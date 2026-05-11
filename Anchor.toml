@@ -8,13 +8,13 @@ seeds = true
 skip-lint = false
 
 [programs.localnet]
-gold_miner = "GM111111111111111111111111111111111111111111"
+gold_miner = "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
 
 [programs.testnet]
-gold_miner = "GM111111111111111111111111111111111111111111"
+gold_miner = "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
 
 [programs.mainnet]
-gold_miner = "GM111111111111111111111111111111111111111111"
+gold_miner = "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
 
 [registry]
 url = "https://api.apr.dev"

@@ -1,0 +1,14 @@
+/home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/deps/serde-0faef81571de63a5.d: /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/build/serde-ceb9e5098b25d97c/out/private.rs
+
+/home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/deps/libserde-0faef81571de63a5.rlib: /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/build/serde-ceb9e5098b25d97c/out/private.rs
+
+/home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/deps/libserde-0faef81571de63a5.rmeta: /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/build/serde-ceb9e5098b25d97c/out/private.rs
+
+/home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/jack/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/build/serde-ceb9e5098b25d97c/out/private.rs:
+
+# env-dep:OUT_DIR=/home/jack/newtheo/workspace-cyberdyne/gold-miner/target/sbpf-solana-solana/release/build/serde-ceb9e5098b25d97c/out
