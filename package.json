@@ -1,0 +1,27 @@
+{
+  "name": "gold-miner",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "app"
+  ],
+  "scripts": {
+    "build": "anchor build",
+    "test": "anchor test",
+    "deploy:testnet": "anchor deploy --provider.cluster testnet",
+    "app:dev": "cd app && npm run dev",
+    "app:build": "cd app && npm run build"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.1.0",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^9.0.0",
+    "chai": "^4.3.4",
+    "mocha": "^9.0.0",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1"
+  }
+}
