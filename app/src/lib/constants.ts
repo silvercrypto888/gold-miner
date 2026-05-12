@@ -14,13 +14,19 @@ export function getProgramId(): PublicKey {
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.x1.xyz";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws.testnet.x1.xyz";
 
-// Token-2022 program on X1 (valid 32-byte key)
+// Token-2022 program on X1 — constructed from raw bytes to avoid
+// browser web3.js rejecting off-curve PDAs via new PublicKey(string)
+// Hex: 06ddf6e1ee758fde18425dbce46ccddab61afc4d83b90d27febdf928d8a18bfc
+const X1_TOKEN_2022_BYTES = Uint8Array.from([
+  0x06, 0xdd, 0xf6, 0xe1, 0xee, 0x75, 0x8f, 0xde,
+  0x18, 0x42, 0x5d, 0xbc, 0xe4, 0x6c, 0xcd, 0xda,
+  0xb6, 0x1a, 0xfc, 0x4d, 0x83, 0xb9, 0x0d, 0x27,
+  0xfe, 0xbd, 0xf9, 0x28, 0xd8, 0xa1, 0x8b, 0xfc,
+]);
 let _TOKEN_2022_PROGRAM_ID: PublicKey | null = null;
 export function getToken2022ProgramId(): PublicKey {
   if (!_TOKEN_2022_PROGRAM_ID) {
-    _TOKEN_2022_PROGRAM_ID = new PublicKey(
-      process.env.NEXT_PUBLIC_TOKEN_2022_PROGRAM_ID || "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    );
+    _TOKEN_2022_PROGRAM_ID = new PublicKey(X1_TOKEN_2022_BYTES);
   }
   return _TOKEN_2022_PROGRAM_ID;
 }
