@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useSessionKey } from "@/hooks/useSessionKey";
 import { useGoldMiner } from "@/hooks/useGoldMiner";
 import { formatXNT, formatGoldium } from "@/lib/constants";
@@ -8,13 +9,17 @@ import { shortenAddress, getTimeRemaining } from "@/lib/utils";
 
 export function PlayerHUD() {
   const { publicKey, disconnect } = useWallet();
+  const { setVisible, visible } = useWalletModal();
   const { sessionPubkey, playerState, isSessionValid, clearSession } =
     useSessionKey();
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
 
   if (!publicKey) {
     return (
-      <button className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white font-medium py-2 px-6 rounded-lg transition-colors">
+      <button
+        onClick={() => setVisible(true)}
+        className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+      >
         Connect Wallet
       </button>
     );

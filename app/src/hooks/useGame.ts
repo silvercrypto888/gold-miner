@@ -31,8 +31,15 @@ export function useGame(): UseGameReturn {
   const [visibleGold, setVisibleGold] = useState<GoldSpot[]>([]);
   const [isMoving, setIsMoving] = useState(false);
   const [lastMoveTime, setLastMoveTime] = useState(0);
-  const connectionRef = useRef(new Connection(RPC_URL));
+  const connectionRef = useRef<Connection | null>(null);
   const moveQueueRef = useRef<Direction[]>([]);
+
+  // Lazy-init connection client-side only
+  useEffect(() => {
+    if (!connectionRef.current) {
+      connectionRef.current = new Connection(RPC_URL);
+    }
+  }, []);
 
   // Update position when player state changes
   useEffect(() => {
