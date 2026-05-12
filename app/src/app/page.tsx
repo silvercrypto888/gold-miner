@@ -1,5 +1,8 @@
 "use client";
 
+// Force client-side rendering — Solana wallet hooks crash during SSR
+export const dynamic = 'force-dynamic';
+
 import { WalletProvider } from "@/components/WalletProvider";
 import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
