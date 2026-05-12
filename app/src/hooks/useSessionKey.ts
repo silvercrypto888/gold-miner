@@ -121,53 +121,6 @@ export function useSessionKey() {
     }
   }, [publicKey, signTransaction]);
 
-  // Join game (create player account)
-  const joinGame = useCallback(async () => {
-    if (!publicKey || !signTransaction || !programRef.current) {
-      setError("Wallet not connected");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const [playerPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("player"), publicKey.toBuffer()],
-        getProgramId()
-      );
-
-      const tx = await programRef.current.methods
-        .joinGame()
-        .accounts({
-          wallet: publicKey,
-          player: playerPda,
-          systemProgram: web3.SystemProgram.programId,
-        })
-        .transaction();
-
-      tx.feePayer = publicKey;
-      tx.recentBlockhash = (
-        await connectionRef.current!.getLatestBlockhash()
-      ).blockhash;
-
-      const signed = await signTransaction(tx);
-      const signature = await connectionRef.current!.sendRawTransaction(
-        signed.serialize()
-      );
-
-      await connectionRef.current!.confirmTransaction(signature);
-
-      // Start session immediately after joining
-      await startSession();
-    } catch (err: any) {
-      console.error("Failed to join game:", err);
-      setError(err.message || "Failed to join game");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey, signTransaction, startSession]);
-
   // Refresh player state from chain
   const refreshPlayerState = useCallback(async () => {
     if (!publicKey || !programRef.current) return;
@@ -201,6 +154,84 @@ export function useSessionKey() {
       console.log("Player not found:", err);
     }
   }, [publicKey]);
+
+  // Join game (create player account + start session in one tx)
+  const joinGame = useCallback(async () => {
+    if (!publicKey || !signTransaction || !programRef.current) {
+      setError("Wallet not connected");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const [playerPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("player"), publicKey.toBuffer()],
+        getProgramId()
+      );
+
+      // Generate session keypair upfront
+      const newKeypair = nacl.sign.keyPair();
+      const sessionPubkey = new PublicKey(newKeypair.publicKey);
+
+      // Build joinGame instruction
+      const joinIx = await programRef.current.methods
+        .joinGame()
+        .accounts({
+          wallet: publicKey,
+          player: playerPda,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .instruction();
+
+      // Build startSession instruction
+      const startIx = await programRef.current.methods
+        .startSession(sessionPubkey)
+        .accounts({
+          wallet: publicKey,
+          player: playerPda,
+        })
+        .instruction();
+
+      // Combine into single transaction
+      const { blockhash, lastValidBlockHeight } =
+        await connectionRef.current!.getLatestBlockhash();
+      const tx = new web3.Transaction({
+        feePayer: publicKey,
+        blockhash,
+        lastValidBlockHeight,
+      });
+      tx.add(joinIx, startIx);
+
+      const signed = await signTransaction(tx);
+      const signature = await connectionRef.current!.sendRawTransaction(
+        signed.serialize()
+      );
+
+      await connectionRef.current!.confirmTransaction({
+        signature,
+        blockhash,
+        lastValidBlockHeight,
+      });
+
+      // Calculate expiry (4 hours from now)
+      const expiresAt = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
+
+      // Store session key
+      storeSessionKey(newKeypair, expiresAt);
+      setSessionKeypair(newKeypair);
+      setSessionExpiry(expiresAt);
+
+      // Fetch player state
+      await refreshPlayerState();
+    } catch (err: any) {
+      console.error("Failed to join game:", err);
+      setError(err.message || "Failed to join game");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [publicKey, signTransaction, refreshPlayerState]);
 
   // Check if player exists and has session
   const checkSession = useCallback(async () => {

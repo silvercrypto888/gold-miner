@@ -16,7 +16,7 @@ import { Direction } from "@/types";
 export function GameCanvas() {
   const { publicKey } = useWallet();
   const { position, visibleGold, isMoving, move } = useGame();
-  const { sessionPubkey, playerState, joinGame, startSession, isLoading } =
+  const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
     useSessionKey();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [displayPosition, setDisplayPosition] = useState(position);
@@ -264,6 +264,9 @@ export function GameCanvas() {
         >
           {isLoading ? "Joining..." : "Join Game"}
         </button>
+        {error && (
+          <p className="mt-4 text-sm text-red-400">{error}</p>
+        )}
       </div>
     );
   }
@@ -284,6 +287,9 @@ export function GameCanvas() {
         >
           {isLoading ? "Starting..." : "Start Session"}
         </button>
+        {error && (
+          <p className="mt-4 text-sm text-red-400">{error}</p>
+        )}
       </div>
     );
   }

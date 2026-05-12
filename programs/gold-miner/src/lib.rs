@@ -172,25 +172,13 @@ pub mod gold_miner {
 
         require!(withdraw_amount > 0, GoldMinerError::NoFundsToWithdraw);
 
-        let player_bump = player.bump;
-        let wallet_key = player.wallet;
-        let signer_seeds: &[&[&[u8]]] = &[&[
-            b"player",
-            wallet_key.as_ref(),
-            &[player_bump],
-        ]];
-
-        system_program::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
-                    from: ctx.accounts.player.to_account_info(),
-                    to: ctx.accounts.wallet.to_account_info(),
-                },
-                signer_seeds,
-            ),
-            withdraw_amount,
-        )?;
+        // Direct lamport transfer: subtract from player PDA, add to wallet.
+        // SystemProgram::transfer cannot be used because the player PDA
+        // carries data (Anchor account), which SystemProgram rejects with
+        // "from must not carry data".
+        let player_info = player.to_account_info();
+        **player_info.try_borrow_mut_lamports()? -= withdraw_amount;
+        **ctx.accounts.wallet.to_account_info().try_borrow_mut_lamports()? += withdraw_amount;
 
         msg!("Withdrew {} lamports from escrow", withdraw_amount);
         Ok(())
