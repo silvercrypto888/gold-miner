@@ -129,6 +129,14 @@ export function shortenAddress(address: string, chars: number = 4): string {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
 
+// Format goldium amount for display
+export function formatGoldium(amount: number): string {
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 // Convert PublicKey to Buffer for PDA
 export function publicKeyToBuffer(pk: PublicKey): Buffer {
   return pk.toBuffer();
