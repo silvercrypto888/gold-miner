@@ -1,48 +1,16 @@
 import { PublicKey } from "@solana/web3.js";
 
 // Program and Network Configuration
-export function getProgramId(): PublicKey {
-  return new PublicKey(
-    process.env.NEXT_PUBLIC_PROGRAM_ID || "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
-  );
-}
+export const PROGRAM_ID = new PublicKey(
+  "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
+);
 
-export function getRpcUrl(): string {
-  return process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.x1.xyz";
-}
+export const RPC_URL = "https://rpc.testnet.x1.xyz";
+export const WS_URL = "wss://ws.testnet.x1.xyz";
 
-export function getWsUrl(): string {
-  return process.env.NEXT_PUBLIC_WS_URL || "wss://ws.testnet.x1.xyz";
-}
-
-export function getToken2022ProgramId(): PublicKey {
-  return new PublicKey(
-    process.env.NEXT_PUBLIC_TOKEN_2022_PROGRAM_ID || "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ"
-  );
-}
-
-// Lazy-initialized singletons for client-side use
-let _programId: PublicKey | null = null;
-let _token2022ProgramId: PublicKey | null = null;
-
-export const PROGRAM_ID = new Proxy({} as PublicKey, {
-  get(_, prop) {
-    if (!_programId) _programId = getProgramId();
-    const val = Reflect.get(_programId, prop);
-    return typeof val === 'function' ? val.bind(_programId) : val;
-  },
-});
-
-export const TOKEN_2022_PROGRAM_ID = new Proxy({} as PublicKey, {
-  get(_, prop) {
-    if (!_token2022ProgramId) _token2022ProgramId = getToken2022ProgramId();
-    const val = Reflect.get(_token2022ProgramId, prop);
-    return typeof val === 'function' ? val.bind(_token2022ProgramId) : val;
-  },
-});
-
-export const RPC_URL = typeof window !== 'undefined' ? getRpcUrl() : 'https://rpc.testnet.x1.xyz';
-export const WS_URL = typeof window !== 'undefined' ? getWsUrl() : 'wss://ws.testnet.x1.xyz';
+export const TOKEN_2022_PROGRAM_ID = new PublicKey(
+  "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ"
+);
 
 // Game Constants
 export const GRID_SIZE = 100;
@@ -125,7 +93,6 @@ export function getViewportRange(playerX: number, playerY: number): {
 
 // PDA derivation helpers
 export function getGameConfigPda(programId: PublicKey): [PublicKey, number] {
-  if (typeof window === 'undefined') throw new Error('getGameConfigPda called during SSR');
   return PublicKey.findProgramAddressSync(
     [Buffer.from("game_config")],
     programId
@@ -133,7 +100,6 @@ export function getGameConfigPda(programId: PublicKey): [PublicKey, number] {
 }
 
 export function getPlayerPda(wallet: PublicKey, programId: PublicKey): [PublicKey, number] {
-  if (typeof window === 'undefined') throw new Error('getPlayerPda called during SSR');
   return PublicKey.findProgramAddressSync(
     [Buffer.from("player"), wallet.toBuffer()],
     programId
@@ -141,7 +107,6 @@ export function getPlayerPda(wallet: PublicKey, programId: PublicKey): [PublicKe
 }
 
 export function getGoldSpotPda(x: number, y: number, programId: PublicKey): [PublicKey, number] {
-  if (typeof window === 'undefined') throw new Error('getGoldSpotPda called during SSR');
   const xBuffer = Buffer.alloc(2);
   xBuffer.writeUInt16LE(x, 0);
   const yBuffer = Buffer.alloc(2);
