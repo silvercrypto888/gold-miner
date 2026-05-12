@@ -29,11 +29,14 @@ export function useSessionKey() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
-  const connectionRef = useRef(new Connection(RPC_URL));
+  const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
 
   // Initialize program reference
   useEffect(() => {
+    if (!connectionRef.current) {
+      connectionRef.current = new Connection(RPC_URL);
+    }
     if (publicKey && signTransaction) {
       const provider = new AnchorProvider(
         connectionRef.current,
@@ -75,7 +78,7 @@ export function useSessionKey() {
       );
 
       // Check if player exists
-      const playerAccount = await connectionRef.current.getAccountInfo(
+      const playerAccount = await connectionRef.current!.getAccountInfo(
         playerPda
       );
 
@@ -90,15 +93,15 @@ export function useSessionKey() {
 
       tx.feePayer = publicKey;
       tx.recentBlockhash = (
-        await connectionRef.current.getLatestBlockhash()
+        await connectionRef.current!.getLatestBlockhash()
       ).blockhash;
 
       const signed = await signTransaction(tx);
-      const signature = await connectionRef.current.sendRawTransaction(
+      const signature = await connectionRef.current!.sendRawTransaction(
         signed.serialize()
       );
 
-      await connectionRef.current.confirmTransaction(signature);
+      await connectionRef.current!.confirmTransaction(signature);
 
       // Calculate expiry (4 hours from now)
       const expiresAt = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
@@ -145,15 +148,15 @@ export function useSessionKey() {
 
       tx.feePayer = publicKey;
       tx.recentBlockhash = (
-        await connectionRef.current.getLatestBlockhash()
+        await connectionRef.current!.getLatestBlockhash()
       ).blockhash;
 
       const signed = await signTransaction(tx);
-      const signature = await connectionRef.current.sendRawTransaction(
+      const signature = await connectionRef.current!.sendRawTransaction(
         signed.serialize()
       );
 
-      await connectionRef.current.confirmTransaction(signature);
+      await connectionRef.current!.confirmTransaction(signature);
 
       // Start session immediately after joining
       await startSession();

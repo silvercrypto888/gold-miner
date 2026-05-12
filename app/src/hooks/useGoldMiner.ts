@@ -31,11 +31,14 @@ export function useGoldMiner() {
   const [gameConfig, setGameConfig] = useState<GameConfigAccount | null>(null);
   const [escrowBalance, setEscrowBalance] = useState<number>(0);
   const [goldiumBalance, setGoldiumBalance] = useState<number>(0);
-  const connectionRef = useRef(new Connection(RPC_URL));
+  const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
 
   // Initialize program
   useEffect(() => {
+    if (!connectionRef.current) {
+      connectionRef.current = new Connection(RPC_URL);
+    }
     if (publicKey && signTransaction) {
       const provider = new AnchorProvider(
         connectionRef.current,
@@ -61,8 +64,8 @@ export function useGoldMiner() {
         setPlayerAccount(account as PlayerAccount);
         
         // Get escrow balance
-        const balance = await connectionRef.current.getBalance(playerPda);
-        const minRent = await connectionRef.current.getMinimumBalanceForRentExemption(200);
+        const balance = await connectionRef.current!.getBalance(playerPda);
+        const minRent = await connectionRef.current!.getMinimumBalanceForRentExemption(200);
         setEscrowBalance(Math.max(0, balance - minRent));
       }
     } catch (err) {
@@ -112,15 +115,15 @@ export function useGoldMiner() {
 
         tx.feePayer = publicKey;
         tx.recentBlockhash = (
-          await connectionRef.current.getLatestBlockhash()
+          await connectionRef.current!.getLatestBlockhash()
         ).blockhash;
 
         const signed = await signTransaction(tx);
-        const signature = await connectionRef.current.sendRawTransaction(
+        const signature = await connectionRef.current!.sendRawTransaction(
           signed.serialize()
         );
 
-        await connectionRef.current.confirmTransaction(signature);
+        await connectionRef.current!.confirmTransaction(signature);
         await fetchPlayerData();
 
         return { signature, success: true };
@@ -158,15 +161,15 @@ export function useGoldMiner() {
 
       tx.feePayer = publicKey;
       tx.recentBlockhash = (
-        await connectionRef.current.getLatestBlockhash()
+        await connectionRef.current!.getLatestBlockhash()
       ).blockhash;
 
       const signed = await signTransaction(tx);
-      const signature = await connectionRef.current.sendRawTransaction(
+      const signature = await connectionRef.current!.sendRawTransaction(
         signed.serialize()
       );
 
-      await connectionRef.current.confirmTransaction(signature);
+      await connectionRef.current!.confirmTransaction(signature);
       await fetchPlayerData();
 
       return { signature, success: true };
@@ -191,7 +194,7 @@ export function useGoldMiner() {
         TOKEN_2022_PROGRAM_ID
       );
 
-      const account = await connectionRef.current.getTokenAccountBalance(
+      const account = await connectionRef.current!.getTokenAccountBalance(
         tokenAccount
       );
       setGoldiumBalance(Number(account.value.uiAmountString || "0"));
