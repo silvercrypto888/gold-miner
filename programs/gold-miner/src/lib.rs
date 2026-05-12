@@ -103,7 +103,7 @@ pub mod gold_miner {
         Ok(())
     }
 
-    /// Mine gold at player's current position
+    /// Mine gold at player's current position - auto-creates GoldSpot if needed
     pub fn mine_gold(ctx: Context<MineGold>) -> Result<()> {
         let player = &mut ctx.accounts.player;
         let gold_spot = &mut ctx.accounts.gold_spot;
@@ -121,7 +121,11 @@ pub mod gold_miner {
             GoldMinerError::SessionExpired
         );
 
-        // Verify gold exists at position
+        // Check worldgen - only positions where (x & y) % 7 == 0 have gold
+        let has_gold = has_gold_at(player.position_x, player.position_y);
+        require!(has_gold, GoldMinerError::NoGoldHere);
+
+        // Verify gold hasn't been mined yet
         require!(gold_spot.has_gold, GoldMinerError::AlreadyMined);
 
         // Mark gold as mined
@@ -348,7 +352,9 @@ pub struct MineGold<'info> {
     pub player: Account<'info, Player>,
 
     #[account(
-        mut,
+        init_if_needed,
+        payer = player,
+        space = 8 + GoldSpot::SIZE,
         seeds = [
             b"gold_spot",
             player.position_x.to_be_bytes().as_ref(),
@@ -430,4 +436,6 @@ pub enum GoldMinerError {
     ArithmeticOverflow,
     #[msg("Position already mined")]
     AlreadyMined,
+    #[msg("No gold at this position")]
+    NoGoldHere,
 }
