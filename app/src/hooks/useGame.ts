@@ -97,12 +97,11 @@ export function useGame(): UseGameReturn {
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
-  // Mine gold at current position — Anchor handles ATA + gold_spot creation via CPI
+  // Mine gold at current position — uses ON-CHAIN position for PDA derivation
   const mineGold = useCallback(async (): Promise<boolean> => {
     if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current || !goldiumMintRef.current) {
       return false;
     }
-    if (!hasGoldAt(position.x, position.y)) return false;
 
     try {
       const programId = getProgramId();
@@ -110,9 +109,17 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
+      // Read ON-CHAIN position for PDA derivation (frontend position may be stale)
       const [playerPda] = getPlayerPda(walletPk, programId);
+      const playerInfo = await connectionRef.current.getAccountInfo(playerPda);
+      if (!playerInfo) return false;
+      const onChainX = playerInfo.data.readUInt32LE(72);
+      const onChainY = playerInfo.data.readUInt32LE(76);
+
+      if (!hasGoldAt(onChainX, onChainY)) return false;
+
       const [gameConfigPda] = getGameConfigPda(programId);
-      const [goldSpotPda] = getGoldSpotPda(position.x, position.y, programId);
+      const [goldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
       const goldiumMint = goldiumMintRef.current;
       const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
       const tokenProgram = getToken2022ProgramId();
