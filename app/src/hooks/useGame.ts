@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { PublicKey, Connection, Transaction, Keypair } from "@solana/web3.js";
-import { Program, AnchorProvider, web3 } from "@coral-xyz/anchor";
+import { PublicKey, Connection, Transaction, TransactionInstruction, Keypair } from "@solana/web3.js";
 import { useSessionKey } from "./useSessionKey";
 import { Position, Direction, GoldSpot } from "@/types";
 import {
@@ -13,7 +12,6 @@ import {
   getViewportRange,
   getPlayerPda,
 } from "@/lib/constants";
-import { GoldMinerIDL, directionToAnchor } from "@/lib/idl";
 
 interface UseGameReturn {
   position: Position;
@@ -26,6 +24,17 @@ interface UseGameReturn {
 
 const MOVE_COOLDOWN_MS = 400;
 
+// movePlayer discriminator: sha256("global:move_player")[0..8]
+const MOVE_PLAYER_DISC = Buffer.from([17, 58, 68, 221, 186, 117, 140, 231]);
+
+// Direction enum variant index: Up=0, Down=1, Left=2, Right=3
+const DIRECTION_VARIANT: Record<Direction, number> = {
+  Up: 0,
+  Down: 1,
+  Left: 2,
+  Right: 3,
+};
+
 export function useGame(): UseGameReturn {
   const { sessionKeypair, sessionPubkey, playerState, refreshPlayerState } =
     useSessionKey();
@@ -34,25 +43,13 @@ export function useGame(): UseGameReturn {
   const [isMoving, setIsMoving] = useState(false);
   const [lastMoveTime, setLastMoveTime] = useState(0);
   const connectionRef = useRef<Connection | null>(null);
-  const programRef = useRef<Program | null>(null);
 
-  // Initialize connection and program
+  // Initialize connection
   useEffect(() => {
     if (!connectionRef.current) {
       connectionRef.current = new Connection(RPC_URL);
     }
-    if (playerState?.wallet && sessionKeypair) {
-      const provider = new AnchorProvider(
-        connectionRef.current,
-        {
-          publicKey: playerState.wallet,
-          signTransaction: async (_tx: Transaction) => _tx, // We sign manually
-        } as any,
-        { commitment: "confirmed" }
-      );
-      programRef.current = new Program(GoldMinerIDL as any, provider);
-    }
-  }, [playerState?.wallet, sessionKeypair]);
+  }, []);
 
   // Update position when player state changes
   useEffect(() => {
@@ -85,8 +82,8 @@ export function useGame(): UseGameReturn {
   // Move player — sends actual on-chain transaction signed by session key
   const move = useCallback(
     async (direction: Direction) => {
-      if (!sessionKeypair || !sessionPubkey || !playerState || !programRef.current || !connectionRef.current) {
-        console.log("Cannot move: missing session or program");
+      if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current) {
+        console.log("Cannot move: missing session or connection");
         return;
       }
 
@@ -131,15 +128,22 @@ export function useGame(): UseGameReturn {
         const [playerPda] = getPlayerPda(walletPk, programId);
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Build movePlayer instruction (simplified: only sessionSigner, player, systemProgram)
-        const ix = await programRef.current.methods
-          .movePlayer(directionToAnchor(direction))
-          .accounts({
-            sessionSigner: sessionSigner.publicKey,
-            player: playerPda,
-            systemProgram: web3.SystemProgram.programId,
-          })
-          .instruction();
+        // Build movePlayer instruction manually (avoids Anchor codec issues)
+        // Data: 8-byte discriminator + 1-byte direction variant index
+        const data = Buffer.concat([
+          MOVE_PLAYER_DISC,
+          Buffer.from([DIRECTION_VARIANT[direction]]),
+        ]);
+
+        const ix = new TransactionInstruction({
+          keys: [
+            { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: false },
+            { pubkey: playerPda, isSigner: false, isWritable: true },
+            { pubkey: new PublicKey("11111111111111111111111111111111"), isSigner: false, isWritable: false },
+          ],
+          programId,
+          data,
+        });
 
         const { blockhash, lastValidBlockHeight } =
           await connectionRef.current.getLatestBlockhash();
