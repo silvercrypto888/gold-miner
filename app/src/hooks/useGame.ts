@@ -54,7 +54,6 @@ export function useGame(): UseGameReturn {
   const connectionRef = useRef<Connection | null>(null);
   const goldiumMintRef = useRef<PublicKey | null>(null);
 
-  // Initialize connection
   useEffect(() => {
     if (!connectionRef.current) {
       connectionRef.current = new Connection(RPC_URL);
@@ -70,7 +69,6 @@ export function useGame(): UseGameReturn {
         const [gameConfigPda] = getGameConfigPda();
         const configInfo = await conn.getAccountInfo(gameConfigPda);
         if (configInfo) {
-          // GameConfig layout: 8(disc) + 32(authority) + 4(grid_size) + 32(goldium_mint) ...
           goldiumMintRef.current = new PublicKey(configInfo.data.slice(44, 76));
         }
       } catch (e) {
@@ -79,7 +77,6 @@ export function useGame(): UseGameReturn {
     })();
   }, []);
 
-  // Update position when player state changes
   useEffect(() => {
     if (playerState) {
       setPosition(playerState.position);
@@ -87,15 +84,12 @@ export function useGame(): UseGameReturn {
     }
   }, [playerState]);
 
-  // Calculate visible gold spots in viewport
   const updateVisibleGold = useCallback(() => {
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
     const goldSpots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
-        if (hasGoldAt(x, y)) {
-          goldSpots.push({ x, y, hasGold: true });
-        }
+        if (hasGoldAt(x, y)) goldSpots.push({ x, y, hasGold: true });
       }
     }
     setVisibleGold(goldSpots);
@@ -103,15 +97,12 @@ export function useGame(): UseGameReturn {
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
-  // Mine gold at current position
+  // Mine gold at current position — Anchor handles ATA + gold_spot creation via CPI
   const mineGold = useCallback(async (): Promise<boolean> => {
     if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current || !goldiumMintRef.current) {
       return false;
     }
-
-    if (!hasGoldAt(position.x, position.y)) {
-      return false;
-    }
+    if (!hasGoldAt(position.x, position.y)) return false;
 
     try {
       const programId = getProgramId();
@@ -127,6 +118,23 @@ export function useGame(): UseGameReturn {
       const tokenProgram = getToken2022ProgramId();
       const ataProgram = getAtaProgramId();
 
+      // Build mineGold instruction — Anchor CPI creates ATA + gold_spot if needed
+      const mineIx = new TransactionInstruction({
+        keys: [
+          { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut, payer)
+          { pubkey: gameConfigPda, isSigner: false, isWritable: true },                 // game_config
+          { pubkey: playerPda, isSigner: false, isWritable: true },                    // player
+          { pubkey: goldSpotPda, isSigner: false, isWritable: true },                   // gold_spot (init_if_needed)
+          { pubkey: goldiumMint, isSigner: false, isWritable: true },                    // goldium_mint
+          { pubkey: playerAta, isSigner: false, isWritable: true },                      // player_token_account (associated_token init_if_needed)
+          { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
+          { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
+        ],
+        programId,
+        data: MINE_GOLD_DISC,
+      });
+
       const { blockhash, lastValidBlockHeight } =
         await connectionRef.current.getLatestBlockhash();
 
@@ -135,46 +143,7 @@ export function useGame(): UseGameReturn {
         blockhash,
         lastValidBlockHeight,
       });
-
-      // Check if player's goldium ATA exists — if not, create it
-      const ataInfo = await connectionRef.current.getAccountInfo(playerAta);
-      if (!ataInfo) {
-        console.log("Creating goldium ATA for player...");
-        // Build ATA create instruction manually
-        // ATA program: create_idempotent instruction (discriminator: [1, 0])
-        const createAtaIx = new TransactionInstruction({
-          keys: [
-            { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },   // payer
-            { pubkey: playerAta, isSigner: false, isWritable: true },                  // ATA address
-            { pubkey: playerPda, isSigner: false, isWritable: false },                // owner
-            { pubkey: goldiumMint, isSigner: false, isWritable: false },              // mint
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-            { pubkey: tokenProgram, isSigner: false, isWritable: false },
-          ],
-          programId: ataProgram,
-          data: Buffer.from([1, 0, 0, 0, 0, 0, 0, 0]), // create_idempotent discriminator
-        });
-        tx.add(createAtaIx);
-      }
-
-      // Build mineGold instruction
-      const mineIx = new TransactionInstruction({
-        keys: [
-          { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut = payer)
-          { pubkey: gameConfigPda, isSigner: false, isWritable: true },                // game_config
-          { pubkey: playerPda, isSigner: false, isWritable: true },                   // player
-          { pubkey: goldSpotPda, isSigner: false, isWritable: true },                  // gold_spot (init_if_needed)
-          { pubkey: goldiumMint, isSigner: false, isWritable: true },                   // goldium_mint
-          { pubkey: playerAta, isSigner: false, isWritable: true },                     // player_token_account
-          { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
-          { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },       // system_program
-        ],
-        programId,
-        data: MINE_GOLD_DISC,
-      });
       tx.add(mineIx);
-
       tx.sign(sessionSigner);
 
       const signature = await connectionRef.current.sendRawTransaction(
@@ -194,66 +163,49 @@ export function useGame(): UseGameReturn {
       return true;
     } catch (err: any) {
       console.error("Mine gold failed:", err);
-      if (err?.logs) {
-        console.error("Program logs:", err.logs.join("\n"));
-      }
+      if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
       return false;
     }
   }, [sessionKeypair, sessionPubkey, playerState, position]);
 
-  // Move player — session key is fee payer (no wallet popup)
+  // Move player — session key is fee payer
   const move = useCallback(
     async (direction: Direction) => {
-      if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current) {
-        return;
-      }
+      if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current) return;
 
       const now = Date.now();
-      if (now - lastMoveTime < MOVE_COOLDOWN_MS) {
-        return;
-      }
+      if (now - lastMoveTime < MOVE_COOLDOWN_MS) return;
 
-      let newX = position.x;
-      let newY = position.y;
-
+      let newX = position.x, newY = position.y;
       switch (direction) {
         case Direction.Up:    newY = Math.min(GRID_SIZE, position.y + 1); break;
         case Direction.Down:  newY = Math.max(1, position.y - 1); break;
         case Direction.Left:  newX = Math.max(1, position.x - 1); break;
         case Direction.Right: newX = Math.min(GRID_SIZE, position.x + 1); break;
       }
-
       if (newX === position.x && newY === position.y) return;
 
       setIsMoving(true);
       setLastMoveTime(now);
-      setPosition({ x: newX, y: newY }); // Optimistic update
+      setPosition({ x: newX, y: newY }); // Optimistic
 
       try {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Check session key balance
         const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-        if (balance < 5_000_000) { // 0.005 XNT minimum for moves + mining
+        if (balance < 5_000_000) {
           const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
             await connectionRef.current.getLatestBlockhash();
-          try {
-            await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb);
-          } catch (e) {
-            console.warn("Failed to fund session key:", e);
-          }
+          try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
+          catch (e) { console.warn("Failed to fund session key:", e); }
         }
 
         const walletPk = playerState.wallet;
         if (!walletPk) { setPosition(playerState.position); return; }
         const [playerPda] = getPlayerPda(walletPk, programId);
 
-        const data = Buffer.concat([
-          MOVE_PLAYER_DISC,
-          Buffer.from([DIRECTION_VARIANT[direction]]),
-        ]);
-
+        const data = Buffer.concat([MOVE_PLAYER_DISC, Buffer.from([DIRECTION_VARIANT[direction]])]);
         const ix = new TransactionInstruction({
           keys: [
             { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: false },
@@ -264,34 +216,18 @@ export function useGame(): UseGameReturn {
           data,
         });
 
-        const { blockhash, lastValidBlockHeight } =
-          await connectionRef.current.getLatestBlockhash();
-
-        const tx = new Transaction({
-          feePayer: sessionSigner.publicKey,
-          blockhash,
-          lastValidBlockHeight,
-        });
+        const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
+        const tx = new Transaction({ feePayer: sessionSigner.publicKey, blockhash, lastValidBlockHeight });
         tx.add(ix);
         tx.sign(sessionSigner);
 
         const signature = await connectionRef.current.sendRawTransaction(
-          tx.serialize(),
-          { skipPreflight: false, preflightCommitment: "confirmed" }
+          tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
-
-        await connectionRef.current.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        });
-
+        await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
         await refreshPlayerState();
 
-        // Try to mine gold at new position
-        if (hasGoldAt(newX, newY)) {
-          await mineGold();
-        }
+        if (hasGoldAt(newX, newY)) await mineGold();
       } catch (err: any) {
         console.error("Move failed:", err);
         setPosition(playerState.position);
@@ -308,10 +244,8 @@ export function useGame(): UseGameReturn {
       const keyMap: { [key: string]: Direction } = {
         ArrowUp: Direction.Up, ArrowDown: Direction.Down,
         ArrowLeft: Direction.Left, ArrowRight: Direction.Right,
-        w: Direction.Up, W: Direction.Up,
-        s: Direction.Down, S: Direction.Down,
-        a: Direction.Left, A: Direction.Left,
-        d: Direction.Right, D: Direction.Right,
+        w: Direction.Up, W: Direction.Up, s: Direction.Down, S: Direction.Down,
+        a: Direction.Left, A: Direction.Left, d: Direction.Right, D: Direction.Right,
       };
       const direction = keyMap[e.key];
       if (direction) { e.preventDefault(); move(direction); }
@@ -321,6 +255,5 @@ export function useGame(): UseGameReturn {
   }, [move]);
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
-
   return { position, visibleGold, isMoving, lastMoveTime, move, canMove, goldMined };
 }
