@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use anchor_spl::token_2022::{Token2022, MintTo, mint_to};
-use anchor_spl::token_interface::{Mint, TokenAccount};
+use anchor_spl::token_interface::{Mint, TokenAccount as TokenAccountInterface};
+use anchor_spl::token::TokenAccount;
 use anchor_spl::associated_token::AssociatedToken;
 
 // Gold Miner - On-chain multiplayer grid game on X1
@@ -368,14 +369,15 @@ pub struct MineGold<'info> {
     #[account(mut)]
     pub goldium_mint: InterfaceAccount<'info, Mint>,
 
-    /// CHECK: Associated token account for player's Goldium, validated by ATA program
+    /// Associated token account for player's Goldium — auto-created via ATA CPI if needed
     #[account(
-        mut,
+        init_if_needed,
+        payer = session_signer,
         associated_token::mint = goldium_mint,
         associated_token::authority = player,
         associated_token::token_program = token_program,
     )]
-    pub player_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub player_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
