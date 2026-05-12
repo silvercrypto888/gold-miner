@@ -5,7 +5,7 @@ import { PublicKey, Connection } from "@solana/web3.js";
 import { useSessionKey } from "./useSessionKey";
 import { Position, Direction, GoldSpot } from "@/types";
 import {
-  PROGRAM_ID,
+  getProgramId,
   RPC_URL,
   GRID_SIZE,
   hasGoldAt,
@@ -120,7 +120,7 @@ export function useGame(): UseGameReturn {
             Buffer.from([newX & 0xff, (newX >> 8) & 0xff]),
             Buffer.from([newY & 0xff, (newY >> 8) & 0xff]),
           ],
-          PROGRAM_ID
+          getProgramId()
         );
 
         const instruction = program.methods.movePlayer(directionToAnchor(direction.toLowerCase() as any))

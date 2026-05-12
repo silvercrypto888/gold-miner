@@ -13,7 +13,7 @@ import {
 } from "@/lib/utils";
 import { GoldMinerIDL } from "@/lib/idl";
 import {
-  PROGRAM_ID,
+  getProgramId,
   RPC_URL,
   SESSION_DURATION_SLOTS,
   BLOCK_TIME_MS,
@@ -74,7 +74,7 @@ export function useSessionKey() {
       // Get player PDA
       const [playerPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("player"), publicKey.toBuffer()],
-        PROGRAM_ID
+        getProgramId()
       );
 
       // Check if player exists
@@ -134,7 +134,7 @@ export function useSessionKey() {
     try {
       const [playerPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("player"), publicKey.toBuffer()],
-        PROGRAM_ID
+        getProgramId()
       );
 
       const tx = await programRef.current.methods
@@ -175,7 +175,7 @@ export function useSessionKey() {
     try {
       const [playerPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("player"), publicKey.toBuffer()],
-        PROGRAM_ID
+        getProgramId()
       );
 
       // @ts-ignore - accessing account

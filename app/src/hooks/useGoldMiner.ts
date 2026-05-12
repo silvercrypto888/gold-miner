@@ -4,10 +4,11 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Connection, SystemProgram, Transaction } from "@solana/web3.js";
 import { Program, AnchorProvider, web3, BN } from "@coral-xyz/anchor";
-import { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { GoldMinerIDL } from "@/lib/idl";
 import {
-  PROGRAM_ID,
+  getProgramId,
+  getToken2022ProgramId,
   RPC_URL,
   LAMPORTS_PER_SOL,
   getPlayerPda,
@@ -56,7 +57,7 @@ export function useGoldMiner() {
     if (!publicKey || !programRef.current) return;
 
     try {
-      const [playerPda] = getPlayerPda(publicKey, PROGRAM_ID);
+      const [playerPda] = getPlayerPda(publicKey, getProgramId());
       
       // @ts-ignore
       const account = await programRef.current.account.player.fetch(playerPda);
@@ -79,7 +80,7 @@ export function useGoldMiner() {
     if (!programRef.current) return;
 
     try {
-      const [configPda] = getGameConfigPda(PROGRAM_ID);
+      const [configPda] = getGameConfigPda(getProgramId());
       // @ts-ignore
       const config = await programRef.current.account.gameConfig.fetch(configPda);
       if (config) {
@@ -101,7 +102,7 @@ export function useGoldMiner() {
       setError(null);
 
       try {
-        const [playerPda] = getPlayerPda(publicKey, PROGRAM_ID);
+        const [playerPda] = getPlayerPda(publicKey, getProgramId());
         const amountLamports = new BN(amountXnt * LAMPORTS_PER_SOL);
 
         const tx = await programRef.current.methods
@@ -148,7 +149,7 @@ export function useGoldMiner() {
     setError(null);
 
     try {
-      const [playerPda] = getPlayerPda(publicKey, PROGRAM_ID);
+      const [playerPda] = getPlayerPda(publicKey, getProgramId());
 
       const tx = await programRef.current.methods
         .withdrawXnt()
@@ -191,7 +192,7 @@ export function useGoldMiner() {
         new PublicKey(gameConfig.goldiumMint),
         publicKey,
         false,
-        TOKEN_2022_PROGRAM_ID
+        getToken2022ProgramId()
       );
 
       const account = await connectionRef.current!.getTokenAccountBalance(
