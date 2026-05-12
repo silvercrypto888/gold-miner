@@ -56,6 +56,15 @@ export function useSessionKey() {
     }
   }, []);
 
+  // Auto-detect existing player when wallet connects
+  useEffect(() => {
+    if (!publicKey) {
+      setPlayerState(null);
+      return;
+    }
+    refreshPlayerState();
+  }, [publicKey]);
+
   // Start a new session
   const startSession = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) {
@@ -156,6 +165,7 @@ export function useSessionKey() {
   }, [publicKey]);
 
   // Join game (create player account + start session in one tx)
+  // If player already exists, just start session
   const joinGame = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) {
       setError("Wallet not connected");
@@ -171,30 +181,13 @@ export function useSessionKey() {
         getProgramId()
       );
 
+      const playerAccount = await connectionRef.current!.getAccountInfo(playerPda);
+      const playerExists = playerAccount !== null;
+
       // Generate session keypair upfront
       const newKeypair = nacl.sign.keyPair();
       const sessionPubkey = new PublicKey(newKeypair.publicKey);
 
-      // Build joinGame instruction
-      const joinIx = await programRef.current.methods
-        .joinGame()
-        .accounts({
-          wallet: publicKey,
-          player: playerPda,
-          systemProgram: web3.SystemProgram.programId,
-        })
-        .instruction();
-
-      // Build startSession instruction
-      const startIx = await programRef.current.methods
-        .startSession(sessionPubkey)
-        .accounts({
-          wallet: publicKey,
-          player: playerPda,
-        })
-        .instruction();
-
-      // Combine into single transaction
       const { blockhash, lastValidBlockHeight } =
         await connectionRef.current!.getLatestBlockhash();
       const tx = new web3.Transaction({
@@ -202,7 +195,28 @@ export function useSessionKey() {
         blockhash,
         lastValidBlockHeight,
       });
-      tx.add(joinIx, startIx);
+
+      if (!playerExists) {
+        // Player doesn't exist: join + start session
+        const joinIx = await programRef.current.methods
+          .joinGame()
+          .accounts({
+            wallet: publicKey,
+            player: playerPda,
+            systemProgram: web3.SystemProgram.programId,
+          })
+          .instruction();
+        tx.add(joinIx);
+      }
+
+      const startIx = await programRef.current.methods
+        .startSession(sessionPubkey)
+        .accounts({
+          wallet: publicKey,
+          player: playerPda,
+        })
+        .instruction();
+      tx.add(startIx);
 
       const signed = await signTransaction(tx);
       const signature = await connectionRef.current!.sendRawTransaction(
