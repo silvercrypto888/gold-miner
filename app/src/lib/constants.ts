@@ -60,7 +60,7 @@ let _TOKEN_2022_PROGRAM_ID: PublicKey | null = null;
 export function getToken2022ProgramId(): PublicKey {
   if (!_TOKEN_2022_PROGRAM_ID) {
     _TOKEN_2022_PROGRAM_ID = safePublicKey(
-      process.env.NEXT_PUBLIC_TOKEN_2022_PROGRAM_ID || "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ"
+      process.env.NEXT_PUBLIC_TOKEN_2022_PROGRAM_ID || "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
     );
   }
   return _TOKEN_2022_PROGRAM_ID;
