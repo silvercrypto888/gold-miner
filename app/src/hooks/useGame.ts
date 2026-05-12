@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { PublicKey, Connection, Transaction, TransactionInstruction, Keypair } from "@solana/web3.js";
+import { PublicKey, Connection, Transaction, TransactionInstruction, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { useSessionKey } from "./useSessionKey";
 import { Position, Direction, GoldSpot } from "@/types";
 import {
@@ -23,6 +23,7 @@ interface UseGameReturn {
 }
 
 const MOVE_COOLDOWN_MS = 400;
+const SESSION_FUND_LAMPORTS = 0.05 * LAMPORTS_PER_SOL;
 
 // movePlayer discriminator: sha256("global:move_player")[0..8]
 const MOVE_PLAYER_DISC = Buffer.from([17, 58, 68, 221, 186, 117, 140, 231]);
@@ -36,7 +37,7 @@ const DIRECTION_VARIANT: Record<Direction, number> = {
 };
 
 export function useGame(): UseGameReturn {
-  const { sessionKeypair, sessionPubkey, playerState, refreshPlayerState } =
+  const { sessionKeypair, sessionPubkey, playerState, refreshPlayerState, fundSessionKey } =
     useSessionKey();
   const [position, setPosition] = useState<Position>({ x: 1, y: 1 });
   const [visibleGold, setVisibleGold] = useState<GoldSpot[]>([]);
@@ -79,7 +80,7 @@ export function useGame(): UseGameReturn {
     updateVisibleGold();
   }, [updateVisibleGold]);
 
-  // Move player — sends actual on-chain transaction signed by session key
+  // Move player — session key is fee payer (no wallet popup)
   const move = useCallback(
     async (direction: Direction) => {
       if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current) {
@@ -123,13 +124,26 @@ export function useGame(): UseGameReturn {
 
       try {
         const programId = getProgramId();
-        if (!playerState.wallet) throw new Error("Player wallet not set");
-        const walletPk = playerState.wallet;
-        const [playerPda] = getPlayerPda(walletPk, programId);
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Build movePlayer instruction manually (avoids Anchor codec issues)
-        // Data: 8-byte discriminator + 1-byte direction variant index
+        // Check session key balance — if low, try to top up
+        const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
+        if (balance < 5000) {
+          console.log("Session key low on funds, topping up...");
+          const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
+            await connectionRef.current.getLatestBlockhash();
+          try {
+            await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb);
+          } catch (e) {
+            console.warn("Failed to fund session key:", e);
+          }
+        }
+
+        const walletPk = playerState.wallet;
+        if (!walletPk) { console.error("No wallet"); setPosition(playerState.position); return; }
+        const [playerPda] = getPlayerPda(walletPk, programId);
+
+        // Build movePlayer instruction manually
         const data = Buffer.concat([
           MOVE_PLAYER_DISC,
           Buffer.from([DIRECTION_VARIANT[direction]]),
@@ -139,7 +153,7 @@ export function useGame(): UseGameReturn {
           keys: [
             { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: false },
             { pubkey: playerPda, isSigner: false, isWritable: true },
-            { pubkey: new PublicKey("11111111111111111111111111111111"), isSigner: false, isWritable: false },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
           ],
           programId,
           data,
@@ -148,15 +162,16 @@ export function useGame(): UseGameReturn {
         const { blockhash, lastValidBlockHeight } =
           await connectionRef.current.getLatestBlockhash();
 
+        // Session key is fee payer — it signs the entire tx
         const tx = new Transaction({
-          feePayer: walletPk,
+          feePayer: sessionSigner.publicKey,
           blockhash,
           lastValidBlockHeight,
         });
         tx.add(ix);
-        tx.partialSign(sessionSigner);
+        tx.sign(sessionSigner);
 
-        // Send transaction (session key signs, no wallet popup needed)
+        // Send transaction — no wallet popup needed
         const signature = await connectionRef.current.sendRawTransaction(
           tx.serialize(),
           { skipPreflight: false, preflightCommitment: "confirmed" }
@@ -178,7 +193,7 @@ export function useGame(): UseGameReturn {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, refreshPlayerState]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, refreshPlayerState, fundSessionKey]
   );
 
   // Keyboard controls

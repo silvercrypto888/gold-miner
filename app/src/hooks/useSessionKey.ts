@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { PublicKey, Connection } from "@solana/web3.js";
+import { PublicKey, Connection, Keypair, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as nacl from "tweetnacl";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, web3 } from "@coral-xyz/anchor";
@@ -19,6 +19,9 @@ import {
   BLOCK_TIME_MS,
 } from "@/lib/constants";
 import { PlayerState } from "@/types";
+
+// Amount of XNT to fund the session key for gas fees (0.05 XNT)
+const SESSION_FUND_LAMPORTS = 0.05 * LAMPORTS_PER_SOL;
 
 export function useSessionKey() {
   const { publicKey, signTransaction } = useWallet();
@@ -65,6 +68,37 @@ export function useSessionKey() {
     refreshPlayerState();
   }, [publicKey]);
 
+  // Fund a session key with XNT for gas fees
+  const fundSessionKey = useCallback(async (
+    sessionPubkey: PublicKey,
+    blockhash: string,
+    lastValidBlockHeight: number
+  ) => {
+    if (!publicKey || !signTransaction) return;
+
+    const balance = await connectionRef.current!.getBalance(sessionPubkey);
+    if (balance >= SESSION_FUND_LAMPORTS) return; // Already funded
+
+    const transferIx = SystemProgram.transfer({
+      fromPubkey: publicKey,
+      toPubkey: sessionPubkey,
+      lamports: SESSION_FUND_LAMPORTS - balance,
+    });
+
+    const tx = new Transaction({
+      feePayer: publicKey,
+      blockhash,
+      lastValidBlockHeight,
+    });
+    tx.add(transferIx);
+
+    const signed = await signTransaction(tx);
+    const signature = await connectionRef.current!.sendRawTransaction(
+      signed.serialize()
+    );
+    await connectionRef.current!.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+  }, [publicKey, signTransaction]);
+
   // Start a new session
   const startSession = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) {
@@ -86,31 +120,44 @@ export function useSessionKey() {
         getProgramId()
       );
 
-      // Check if player exists
-      const playerAccount = await connectionRef.current!.getAccountInfo(
-        playerPda
-      );
+      const { blockhash, lastValidBlockHeight } =
+        await connectionRef.current!.getLatestBlockhash();
 
-      // Start session transaction
-      const tx = await programRef.current.methods
+      // Build tx: startSession + fund session key
+      const tx = new Transaction({
+        feePayer: publicKey,
+        blockhash,
+        lastValidBlockHeight,
+      });
+
+      // Start session instruction
+      const startIx = await programRef.current.methods
         .startSession(sessionPubkey)
         .accounts({
           wallet: publicKey,
           player: playerPda,
         })
-        .transaction();
+        .instruction();
+      tx.add(startIx);
 
-      tx.feePayer = publicKey;
-      tx.recentBlockhash = (
-        await connectionRef.current!.getLatestBlockhash()
-      ).blockhash;
+      // Fund session key for gas
+      const fundIx = SystemProgram.transfer({
+        fromPubkey: publicKey,
+        toPubkey: sessionPubkey,
+        lamports: SESSION_FUND_LAMPORTS,
+      });
+      tx.add(fundIx);
 
       const signed = await signTransaction(tx);
       const signature = await connectionRef.current!.sendRawTransaction(
         signed.serialize()
       );
 
-      await connectionRef.current!.confirmTransaction(signature);
+      await connectionRef.current!.confirmTransaction({
+        signature,
+        blockhash,
+        lastValidBlockHeight,
+      });
 
       // Calculate expiry (4 hours from now)
       const expiresAt = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
@@ -164,8 +211,7 @@ export function useSessionKey() {
     }
   }, [publicKey]);
 
-  // Join game (create player account + start session in one tx)
-  // If player already exists, just start session
+  // Join game (create player account + start session + fund session key in one tx)
   const joinGame = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) {
       setError("Wallet not connected");
@@ -197,7 +243,6 @@ export function useSessionKey() {
       });
 
       if (!playerExists) {
-        // Player doesn't exist: join + start session
         const joinIx = await programRef.current.methods
           .joinGame()
           .accounts({
@@ -217,6 +262,14 @@ export function useSessionKey() {
         })
         .instruction();
       tx.add(startIx);
+
+      // Fund session key with XNT for gas fees
+      const fundIx = SystemProgram.transfer({
+        fromPubkey: publicKey,
+        toPubkey: sessionPubkey,
+        lamports: SESSION_FUND_LAMPORTS,
+      });
+      tx.add(fundIx);
 
       const signed = await signTransaction(tx);
       const signature = await connectionRef.current!.sendRawTransaction(
@@ -294,5 +347,6 @@ export function useSessionKey() {
     checkSession,
     refreshPlayerState,
     clearSession,
+    fundSessionKey,
   };
 }
