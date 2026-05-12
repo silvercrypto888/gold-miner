@@ -13,8 +13,10 @@ import {
   getPlayerPda,
   getGameConfigPda,
   getGoldSpotPda,
+  getPlayerGoldiumAta,
   GOLD_PER_MINE,
   getToken2022ProgramId,
+  getAtaProgramId,
 } from "@/lib/constants";
 
 interface UseGameReturn {
@@ -40,16 +42,6 @@ const DIRECTION_VARIANT: Record<Direction, number> = {
   Left: 2,
   Right: 3,
 };
-
-// Derive Associated Token Account address
-function getAta(mint: PublicKey, owner: PublicKey): PublicKey {
-  const tokenProgram = getToken2022ProgramId();
-  const ataProgram = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-  return PublicKey.findProgramAddressSync(
-    [owner.toBuffer(), tokenProgram.toBuffer(), mint.toBuffer()],
-    ataProgram
-  )[0];
-}
 
 export function useGame(): UseGameReturn {
   const { sessionKeypair, sessionPubkey, playerState, refreshPlayerState, fundSessionKey } =
@@ -99,7 +91,6 @@ export function useGame(): UseGameReturn {
   const updateVisibleGold = useCallback(() => {
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
     const goldSpots: GoldSpot[] = [];
-
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
@@ -107,14 +98,10 @@ export function useGame(): UseGameReturn {
         }
       }
     }
-
     setVisibleGold(goldSpots);
   }, [position]);
 
-  // Update visible gold when position changes
-  useEffect(() => {
-    updateVisibleGold();
-  }, [updateVisibleGold]);
+  useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
   // Mine gold at current position
   const mineGold = useCallback(async (): Promise<boolean> => {
@@ -136,7 +123,9 @@ export function useGame(): UseGameReturn {
       const [gameConfigPda] = getGameConfigPda(programId);
       const [goldSpotPda] = getGoldSpotPda(position.x, position.y, programId);
       const goldiumMint = goldiumMintRef.current;
-      const playerAta = getAta(goldiumMint, playerPda);
+      const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
+      const tokenProgram = getToken2022ProgramId();
+      const ataProgram = getAtaProgramId();
 
       const { blockhash, lastValidBlockHeight } =
         await connectionRef.current.getLatestBlockhash();
@@ -150,21 +139,20 @@ export function useGame(): UseGameReturn {
       // Check if player's goldium ATA exists — if not, create it
       const ataInfo = await connectionRef.current.getAccountInfo(playerAta);
       if (!ataInfo) {
-        console.log("Creating goldium ATA...");
-        // Create ATA instruction: ATA program creates the account
-        const ataProgramId = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-        const tokenProgram = getToken2022ProgramId();
+        console.log("Creating goldium ATA for player...");
+        // Build ATA create instruction manually
+        // ATA program: create_idempotent instruction (discriminator: [1, 0])
         const createAtaIx = new TransactionInstruction({
           keys: [
-            { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },  // payer
-            { pubkey: playerAta, isSigner: false, isWritable: true },               // ATA
-            { pubkey: playerPda, isSigner: false, isWritable: false },              // owner
-            { pubkey: goldiumMint, isSigner: false, isWritable: false },            // mint
+            { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },   // payer
+            { pubkey: playerAta, isSigner: false, isWritable: true },                  // ATA address
+            { pubkey: playerPda, isSigner: false, isWritable: false },                // owner
+            { pubkey: goldiumMint, isSigner: false, isWritable: false },              // mint
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
             { pubkey: tokenProgram, isSigner: false, isWritable: false },
           ],
-          programId: ataProgramId,
-          data: Buffer.alloc(0), // ATA create instruction has no data
+          programId: ataProgram,
+          data: Buffer.from([1, 0, 0, 0, 0, 0, 0, 0]), // create_idempotent discriminator
         });
         tx.add(createAtaIx);
       }
@@ -172,15 +160,15 @@ export function useGame(): UseGameReturn {
       // Build mineGold instruction
       const mineIx = new TransactionInstruction({
         keys: [
-          { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },
-          { pubkey: gameConfigPda, isSigner: false, isWritable: true },
-          { pubkey: playerPda, isSigner: false, isWritable: true },
-          { pubkey: goldSpotPda, isSigner: false, isWritable: true },
-          { pubkey: goldiumMint, isSigner: false, isWritable: true },
-          { pubkey: playerAta, isSigner: false, isWritable: true },
-          { pubkey: getToken2022ProgramId(), isSigner: false, isWritable: false },
-          { pubkey: new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"), isSigner: false, isWritable: false },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+          { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut = payer)
+          { pubkey: gameConfigPda, isSigner: false, isWritable: true },                // game_config
+          { pubkey: playerPda, isSigner: false, isWritable: true },                   // player
+          { pubkey: goldSpotPda, isSigner: false, isWritable: true },                  // gold_spot (init_if_needed)
+          { pubkey: goldiumMint, isSigner: false, isWritable: true },                   // goldium_mint
+          { pubkey: playerAta, isSigner: false, isWritable: true },                     // player_token_account
+          { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
+          { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },       // system_program
         ],
         programId,
         data: MINE_GOLD_DISC,
@@ -206,6 +194,9 @@ export function useGame(): UseGameReturn {
       return true;
     } catch (err: any) {
       console.error("Mine gold failed:", err);
+      if (err?.logs) {
+        console.error("Program logs:", err.logs.join("\n"));
+      }
       return false;
     }
   }, [sessionKeypair, sessionPubkey, playerState, position]);
@@ -236,7 +227,7 @@ export function useGame(): UseGameReturn {
 
       setIsMoving(true);
       setLastMoveTime(now);
-      setPosition({ x: newX, y: newY });
+      setPosition({ x: newX, y: newY }); // Optimistic update
 
       try {
         const programId = getProgramId();
@@ -244,7 +235,7 @@ export function useGame(): UseGameReturn {
 
         // Check session key balance
         const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-        if (balance < 5000) {
+        if (balance < 5_000_000) { // 0.005 XNT minimum for moves + mining
           const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
             await connectionRef.current.getLatestBlockhash();
           try {

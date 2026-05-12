@@ -25,6 +25,26 @@ export function getToken2022ProgramId(): PublicKey {
   return _TOKEN_2022_PROGRAM_ID;
 }
 
+let _ATA_PROGRAM_ID: PublicKey | null = null;
+export function getAtaProgramId(): PublicKey {
+  if (!_ATA_PROGRAM_ID) {
+    _ATA_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+  }
+  return _ATA_PROGRAM_ID;
+}
+
+// Derive player's Goldium ATA (Token-2022)
+export function getPlayerGoldiumAta(goldiumMint: PublicKey, playerPda: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [
+      playerPda.toBuffer(),
+      getToken2022ProgramId().toBuffer(),
+      goldiumMint.toBuffer(),
+    ],
+    getAtaProgramId()
+  )[0];
+}
+
 // Game Constants
 export const GRID_SIZE = 100;
 export const VIEWPORT_SIZE = 15;
