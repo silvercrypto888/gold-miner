@@ -2,7 +2,7 @@
 import { Idl } from "@coral-xyz/anchor";
 
 export const GoldMinerIDL: Idl = {
-  address: "GoldMiner11111111111111111111111111111111111",
+  address: "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf",
   metadata: {
     name: "gold_miner",
     version: "0.1.0",
