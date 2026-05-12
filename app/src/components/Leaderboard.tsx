@@ -31,9 +31,9 @@ export function Leaderboard() {
   }, []);
 
   // Calculate player rank if they exist
-  const playerRank = playerState
+  const playerRank = playerState?.wallet
     ? entries.findIndex(
-        (e) => e.wallet === playerState.wallet.toString()
+        (e) => e.wallet === playerState.wallet!.toString()
       ) + 1 || entries.length + 1
     : null;
 
