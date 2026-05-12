@@ -1,7 +1,47 @@
 import { PublicKey } from "@solana/web3.js";
 
+// Safe PublicKey constructor that handles off-curve program-derived addresses
+// like Token-2022 (TokenzQg...) which decode to <32 bytes in base58.
+// Solana pads these with a leading 0x00 byte to make them 32 bytes.
+function safePublicKey(address: string): PublicKey {
+  // Standard 32-byte addresses work fine with new PublicKey()
+  try {
+    return new PublicKey(address);
+  } catch {
+    // For off-curve addresses that are <32 bytes, manually decode and pad
+    // Use the buffer approach to handle 31-byte addresses like Token-2022
+    const CHARSET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const bytes = [0];
+    for (const c of address) {
+      const carry = CHARSET.indexOf(c);
+      for (let j = 0; j < bytes.length; j++) {
+        const val = bytes[j] * 58 + carry;
+        bytes[j] = val & 0xff;
+      }
+      let carry2 = 0;
+      for (let j = 0; j < bytes.length; j++) {
+        bytes[j] += carry2;
+        carry2 = bytes[j] >> 8;
+        bytes[j] &= 0xff;
+      }
+      while (carry2) {
+        bytes.push(carry2 & 0xff);
+        carry2 >>= 8;
+      }
+    }
+    // Add leading zeros for each leading '1' in base58
+    for (const c of address) {
+      if (c === "1") bytes.push(0);
+      else break;
+    }
+    // Reverse to big-endian and ensure 32 bytes
+    bytes.reverse();
+    while (bytes.length < 32) bytes.unshift(0);
+    return new PublicKey(Buffer.from(bytes.slice(0, 32)));
+  }
+}
+
 // Program and Network Configuration
-// Lazy getters to avoid module-level PublicKey construction errors
 let _PROGRAM_ID: PublicKey | null = null;
 export function getProgramId(): PublicKey {
   if (!_PROGRAM_ID) {
@@ -15,16 +55,18 @@ export function getProgramId(): PublicKey {
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.x1.xyz";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws.testnet.x1.xyz";
 
+// Token-2022 program (off-curve address — must use safe constructor)
 let _TOKEN_2022_PROGRAM_ID: PublicKey | null = null;
 export function getToken2022ProgramId(): PublicKey {
   if (!_TOKEN_2022_PROGRAM_ID) {
-    _TOKEN_2022_PROGRAM_ID = new PublicKey(
+    _TOKEN_2022_PROGRAM_ID = safePublicKey(
       process.env.NEXT_PUBLIC_TOKEN_2022_PROGRAM_ID || "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ"
     );
   }
   return _TOKEN_2022_PROGRAM_ID;
 }
 
+// ATA program
 let _ATA_PROGRAM_ID: PublicKey | null = null;
 export function getAtaProgramId(): PublicKey {
   if (!_ATA_PROGRAM_ID) {
@@ -96,7 +138,7 @@ export function getViewportRange(playerX: number, playerY: number): {
   return { minX, maxX, minY, maxY };
 }
 
-// PDA derivation helpers — use lazy getters
+// PDA derivation helpers
 export function getGameConfigPda(programId?: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("game_config")],
