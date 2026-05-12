@@ -123,7 +123,7 @@ export function useGame(): UseGameReturn {
           getProgramId()
         );
 
-        const instruction = program.methods.movePlayer(directionToAnchor(direction.toLowerCase() as any))
+        const instruction = program.methods.movePlayer(directionToAnchor(direction))
           .accounts({ ... })
           .instruction();
         

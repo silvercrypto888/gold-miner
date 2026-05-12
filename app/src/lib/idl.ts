@@ -1,20 +1,24 @@
-// Generated IDL types for Gold Miner program
-// Anchor v0.30 format with explicit discriminators
+// Generated IDL for Gold Miner program — Anchor v0.30 format
 import { Idl } from "@coral-xyz/anchor";
 
 export const GoldMinerIDL: Idl = {
-  version: "0.1.0",
-  name: "gold_miner",
+  address: "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf",
+  metadata: {
+    name: "gold_miner",
+    version: "0.1.0",
+    spec: "0.1.0",
+    description: "Gold Miner game on X1/Solana",
+  },
   instructions: [
     {
       name: "initializeGame",
       discriminator: [44, 62, 102, 247, 126, 208, 130, 215],
       accounts: [
-        { name: "authority", isMut: true, isSigner: true },
-        { name: "gameConfig", isMut: true, isSigner: false },
-        { name: "goldiumMint", isMut: true, isSigner: false },
-        { name: "tokenProgram", isMut: false, isSigner: false },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        { name: "authority", writable: true, signer: true },
+        { name: "gameConfig", writable: true },
+        { name: "goldiumMint", writable: true },
+        { name: "tokenProgram", address: "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ" },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [],
     },
@@ -22,9 +26,9 @@ export const GoldMinerIDL: Idl = {
       name: "joinGame",
       discriminator: [107, 112, 18, 38, 56, 173, 60, 128],
       accounts: [
-        { name: "wallet", isMut: true, isSigner: true },
-        { name: "player", isMut: true, isSigner: false },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        { name: "wallet", writable: true, signer: true },
+        { name: "player", writable: true },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [],
     },
@@ -32,33 +36,31 @@ export const GoldMinerIDL: Idl = {
       name: "startSession",
       discriminator: [23, 227, 111, 142, 212, 230, 3, 175],
       accounts: [
-        { name: "wallet", isMut: true, isSigner: true },
-        { name: "player", isMut: true, isSigner: false },
+        { name: "wallet", writable: true, signer: true },
+        { name: "player", writable: true },
       ],
       args: [
-        { name: "sessionKey", type: "publicKey" },
+        { name: "sessionKey", type: "pubkey" },
       ],
     },
     {
       name: "movePlayer",
       discriminator: [17, 58, 68, 221, 186, 117, 140, 231],
       accounts: [
-        { name: "sessionSigner", isMut: false, isSigner: true },
-        { name: "gameConfig", isMut: true, isSigner: false },
-        { name: "player", isMut: true, isSigner: false },
-        { name: "goldSpot", isMut: true, isSigner: false },
-        { name: "goldiumMint", isMut: true, isSigner: false },
-        { name: "playerTokenAccount", isMut: true, isSigner: false },
-        { name: "tokenProgram", isMut: false, isSigner: false },
-        { name: "associatedTokenProgram", isMut: false, isSigner: false },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        { name: "sessionSigner", signer: true },
+        { name: "gameConfig", writable: true },
+        { name: "player", writable: true },
+        { name: "goldSpot", writable: true },
+        { name: "goldiumMint", writable: true },
+        { name: "playerTokenAccount", writable: true },
+        { name: "tokenProgram", address: "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ" },
+        { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [
         {
           name: "direction",
-          type: {
-            defined: "Direction",
-          },
+          type: { defined: { name: "Direction" } },
         },
       ],
     },
@@ -66,9 +68,9 @@ export const GoldMinerIDL: Idl = {
       name: "depositXnt",
       discriminator: [174, 84, 153, 146, 93, 0, 115, 244],
       accounts: [
-        { name: "wallet", isMut: true, isSigner: true },
-        { name: "player", isMut: true, isSigner: false },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        { name: "wallet", writable: true, signer: true },
+        { name: "player", writable: true },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [
         { name: "amountLamports", type: "u64" },
@@ -78,9 +80,9 @@ export const GoldMinerIDL: Idl = {
       name: "withdrawXnt",
       discriminator: [129, 188, 47, 92, 90, 169, 6, 251],
       accounts: [
-        { name: "wallet", isMut: true, isSigner: true },
-        { name: "player", isMut: true, isSigner: false },
-        { name: "systemProgram", isMut: false, isSigner: false },
+        { name: "wallet", writable: true, signer: true },
+        { name: "player", writable: true },
+        { name: "systemProgram", address: "11111111111111111111111111" },
       ],
       args: [],
     },
@@ -105,9 +107,9 @@ export const GoldMinerIDL: Idl = {
       type: {
         kind: "struct",
         fields: [
-          { name: "authority", type: "publicKey" },
+          { name: "authority", type: "pubkey" },
           { name: "gridSize", type: "u32" },
-          { name: "goldiumMint", type: "publicKey" },
+          { name: "goldiumMint", type: "pubkey" },
           { name: "totalGoldMined", type: "u64" },
           { name: "moveFeeLamports", type: "u64" },
           { name: "bump", type: "u8" },
@@ -119,8 +121,8 @@ export const GoldMinerIDL: Idl = {
       type: {
         kind: "struct",
         fields: [
-          { name: "wallet", type: "publicKey" },
-          { name: "sessionKey", type: "publicKey" },
+          { name: "wallet", type: "pubkey" },
+          { name: "sessionKey", type: "pubkey" },
           { name: "positionX", type: "u32" },
           { name: "positionY", type: "u32" },
           { name: "goldiumMinted", type: "u64" },
@@ -135,7 +137,7 @@ export const GoldMinerIDL: Idl = {
         kind: "struct",
         fields: [
           { name: "hasGold", type: "bool" },
-          { name: "minedBy", type: { option: "publicKey" } },
+          { name: "minedBy", type: { option: "pubkey" } },
         ],
       },
     },
@@ -186,24 +188,8 @@ export interface GoldSpotAccount {
   minedBy: string | null;
 }
 
-export enum Direction {
-  Up = { up: {} },
-  Down = { down: {} },
-  Left = { left: {} },
-  Right = { right: {} },
-}
+export type Direction = "Up" | "Down" | "Left" | "Right";
 
-export function directionToAnchor(direction: "up" | "down" | "left" | "right"): object {
-  switch (direction) {
-    case "up":
-      return { up: {} };
-    case "down":
-      return { down: {} };
-    case "left":
-      return { left: {} };
-    case "right":
-      return { right: {} };
-    default:
-      throw new Error("Invalid direction");
-  }
+export function directionToAnchor(direction: Direction): Record<string, {}> {
+  return { [direction]: {} };
 }
