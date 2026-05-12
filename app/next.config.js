@@ -10,6 +10,12 @@ const nextConfig = {
       os: false,
       'pino-pretty': false,
     };
+    // Remove unused wallet adapter packages from bundle
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@solana/wallet-adapter-wallets': false,
+      '@solana-mobile/wallet-adapter-mobile': false,
+    };
     return config;
   },
 };
