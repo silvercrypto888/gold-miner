@@ -48,6 +48,21 @@ export const GoldMinerIDL: Idl = {
       discriminator: [17, 58, 68, 221, 186, 117, 140, 231],
       accounts: [
         { name: "sessionSigner", signer: true },
+        { name: "player", writable: true },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
+      ],
+      args: [
+        {
+          name: "direction",
+          type: { defined: { name: "Direction" } },
+        },
+      ],
+    },
+    {
+      name: "mineGold",
+      discriminator: [142, 115, 244, 89, 37, 215, 160, 77],
+      accounts: [
+        { name: "sessionSigner", signer: true },
         { name: "gameConfig", writable: true },
         { name: "player", writable: true },
         { name: "goldSpot", writable: true },
@@ -57,12 +72,7 @@ export const GoldMinerIDL: Idl = {
         { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
         { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
-      args: [
-        {
-          name: "direction",
-          type: { defined: { name: "Direction" } },
-        },
-      ],
+      args: [],
     },
     {
       name: "depositXnt",
@@ -82,7 +92,7 @@ export const GoldMinerIDL: Idl = {
       accounts: [
         { name: "wallet", writable: true, signer: true },
         { name: "player", writable: true },
-        { name: "systemProgram", address: "11111111111111111111111111" },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [],
     },
@@ -159,7 +169,8 @@ export const GoldMinerIDL: Idl = {
     { code: 6001, name: "SessionExpired", msg: "Session has expired" },
     { code: 6002, name: "OutOfBounds", msg: "Move out of bounds" },
     { code: 6003, name: "NoFundsToWithdraw", msg: "No funds to withdraw" },
-    { code: 6004, name: "AlreadyMined", msg: "Position already mined" },
+    { code: 6004, name: "ArithmeticOverflow", msg: "Arithmetic overflow" },
+    { code: 6005, name: "AlreadyMined", msg: "Position already mined" },
   ],
 };
 

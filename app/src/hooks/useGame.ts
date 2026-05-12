@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { PublicKey, Connection } from "@solana/web3.js";
+import { PublicKey, Connection, Transaction, Keypair } from "@solana/web3.js";
+import { Program, AnchorProvider, web3 } from "@coral-xyz/anchor";
 import { useSessionKey } from "./useSessionKey";
 import { Position, Direction, GoldSpot } from "@/types";
 import {
@@ -10,8 +11,9 @@ import {
   GRID_SIZE,
   hasGoldAt,
   getViewportRange,
+  getPlayerPda,
 } from "@/lib/constants";
-import { directionToAnchor } from "@/lib/idl";
+import { GoldMinerIDL, directionToAnchor } from "@/lib/idl";
 
 interface UseGameReturn {
   position: Position;
@@ -22,7 +24,7 @@ interface UseGameReturn {
   canMove: boolean;
 }
 
-const MOVE_COOLDOWN_MS = 400; // Match X1 block time
+const MOVE_COOLDOWN_MS = 400;
 
 export function useGame(): UseGameReturn {
   const { sessionKeypair, sessionPubkey, playerState, refreshPlayerState } =
@@ -32,14 +34,25 @@ export function useGame(): UseGameReturn {
   const [isMoving, setIsMoving] = useState(false);
   const [lastMoveTime, setLastMoveTime] = useState(0);
   const connectionRef = useRef<Connection | null>(null);
-  const moveQueueRef = useRef<Direction[]>([]);
+  const programRef = useRef<Program | null>(null);
 
-  // Lazy-init connection client-side only
+  // Initialize connection and program
   useEffect(() => {
     if (!connectionRef.current) {
       connectionRef.current = new Connection(RPC_URL);
     }
-  }, []);
+    if (playerState?.wallet && sessionKeypair) {
+      const provider = new AnchorProvider(
+        connectionRef.current,
+        {
+          publicKey: playerState.wallet,
+          signTransaction: async (_tx: Transaction) => _tx, // We sign manually
+        } as any,
+        { commitment: "confirmed" }
+      );
+      programRef.current = new Program(GoldMinerIDL as any, provider);
+    }
+  }, [playerState?.wallet, sessionKeypair]);
 
   // Update position when player state changes
   useEffect(() => {
@@ -69,17 +82,16 @@ export function useGame(): UseGameReturn {
     updateVisibleGold();
   }, [updateVisibleGold]);
 
-  // Move player
+  // Move player — sends actual on-chain transaction signed by session key
   const move = useCallback(
     async (direction: Direction) => {
-      if (!sessionKeypair || !sessionPubkey || !playerState) {
-        console.log("Cannot move: no session");
+      if (!sessionKeypair || !sessionPubkey || !playerState || !programRef.current || !connectionRef.current) {
+        console.log("Cannot move: missing session or program");
         return;
       }
 
       const now = Date.now();
       if (now - lastMoveTime < MOVE_COOLDOWN_MS) {
-        console.log("Move on cooldown");
         return;
       }
 
@@ -109,36 +121,55 @@ export function useGame(): UseGameReturn {
       setIsMoving(true);
       setLastMoveTime(now);
 
+      // Optimistic update
+      setPosition({ x: newX, y: newY });
+
       try {
-        // In a full implementation, this would send a transaction
-        // For now, we'll just update the local state
-        // The actual transaction would be:
-        /*
-        const [goldSpotPda] = PublicKey.findProgramAddressSync(
-          [
-            Buffer.from("gold_spot"),
-            Buffer.from([newX & 0xff, (newX >> 8) & 0xff]),
-            Buffer.from([newY & 0xff, (newY >> 8) & 0xff]),
-          ],
-          getProgramId()
+        const programId = getProgramId();
+        if (!playerState.wallet) throw new Error("Player wallet not set");
+        const walletPk = playerState.wallet;
+        const [playerPda] = getPlayerPda(walletPk, programId);
+        const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
+
+        // Build movePlayer instruction (simplified: only sessionSigner, player, systemProgram)
+        const ix = await programRef.current.methods
+          .movePlayer(directionToAnchor(direction))
+          .accounts({
+            sessionSigner: sessionSigner.publicKey,
+            player: playerPda,
+            systemProgram: web3.SystemProgram.programId,
+          })
+          .instruction();
+
+        const { blockhash, lastValidBlockHeight } =
+          await connectionRef.current.getLatestBlockhash();
+
+        const tx = new Transaction({
+          feePayer: walletPk,
+          blockhash,
+          lastValidBlockHeight,
+        });
+        tx.add(ix);
+        tx.partialSign(sessionSigner);
+
+        // Send transaction (session key signs, no wallet popup needed)
+        const signature = await connectionRef.current.sendRawTransaction(
+          tx.serialize(),
+          { skipPreflight: false, preflightCommitment: "confirmed" }
         );
 
-        const instruction = program.methods.movePlayer(directionToAnchor(direction))
-          .accounts({ ... })
-          .instruction();
-        
-        // Sign with session key and send
-        */
+        await connectionRef.current.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight,
+        });
 
-        // Optimistic update
-        setPosition({ x: newX, y: newY });
-
-        // After a short delay, refresh from chain
-        setTimeout(() => {
-          refreshPlayerState();
-        }, MOVE_COOLDOWN_MS);
-      } catch (err) {
+        // Refresh from chain after confirmed move
+        await refreshPlayerState();
+      } catch (err: any) {
         console.error("Move failed:", err);
+        // Revert optimistic update on failure
+        setPosition(playerState.position);
       } finally {
         setIsMoving(false);
       }

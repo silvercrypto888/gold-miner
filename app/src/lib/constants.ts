@@ -92,10 +92,10 @@ export function getPlayerPda(wallet: PublicKey, programId?: PublicKey): [PublicK
 }
 
 export function getGoldSpotPda(x: number, y: number, programId?: PublicKey): [PublicKey, number] {
-  const xBuffer = Buffer.alloc(2);
-  xBuffer.writeUInt16LE(x, 0);
-  const yBuffer = Buffer.alloc(2);
-  yBuffer.writeUInt16LE(y, 0);
+  const xBuffer = Buffer.alloc(4);
+  xBuffer.writeUInt32BE(x, 0);
+  const yBuffer = Buffer.alloc(4);
+  yBuffer.writeUInt32BE(y, 0);
   return PublicKey.findProgramAddressSync(
     [Buffer.from("gold_spot"), xBuffer, yBuffer],
     programId || getProgramId()

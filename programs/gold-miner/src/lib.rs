@@ -66,6 +66,7 @@ pub mod gold_miner {
     }
 
     /// Move player - signed by session key, not wallet
+    /// This ONLY updates position. Gold mining is a separate instruction.
     pub fn move_player(ctx: Context<MovePlayer>, direction: Direction) -> Result<()> {
         let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
@@ -99,49 +100,69 @@ pub mod gold_miner {
         player.position_y = new_y;
 
         msg!("Player moved to ({}, {})", new_x, new_y);
+        Ok(())
+    }
 
-        // Check for gold and mine if present
-        if has_gold_at(new_x, new_y) && ctx.accounts.gold_spot.has_gold {
-            // Mark gold as mined
-            ctx.accounts.gold_spot.has_gold = false;
-            ctx.accounts.gold_spot.mined_by = Some(player.wallet);
+    /// Mine gold at player's current position
+    pub fn mine_gold(ctx: Context<MineGold>) -> Result<()> {
+        let player = &mut ctx.accounts.player;
+        let gold_spot = &mut ctx.accounts.gold_spot;
 
-            // Update player stats
-            player.goldium_minted = player.goldium_minted.saturating_add(GOLD_PER_MINE);
+        // Verify session key
+        require!(
+            player.session_key == ctx.accounts.session_signer.key(),
+            GoldMinerError::InvalidSessionKey
+        );
 
-            // Update global counter
-            ctx.accounts.game_config.total_gold_mined =
-                ctx.accounts.game_config.total_gold_mined.saturating_add(1);
+        // Verify session hasn't expired
+        let clock = Clock::get()?;
+        require!(
+            clock.slot <= player.session_expires_at,
+            GoldMinerError::SessionExpired
+        );
 
-            // Mint Goldium tokens to player
-            let config_bump = ctx.accounts.game_config.bump;
-            let signer_seeds: &[&[&[u8]]] = &[&[
-                b"game_config",
-                &[config_bump],
-            ]];
+        // Verify gold exists at position
+        require!(gold_spot.has_gold, GoldMinerError::AlreadyMined);
 
-            let cpi_accounts = MintTo {
-                mint: ctx.accounts.goldium_mint.to_account_info(),
-                to: ctx.accounts.player_token_account.to_account_info(),
-                authority: ctx.accounts.game_config.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                signer_seeds,
-            );
-            let amount = GOLD_PER_MINE
-                .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
-                .ok_or(GoldMinerError::ArithmeticOverflow)?;
-            mint_to(cpi_ctx, amount)?;
+        // Mark gold as mined
+        gold_spot.has_gold = false;
+        gold_spot.mined_by = Some(player.wallet);
 
-            msg!(
-                "GOLD MINED! +{} Goldium at position ({}, {})",
-                GOLD_PER_MINE,
-                new_x,
-                new_y
-            );
-        }
+        // Update player stats
+        player.goldium_minted = player.goldium_minted.saturating_add(GOLD_PER_MINE);
+
+        // Update global counter
+        ctx.accounts.game_config.total_gold_mined =
+            ctx.accounts.game_config.total_gold_mined.saturating_add(1);
+
+        // Mint Goldium tokens to player
+        let config_bump = ctx.accounts.game_config.bump;
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"game_config",
+            &[config_bump],
+        ]];
+
+        let cpi_accounts = MintTo {
+            mint: ctx.accounts.goldium_mint.to_account_info(),
+            to: ctx.accounts.player_token_account.to_account_info(),
+            authority: ctx.accounts.game_config.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            signer_seeds,
+        );
+        let amount = GOLD_PER_MINE
+            .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
+            .ok_or(GoldMinerError::ArithmeticOverflow)?;
+        mint_to(cpi_ctx, amount)?;
+
+        msg!(
+            "GOLD MINED! +{} Goldium at position ({}, {})",
+            GOLD_PER_MINE,
+            player.position_x,
+            player.position_y
+        );
 
         Ok(())
     }
@@ -299,6 +320,22 @@ pub struct MovePlayer<'info> {
     /// Session key signer - authorized to move but nothing else
     pub session_signer: Signer<'info>,
 
+    #[account(
+        mut,
+        seeds = [b"player", player.wallet.as_ref()],
+        bump = player.bump,
+        constraint = player.session_key == session_signer.key() @ GoldMinerError::InvalidSessionKey,
+    )]
+    pub player: Account<'info, Player>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct MineGold<'info> {
+    /// Session key signer
+    pub session_signer: Signer<'info>,
+
     #[account(mut)]
     pub game_config: Account<'info, GameConfig>,
 
@@ -310,9 +347,6 @@ pub struct MovePlayer<'info> {
     )]
     pub player: Account<'info, Player>,
 
-    /// Gold spot PDA at the player's current position (after move)
-    /// Seeds: ["gold_spot", x.to_be_bytes(), y.to_be_bytes()]
-    /// Using 4-byte big-endian for u32 positions
     #[account(
         mut,
         seeds = [
@@ -394,4 +428,6 @@ pub enum GoldMinerError {
     NoFundsToWithdraw,
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
+    #[msg("Position already mined")]
+    AlreadyMined,
 }
