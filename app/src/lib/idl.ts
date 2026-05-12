@@ -60,7 +60,7 @@ export const GoldMinerIDL: Idl = {
     },
     {
       name: "mineGold",
-      discriminator: [142, 115, 244, 89, 37, 215, 160, 77],
+      discriminator: [49, 40, 243, 122, 219, 94, 234, 9],
       accounts: [
         { name: "sessionSigner", signer: true },
         { name: "gameConfig", writable: true },
