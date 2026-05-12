@@ -20,8 +20,8 @@ import {
 } from "@/lib/constants";
 import { PlayerState } from "@/types";
 
-// Amount of XNT to fund the session key for gas fees (0.05 XNT)
-const SESSION_FUND_LAMPORTS = 0.05 * LAMPORTS_PER_SOL;
+// Amount of XNT to fund the session key for gas fees (0.2 XNT - enough for moves + mining)
+const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
 
 export function useSessionKey() {
   const { publicKey, signTransaction } = useWallet();

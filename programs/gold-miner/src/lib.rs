@@ -337,7 +337,8 @@ pub struct MovePlayer<'info> {
 
 #[derive(Accounts)]
 pub struct MineGold<'info> {
-    /// Session key signer
+    /// Session key signer - pays for gold_spot creation if needed
+    #[account(mut)]
     pub session_signer: Signer<'info>,
 
     #[account(mut)]
@@ -353,7 +354,7 @@ pub struct MineGold<'info> {
 
     #[account(
         init_if_needed,
-        payer = player,
+        payer = session_signer,
         space = 8 + GoldSpot::SIZE,
         seeds = [
             b"gold_spot",
