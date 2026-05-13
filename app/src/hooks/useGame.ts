@@ -323,37 +323,32 @@ export function useGame(): UseGameReturn {
 
       const [playerPda] = getPlayerPda(walletPk, programId);
 
-      // Pre-compute gold_spot PDA for the likely position (optimistic)
-      // We'll verify against chain position below
-      const likelyX = position.x;
-      const likelyY = position.y;
-      const [goldSpotPda] = getGoldSpotPda(likelyX, likelyY, programId);
+      // Use our tracked position (just confirmed by move) for PDA derivation
+      // Chain position can be stale, causing wrong gold_spot PDA
+      const mineX = position.x;
+      const mineY = position.y;
+      const [goldSpotPda] = getGoldSpotPda(mineX, mineY, programId);
 
       // Batch-fetch player account + gold_spot account in one RPC call
       const [playerInfo, goldSpotInfo] = await connectionRef.current.getMultipleAccountsInfo(
         [playerPda, goldSpotPda], 'confirmed'
       );
-      if (!playerInfo) return false;
+      if (!playerInfo) { setStatus(""); return false; }
 
       const onChainX = playerInfo.data.readUInt32LE(72);
       const onChainY = playerInfo.data.readUInt32LE(76);
       // Only update position if chain read differs significantly from our tracked state
       // This prevents rubber-banding from stale RPC data while still correcting genuine drift
-      const currentPos = { x: position.x, y: position.y };
-      if (Math.abs(onChainX - currentPos.x) > 1 || Math.abs(onChainY - currentPos.y) > 1) {
+      if (Math.abs(onChainX - mineX) > 1 || Math.abs(onChainY - mineY) > 1) {
         // Chain position is way off — something unusual happened, trust the chain
         setPosition({ x: onChainX, y: onChainY });
       }
 
-      if (!hasGoldAt(onChainX, onChainY)) return false;
+      if (!hasGoldAt(mineX, mineY)) return false;
 
-      // If chain position differs from our guess, re-derive PDA and re-fetch gold_spot
+      // No need to re-derive PDA — we always use our tracked position
       let finalGoldSpotInfo = goldSpotInfo;
       let finalGoldSpotPda = goldSpotPda;
-      if (onChainX !== likelyX || onChainY !== likelyY) {
-        [finalGoldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
-        finalGoldSpotInfo = await connectionRef.current.getAccountInfo(finalGoldSpotPda, 'confirmed');
-      }
 
       if (finalGoldSpotInfo) {
         const hasGold = finalGoldSpotInfo.data[8] === 1;
