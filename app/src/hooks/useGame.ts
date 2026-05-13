@@ -400,6 +400,14 @@ export function useGame(): UseGameReturn {
       }, 'confirmed');
 
       if (mineResult.value?.err) {
+        // Error 6005 = AlreadyMined — gold was mined by someone else, not a real failure
+        const errStr = JSON.stringify(mineResult.value.err);
+        if (errStr.includes("6005") || errStr.includes("AlreadyMined")) {
+          console.log("Gold already mined by another player, refreshing");
+          updateVisibleGold();
+          setStatus("");
+          return false;
+        }
         console.error("Mine TX failed on-chain:", mineResult.value.err);
         setStatus("");
         return false;
