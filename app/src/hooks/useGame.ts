@@ -415,7 +415,8 @@ export function useGame(): UseGameReturn {
 
         // Mine gold at current position (mineGold fetches fresh position from chain)
         if (hasGoldAt(newX, newY)) {
-          await mineGold();
+          const mined = await mineGold();
+          if (!mined) setStatus("");
         } else {
           setStatus("");
         }
