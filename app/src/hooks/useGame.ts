@@ -62,6 +62,8 @@ export function useGame(): UseGameReturn {
   // Timestamp of last authoritative on-chain position read.
   // Prevents stale playerState updates from overwriting position.
   const lastChainPositionRef = useRef<number>(0);
+  // Cache balance check to avoid redundant getBalance calls
+  const lastFundCheckRef = useRef<number>(0);
 
   const toggleShowPlayers = useCallback(() => {
     setShowPlayers(prev => !prev);
@@ -236,28 +238,42 @@ export function useGame(): UseGameReturn {
 
       const [playerPda] = getPlayerPda(walletPk, programId);
 
-      // Always fetch position fresh from chain — never trust cached/passed values
-      // because stale position data causes ConstraintSeeds PDA mismatches.
-      const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+      // Pre-compute gold_spot PDA for the likely position (optimistic)
+      // We'll verify against chain position below
+      const likelyX = position.x;
+      const likelyY = position.y;
+      const [goldSpotPda] = getGoldSpotPda(likelyX, likelyY, programId);
+
+      // Batch-fetch player account + gold_spot account in one RPC call
+      const [playerInfo, goldSpotInfo] = await connectionRef.current.getMultipleAccountsInfo(
+        [playerPda, goldSpotPda], 'confirmed'
+      );
       if (!playerInfo) return false;
+
       const onChainX = playerInfo.data.readUInt32LE(72);
       const onChainY = playerInfo.data.readUInt32LE(76);
+      setPosition({ x: onChainX, y: onChainY });
+      lastChainPositionRef.current = Date.now();
 
       if (!hasGoldAt(onChainX, onChainY)) return false;
 
-      const [gameConfigPda] = getGameConfigPda(programId);
-      const [goldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
+      // If chain position differs from our guess, re-derive PDA and re-fetch gold_spot
+      let finalGoldSpotInfo = goldSpotInfo;
+      let finalGoldSpotPda = goldSpotPda;
+      if (onChainX !== likelyX || onChainY !== likelyY) {
+        [finalGoldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
+        finalGoldSpotInfo = await connectionRef.current.getAccountInfo(finalGoldSpotPda, 'confirmed');
+      }
 
-      // Fetch gold_spot account to check if already mined
-      const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
-      if (goldSpotInfo) {
-        const hasGold = goldSpotInfo.data[8] === 1;
+      if (finalGoldSpotInfo) {
+        const hasGold = finalGoldSpotInfo.data[8] === 1;
         if (!hasGold) {
           console.log(`Gold at (${onChainX}, ${onChainY}) already mined, skipping`);
           return false;
         }
       }
       const goldiumMint = goldiumMintRef.current;
+      const [gameConfigPda] = getGameConfigPda(programId);
       const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
       const tokenProgram = getToken2022ProgramId();
       const ataProgram = getAtaProgramId();
@@ -278,7 +294,7 @@ export function useGame(): UseGameReturn {
           { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut, payer)
           { pubkey: gameConfigPda, isSigner: false, isWritable: true },                 // game_config
           { pubkey: playerPda, isSigner: false, isWritable: true },                    // player
-          { pubkey: goldSpotPda, isSigner: false, isWritable: true },                   // gold_spot (init_if_needed)
+          { pubkey: finalGoldSpotPda, isSigner: false, isWritable: true },             // gold_spot (init_if_needed)
           { pubkey: goldiumMint, isSigner: false, isWritable: true },                    // goldium_mint
           { pubkey: playerAta, isSigner: false, isWritable: true },                      // player_token_account (associated_token init_if_needed)
           { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
@@ -303,7 +319,7 @@ export function useGame(): UseGameReturn {
 
       const signature = await connectionRef.current.sendRawTransaction(
         tx.serialize(),
-        { skipPreflight: false, preflightCommitment: "confirmed" }
+        { skipPreflight: true }
       );
 
       await connectionRef.current.confirmTransaction({
@@ -316,8 +332,8 @@ export function useGame(): UseGameReturn {
       setGoldMined(prev => prev + GOLD_PER_MINE);
       lastChainPositionRef.current = Date.now();
 
-      // Refresh gold visibility — the spot we just mined should disappear
-      await updateVisibleGold();
+      // Fire-and-forget gold visibility refresh — don't block on it
+      updateVisibleGold();
       return true;
     } catch (err: any) {
       console.error("Mine gold failed:", err);
@@ -351,12 +367,17 @@ export function useGame(): UseGameReturn {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-        if (balance < 5_000_000) {
-          const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
-            await connectionRef.current.getLatestBlockhash();
-          try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
-          catch (e) { console.warn("Failed to fund session key:", e); }
+        // Only check balance every 30s to cut an RPC call
+        const fundCheckAge = Date.now() - lastFundCheckRef.current;
+        if (fundCheckAge > 30_000) {
+          const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
+          lastFundCheckRef.current = Date.now();
+          if (balance < 5_000_000) {
+            const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
+              await connectionRef.current.getLatestBlockhash();
+            try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
+            catch (e) { console.warn("Failed to fund session key:", e); }
+          }
         }
 
         const walletPk = playerState.wallet;
@@ -380,7 +401,7 @@ export function useGame(): UseGameReturn {
         tx.sign(sessionSigner);
 
         const signature = await connectionRef.current.sendRawTransaction(
-          tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
+          tx.serialize(), { skipPreflight: true }
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
         lastChainPositionRef.current = Date.now();
