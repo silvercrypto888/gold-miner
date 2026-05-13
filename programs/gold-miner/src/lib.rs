@@ -126,7 +126,22 @@ pub mod gold_miner {
         require!(has_gold, GoldMinerError::NoGoldHere);
 
         // Verify gold hasn't been mined yet
-        require!(gold_spot.has_gold, GoldMinerError::AlreadyMined);
+        // Note: init_if_needed creates accounts with zero-initialized data,
+        // so has_gold starts as false. We set it to true here for new accounts,
+        // then immediately flip it to false (marking as mined).
+        // For existing accounts, has_gold=true means unmined, has_gold=false means already mined.
+        if !gold_spot.has_gold {
+            // Check if this is a freshly created (zero-init) account
+            // A truly mined spot will have mined_by = Some(pubkey)
+            // A zero-init spot will have mined_by = None (all zeros)
+            if gold_spot.mined_by.is_none() {
+                // Freshly created by init_if_needed — this is the first mine at this spot
+                gold_spot.has_gold = true; // Set before the flip
+            } else {
+                // Previously mined
+                return Err(GoldMinerError::AlreadyMined.into());
+            }
+        }
 
         // Mark gold as mined
         gold_spot.has_gold = false;
