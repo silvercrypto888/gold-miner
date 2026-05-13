@@ -15,7 +15,7 @@ import { Direction, OtherPlayer } from "@/types";
 
 export function GameCanvas() {
   const { publicKey } = useWallet();
-  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status } = useGame();
+  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined } = useGame();
   const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
     useSessionKey();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -358,14 +358,6 @@ export function GameCanvas() {
           }}
         />
 
-        {/* Position overlay */}
-        <div className="absolute top-4 left-4 bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
-          <div className="text-sm text-gray-400">Position</div>
-          <div className="text-xl font-mono font-bold text-white">
-            ({Math.round(position.x)}, {Math.round(position.y)})
-          </div>
-        </div>
-
         {/* Status indicator */}
         {status && (
           <div className="absolute top-4 right-4 flex flex-col gap-2">
@@ -381,7 +373,7 @@ export function GameCanvas() {
             <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
               <div className="text-sm text-gray-400">Gold Spots</div>
               <div className="text-xl font-bold text-yellow-400">
-                {visibleGold.length} visible
+                {visibleGold.filter(g => g.hasGold).length} remaining
               </div>
             </div>
           </div>
@@ -390,7 +382,7 @@ export function GameCanvas() {
           <div className="absolute top-4 right-4 bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
             <div className="text-sm text-gray-400">Gold Spots</div>
             <div className="text-xl font-bold text-yellow-400">
-              {visibleGold.length} visible
+              {visibleGold.filter(g => g.hasGold).length} remaining
             </div>
           </div>
         )}
