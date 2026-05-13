@@ -291,14 +291,23 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
-      // Ensure session key has enough XNT for gas
+      // Always check session key balance before mining — no caching
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-      if (balance < 5_000_000) {
+      if (balance < 10_000_000) {
         const fundBh = await getBlockhash();
         try {
           await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
         } catch (e) {
           console.warn("Failed to fund session key for mine:", e);
+          setStatus("Funding wallet...");
+          // Brief delay for funding to propagate, then retry balance check
+          await new Promise(r => setTimeout(r, 2000));
+          const newBal = await connectionRef.current.getBalance(sessionSigner.publicKey);
+          if (newBal < 5_000_000) {
+            setStatus("");
+            console.error("Session key still underfunded after funding attempt");
+            return false;
+          }
         }
       }
 
@@ -479,12 +488,12 @@ export function useGame(): UseGameReturn {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Only check balance every 30s to cut an RPC call
+        // Check balance every 30s — ensure session key has enough XNT
         const fundCheckAge = Date.now() - lastFundCheckRef.current;
         if (fundCheckAge > 30_000) {
           const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
           lastFundCheckRef.current = Date.now();
-          if (balance < 5_000_000) {
+          if (balance < 10_000_000) {
             const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
               await getBlockhash();
             try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
