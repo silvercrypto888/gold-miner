@@ -31,6 +31,7 @@ interface UseGameReturn {
   move: (direction: Direction) => Promise<void>;
   canMove: boolean;
   goldMined: number;
+  status: string;
 }
 
 const MOVE_COOLDOWN_MS = 400;
@@ -57,6 +58,7 @@ export function useGame(): UseGameReturn {
   const [goldMined, setGoldMined] = useState(0);
   const [visiblePlayers, setVisiblePlayers] = useState<OtherPlayer[]>([]);
   const [showPlayers, setShowPlayers] = useState(false);
+  const [status, setStatus] = useState("");
   const connectionRef = useRef<Connection | null>(null);
   const goldiumMintRef = useRef<PublicKey | null>(null);
   // Timestamp of last authoritative on-chain position read.
@@ -231,6 +233,7 @@ export function useGame(): UseGameReturn {
     }
 
     try {
+      setStatus("Mining...");
       const programId = getProgramId();
       const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
       const walletPk = playerState.wallet;
@@ -330,6 +333,7 @@ export function useGame(): UseGameReturn {
 
       console.log("Gold mined! TX:", signature);
       setGoldMined(prev => prev + GOLD_PER_MINE);
+      setStatus("Mined");
       lastChainPositionRef.current = Date.now();
 
       // Fire-and-forget gold visibility refresh — don't block on it
@@ -337,6 +341,7 @@ export function useGame(): UseGameReturn {
       return true;
     } catch (err: any) {
       console.error("Mine gold failed:", err);
+      setStatus("");
       if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
       return false;
     }
@@ -362,6 +367,7 @@ export function useGame(): UseGameReturn {
       setIsMoving(true);
       setLastMoveTime(now);
       setPosition({ x: newX, y: newY }); // Optimistic
+      setStatus("Moving...");
 
       try {
         const programId = getProgramId();
@@ -405,13 +411,17 @@ export function useGame(): UseGameReturn {
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
         lastChainPositionRef.current = Date.now();
+        setStatus("Moved");
 
         // Mine gold at current position (mineGold fetches fresh position from chain)
         if (hasGoldAt(newX, newY)) {
           await mineGold();
+        } else {
+          setStatus("");
         }
       } catch (err: any) {
         console.error("Move failed:", err);
+        setStatus("");
         setPosition(playerState.position);
       } finally {
         setIsMoving(false);
@@ -437,5 +447,5 @@ export function useGame(): UseGameReturn {
   }, [move]);
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
-  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined };
+  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status };
 }

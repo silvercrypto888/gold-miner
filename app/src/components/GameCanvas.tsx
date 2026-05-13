@@ -15,7 +15,7 @@ import { Direction, OtherPlayer } from "@/types";
 
 export function GameCanvas() {
   const { publicKey } = useWallet();
-  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move } = useGame();
+  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status } = useGame();
   const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
     useSessionKey();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -366,13 +366,34 @@ export function GameCanvas() {
           </div>
         </div>
 
-        {/* Gold nearby indicator */}
-        <div className="absolute top-4 right-4 bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
-          <div className="text-sm text-gray-400">Gold Spots</div>
-          <div className="text-xl font-bold text-yellow-400">
-            {visibleGold.length} visible
+        {/* Status indicator */}
+        {status && (
+          <div className="absolute top-4 right-4 flex flex-col gap-2">
+            <div className={`backdrop-blur px-4 py-2 rounded-lg border ${
+              status === "Moving..." || status === "Mining..."
+                ? "bg-yellow-900/80 border-yellow-600 text-yellow-300"
+                : status === "Moved"
+                  ? "bg-blue-900/80 border-blue-600 text-blue-300"
+                  : "bg-green-900/80 border-green-600 text-green-300"
+            }`}>
+              <div className="text-sm">{status === "Moving..." || status === "Mining..." ? "⏳" : status === "Moved" ? "👟" : "⛏️"} {status}</div>
+            </div>
+            <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
+              <div className="text-sm text-gray-400">Gold Spots</div>
+              <div className="text-xl font-bold text-yellow-400">
+                {visibleGold.length} visible
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+        {!status && (
+          <div className="absolute top-4 right-4 bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
+            <div className="text-sm text-gray-400">Gold Spots</div>
+            <div className="text-xl font-bold text-yellow-400">
+              {visibleGold.length} visible
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Controls hint */}
