@@ -224,12 +224,29 @@ export function useGame(): UseGameReturn {
     }
   }, [playerState]);
 
-  // Load initial position once when playerState first becomes available
+  // Load initial position from chain — use raw account data, not Anchor fetch,
+  // because Anchor fetch returns stale RPC data that causes position jumps on refresh
   const initializedRef = useRef(false);
   useEffect(() => {
-    if (playerState && !initializedRef.current) {
-      setPosition(playerState.position);
-      initializedRef.current = true;
+    if (playerState?.wallet && !initializedRef.current && connectionRef.current) {
+      const loadPosition = async () => {
+        try {
+          const programId = getProgramId();
+          const [playerPda] = getPlayerPda(playerState.wallet!, programId);
+          const accountInfo = await connectionRef.current!.getAccountInfo(playerPda, 'confirmed');
+          if (accountInfo) {
+            const posX = accountInfo.data.readUInt32LE(72);
+            const posY = accountInfo.data.readUInt32LE(76);
+            setPosition({ x: posX, y: posY });
+          } else {
+            setPosition(playerState.position);
+          }
+        } catch {
+          setPosition(playerState.position);
+        }
+        initializedRef.current = true;
+      };
+      loadPosition();
     }
   }, [playerState]);
 
