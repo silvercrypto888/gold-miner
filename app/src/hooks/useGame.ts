@@ -536,8 +536,9 @@ export function useGame(): UseGameReturn {
         setPosition({ x: newX, y: newY });
         setStatus("Moved");
 
-        // Mine gold at current position (mineGold fetches fresh position from chain)
-        if (hasGoldAt(newX, newY)) {
+        // Mine gold at current position — check on-chain state, not just worldgen
+        const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
+        if (goldHere && goldHere.hasGold) {
           const mined = await mineGold();
           if (!mined) setStatus("");
         } else {
@@ -551,7 +552,8 @@ export function useGame(): UseGameReturn {
         if (errMsg.includes("already been processed")) {
           setPosition({ x: newX, y: newY });
           setStatus("Moved");
-          if (hasGoldAt(newX, newY)) {
+          const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
+          if (goldHere && goldHere.hasGold) {
             const mined = await mineGold();
             if (!mined) setStatus("");
           } else {
@@ -572,7 +574,7 @@ export function useGame(): UseGameReturn {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold, getBlockhash, invalidateBlockhash]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold, getBlockhash, invalidateBlockhash, visibleGold]
   );
 
   // Keyboard controls
