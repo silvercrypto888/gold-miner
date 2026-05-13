@@ -368,9 +368,10 @@ pub struct MineGold<'info> {
     #[account(mut)]
     pub goldium_mint: InterfaceAccount<'info, Mint>,
 
-    /// Associated token account for player's Goldium — created via ATA CPI above
+    /// Associated token account for player's Goldium — auto-created via ATA CPI if needed
     #[account(
-        mut,
+        init_if_needed,
+        payer = session_signer,
         associated_token::mint = goldium_mint,
         associated_token::authority = player,
         associated_token::token_program = token_program,
