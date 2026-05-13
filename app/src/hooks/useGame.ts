@@ -54,6 +54,9 @@ export function useGame(): UseGameReturn {
   const [goldMined, setGoldMined] = useState(0);
   const connectionRef = useRef<Connection | null>(null);
   const goldiumMintRef = useRef<PublicKey | null>(null);
+  // Timestamp of last authoritative on-chain position read.
+  // Prevents stale playerState updates from overwriting position.
+  const lastChainPositionRef = useRef<number>(0);
 
   useEffect(() => {
     if (!connectionRef.current) {
@@ -78,16 +81,18 @@ export function useGame(): UseGameReturn {
     })();
   }, []);
 
-  // Sync position from on-chain state — but not during an active move,
-  // which would cause rubber-banding (overwriting the optimistic position).
+  // Sync goldiumMinted from playerState (always safe).
+  // Position sync is blocked for 3 seconds after a direct on-chain read
+  // to prevent stale RPC data from rubber-banding the player.
   useEffect(() => {
     if (playerState) {
       setGoldMined(playerState.goldiumMinted);
-      if (!isMoving) {
+      const now = Date.now();
+      if (now - lastChainPositionRef.current > 3000) {
         setPosition(playerState.position);
       }
     }
-  }, [playerState, isMoving]);
+  }, [playerState]);
 
   const updateVisibleGold = useCallback(async () => {
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
@@ -264,6 +269,7 @@ export function useGame(): UseGameReturn {
           y: postMineInfo.data.readUInt32LE(76),
         });
       }
+      lastChainPositionRef.current = Date.now(); // block stale useEffect overwrites
 
       // Refresh gold visibility — the spot we just mined should disappear
       await updateVisibleGold();
@@ -344,6 +350,7 @@ export function useGame(): UseGameReturn {
           // Fallback: keep optimistic position
           setPosition({ x: newX, y: newY });
         }
+        lastChainPositionRef.current = Date.now(); // block stale useEffect overwrites
 
         // Small delay to ensure RPC has fully propagated the move before mining.
         // Without this, getAccountInfo can return stale position data.
