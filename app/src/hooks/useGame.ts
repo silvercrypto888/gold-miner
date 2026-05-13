@@ -116,7 +116,8 @@ export function useGame(): UseGameReturn {
     return fresh;
   }, []);
 
-  // Invalidate blockhash cache — call on transaction expiry errors
+  // Invalidate blockhash cache — must be called after every TX use
+  // since each blockhash can only sign one transaction
   const invalidateBlockhash = useCallback(() => {
     cachedBlockhashRef.current = null;
     blockhashTimeRef.current = 0;
@@ -379,6 +380,7 @@ export function useGame(): UseGameReturn {
         tx.serialize(),
         { skipPreflight: false, preflightCommitment: "confirmed" }
       );
+      invalidateBlockhash(); // blockhash consumed by this TX
 
       const mineResult = await connectionRef.current.confirmTransaction({
         signature,
@@ -401,11 +403,21 @@ export function useGame(): UseGameReturn {
       updateVisibleGold();
       return true;
     } catch (err: any) {
+      const errMsg = String(err?.message || "");
+
+      // "This transaction has already been processed" means the TX went through
+      if (errMsg.includes("already been processed")) {
+        setGoldMined(prev => prev + GOLD_PER_MINE);
+        setStatus("Mined");
+        updateVisibleGold();
+        return true;
+      }
+
       console.error("Mine gold failed:", err);
       setStatus("");
       // Invalidate cached blockhash on expiry so next action fetches fresh
       if (err?.name === "TransactionExpiredBlockheightExceededError" ||
-          String(err?.message || "").includes("block height exceeded")) {
+          errMsg.includes("block height exceeded")) {
         invalidateBlockhash();
       }
       if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
@@ -475,6 +487,7 @@ export function useGame(): UseGameReturn {
         const signature = await connectionRef.current.sendRawTransaction(
           tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
+        invalidateBlockhash(); // blockhash consumed by this TX
         const result = await connectionRef.current.confirmTransaction(
           { signature, blockhash, lastValidBlockHeight },
           'confirmed'
@@ -501,11 +514,27 @@ export function useGame(): UseGameReturn {
           setStatus("");
         }
       } catch (err: any) {
+        const errMsg = String(err?.message || "");
+
+        // "This transaction has already been processed" means the TX actually went through
+        // — treat as success, not an error
+        if (errMsg.includes("already been processed")) {
+          setPosition({ x: newX, y: newY });
+          setStatus("Moved");
+          if (hasGoldAt(newX, newY)) {
+            const mined = await mineGold();
+            if (!mined) setStatus("");
+          } else {
+            setStatus("");
+          }
+          return;
+        }
+
         console.error("Move failed:", err);
         setStatus("");
         // Invalidate cached blockhash on expiry so next action fetches fresh
         if (err?.name === "TransactionExpiredBlockheightExceededError" ||
-            String(err?.message || "").includes("block height exceeded")) {
+            errMsg.includes("block height exceeded")) {
           invalidateBlockhash();
         }
         setPosition(playerState.position);
