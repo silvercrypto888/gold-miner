@@ -221,10 +221,9 @@ export function useGame(): UseGameReturn {
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
   // Mine gold at current position.
-  // When called from move(), knownPosition is passed in to avoid re-fetching.
-  // When called standalone (e.g. page refresh on a gold spot), knownPosition is undefined
-  // and we fetch from chain.
-  const mineGold = useCallback(async (knownPosition?: Position): Promise<boolean> => {
+  // Always fetches position fresh from chain for PDA derivation
+  // to avoid ConstraintSeeds errors from stale RPC data.
+  const mineGold = useCallback(async (): Promise<boolean> => {
     if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current || !goldiumMintRef.current) {
       return false;
     }
@@ -236,45 +235,21 @@ export function useGame(): UseGameReturn {
       if (!walletPk) return false;
 
       const [playerPda] = getPlayerPda(walletPk, programId);
-      let onChainX: number;
-      let onChainY: number;
 
-      if (knownPosition) {
-        // Use position passed from move() — already confirmed on-chain
-        onChainX = knownPosition.x;
-        onChainY = knownPosition.y;
-      } else {
-        // Standalone call — fetch position from chain
-        try {
-          const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-          if (!playerInfo) return false;
-          onChainX = playerInfo.data.readUInt32LE(72);
-          onChainY = playerInfo.data.readUInt32LE(76);
-        } catch (fetchErr) {
-          console.error("Failed to fetch player account for mineGold:", fetchErr);
-          return false;
-        }
-      }
+      // Always fetch position fresh from chain — never trust cached/passed values
+      // because stale position data causes ConstraintSeeds PDA mismatches.
+      const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+      if (!playerInfo) return false;
+      const onChainX = playerInfo.data.readUInt32LE(72);
+      const onChainY = playerInfo.data.readUInt32LE(76);
 
       if (!hasGoldAt(onChainX, onChainY)) return false;
 
       const [gameConfigPda] = getGameConfigPda(programId);
       const [goldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
 
-      // Batch-fetch player + gold_spot in one RPC call when we need both
-      let goldSpotInfo: { data: Buffer } | null;
-      if (knownPosition) {
-        // Already have player data from move, just need gold_spot
-        goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
-      } else {
-        // Need both — batch fetch
-        const [playerAcct, goldSpotAcct] = await connectionRef.current.getMultipleAccountsInfo(
-          [playerPda, goldSpotPda], 'confirmed'
-        );
-        if (!playerAcct) return false;
-        goldSpotInfo = goldSpotAcct;
-      }
-
+      // Fetch gold_spot account to check if already mined
+      const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
       if (goldSpotInfo) {
         const hasGold = goldSpotInfo.data[8] === 1;
         if (!hasGold) {
@@ -408,22 +383,11 @@ export function useGame(): UseGameReturn {
           tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
-
-        // Read the actual on-chain position after confirmation to avoid stale RPC data.
-        const confirmedInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-        let confirmedPosition: Position = { x: newX, y: newY };
-        if (confirmedInfo) {
-          confirmedPosition = {
-            x: confirmedInfo.data.readUInt32LE(72),
-            y: confirmedInfo.data.readUInt32LE(76),
-          };
-          setPosition(confirmedPosition);
-        }
         lastChainPositionRef.current = Date.now();
 
-        // Mine gold at the confirmed on-chain position (no extra RPC calls needed)
-        if (hasGoldAt(confirmedPosition.x, confirmedPosition.y)) {
-          await mineGold(confirmedPosition);
+        // Mine gold at current position (mineGold fetches fresh position from chain)
+        if (hasGoldAt(newX, newY)) {
+          await mineGold();
         }
       } catch (err: any) {
         console.error("Move failed:", err);
