@@ -306,10 +306,11 @@ export function useGame(): UseGameReturn {
       const programId = getProgramId();
       const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
       const walletPk = playerState.wallet;
-      if (!walletPk) return false;
+      if (!walletPk) { console.warn("mineGold: no walletPk"); setStatus(""); return false; }
 
       // Fund if balance too low for a mine TX (ATA creation can cost ~150k lamports)
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
+      console.log(`mineGold: position=(${position.x},${position.y}) balance=${balance}`);
       if (balance < 50_000_000) {
         // Balance too low — fund up to 0.2 XNT (requires wallet signature)
         const fundBh = await getBlockhash();
@@ -333,7 +334,7 @@ export function useGame(): UseGameReturn {
       const [playerInfo, goldSpotInfo] = await connectionRef.current.getMultipleAccountsInfo(
         [playerPda, goldSpotPda], 'confirmed'
       );
-      if (!playerInfo) { setStatus(""); return false; }
+      if (!playerInfo) { console.warn("mineGold: no playerInfo"); setStatus(""); return false; }
 
       const onChainX = playerInfo.data.readUInt32LE(72);
       const onChainY = playerInfo.data.readUInt32LE(76);
@@ -344,7 +345,7 @@ export function useGame(): UseGameReturn {
         setPosition({ x: onChainX, y: onChainY });
       }
 
-      if (!hasGoldAt(mineX, mineY)) return false;
+      if (!hasGoldAt(mineX, mineY)) { console.log(`mineGold: no gold at (${mineX}, ${mineY})`); setStatus(""); return false; }
 
       // No need to re-derive PDA — we always use our tracked position
       let finalGoldSpotInfo = goldSpotInfo;
@@ -353,7 +354,8 @@ export function useGame(): UseGameReturn {
       if (finalGoldSpotInfo) {
         const hasGold = finalGoldSpotInfo.data[8] === 1;
         if (!hasGold) {
-          console.log(`Gold at (${onChainX}, ${onChainY}) already mined, skipping`);
+          console.log(`Gold at (${mineX}, ${mineY}) already mined, skipping`);
+          setStatus("");
           return false;
         }
       }
@@ -401,6 +403,7 @@ export function useGame(): UseGameReturn {
       tx.add(mineIx);
       tx.sign(sessionSigner);
 
+      console.log(`mineGold: sending TX at position (${mineX}, ${mineY})`);
       const signature = await connectionRef.current.sendRawTransaction(
         tx.serialize(),
         { skipPreflight: false, preflightCommitment: "confirmed" }
