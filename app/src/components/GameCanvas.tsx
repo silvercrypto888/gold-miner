@@ -130,7 +130,12 @@ export function GameCanvas() {
           const centerX = screenX + CELL_SIZE / 2;
           const centerY = screenY + CELL_SIZE / 2;
 
-          // Gold glow
+          // Gold glow — clipped to cell interior to preserve grid borders
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(screenX + 1, screenY + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+          ctx.clip();
+
           const gradient = ctx.createRadialGradient(
             centerX,
             centerY,
@@ -154,6 +159,8 @@ export function GameCanvas() {
           ctx.strokeStyle = "#f59e0b";
           ctx.lineWidth = 2;
           ctx.stroke();
+
+          ctx.restore();
         }
       }
     }
