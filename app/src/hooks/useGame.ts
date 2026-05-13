@@ -291,6 +291,17 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
+      // Ensure session key has enough XNT for gas
+      const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
+      if (balance < 5_000_000) {
+        const fundBh = await getBlockhash();
+        try {
+          await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
+        } catch (e) {
+          console.warn("Failed to fund session key for mine:", e);
+        }
+      }
+
       const [playerPda] = getPlayerPda(walletPk, programId);
 
       // Pre-compute gold_spot PDA for the likely position (optimistic)
@@ -423,7 +434,7 @@ export function useGame(): UseGameReturn {
       if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
       return false;
     }
-  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold, getBlockhash, invalidateBlockhash]);
+  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold, getBlockhash, invalidateBlockhash, fundSessionKey]);
 
   // Move player — session key is fee payer
   const move = useCallback(
