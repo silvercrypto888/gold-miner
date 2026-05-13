@@ -197,15 +197,21 @@ export function useGame(): UseGameReturn {
       clearInterval(interval);
     };
   }, [showPlayers, playerState?.wallet]);
-  // Position sync is blocked for 3 seconds after a direct on-chain read
-  // to prevent stale RPC data from rubber-banding the player.
+  // Sync gold count from playerState, but NOT position.
+  // Position is only set from optimistic updates and direct on-chain reads
+  // to prevent stale Anchor/fetch data from rubber-banding the player.
   useEffect(() => {
     if (playerState) {
       setGoldMined(playerState.goldiumMinted);
-      const now = Date.now();
-      if (now - lastChainPositionRef.current > 3000) {
-        setPosition(playerState.position);
-      }
+    }
+  }, [playerState]);
+
+  // Load initial position once when playerState first becomes available
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (playerState && !initializedRef.current) {
+      setPosition(playerState.position);
+      initializedRef.current = true;
     }
   }, [playerState]);
 
