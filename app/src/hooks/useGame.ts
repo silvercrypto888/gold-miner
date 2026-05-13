@@ -85,14 +85,61 @@ export function useGame(): UseGameReturn {
     }
   }, [playerState]);
 
-  const updateVisibleGold = useCallback(() => {
+  const updateVisibleGold = useCallback(async () => {
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
+    const programId = getProgramId();
     const goldSpots: GoldSpot[] = [];
+
+    // Collect all positions that have gold by worldgen
+    const candidatePositions: [number, number][] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
-        if (hasGoldAt(x, y)) goldSpots.push({ x, y, hasGold: true });
+        if (hasGoldAt(x, y)) candidatePositions.push([x, y]);
       }
     }
+
+    // Check on-chain which gold spots have been mined
+    if (candidatePositions.length > 0 && connectionRef.current) {
+      try {
+        const pdas = candidatePositions.map(([x, y]) => {
+          const xBuf = Buffer.alloc(4);
+          xBuf.writeUInt32BE(x, 0);
+          const yBuf = Buffer.alloc(4);
+          yBuf.writeUInt32BE(y, 0);
+          return PublicKey.findProgramAddressSync(
+            [Buffer.from("gold_spot"), xBuf, yBuf],
+            programId
+          )[0];
+        });
+
+        // Batch fetch all gold_spot accounts
+        const accounts = await connectionRef.current.getMultipleAccountsInfo(pdas, 'confirmed');
+
+        // GoldSpot discriminator
+        const goldSpotDisc = Buffer.from([112, 156, 149, 108, 70, 90, 135, 242]);
+
+        for (let i = 0; i < candidatePositions.length; i++) {
+          const [x, y] = candidatePositions[i];
+          const acct = accounts[i];
+
+          if (acct && acct.data.slice(0, 8).equals(goldSpotDisc)) {
+            // Account exists — check if gold is still there
+            const hasGold = acct.data[8] === 1;
+            goldSpots.push({ x, y, hasGold });
+          } else {
+            // Account doesn't exist yet — gold is available
+            goldSpots.push({ x, y, hasGold: true });
+          }
+        }
+      } catch (e) {
+        // Fallback: if batch fetch fails, assume all gold is available
+        console.warn("Failed to fetch gold spots, assuming all available:", e);
+        for (const [x, y] of candidatePositions) {
+          goldSpots.push({ x, y, hasGold: true });
+        }
+      }
+    }
+
     setVisibleGold(goldSpots);
   }, [position]);
 
@@ -205,13 +252,15 @@ export function useGame(): UseGameReturn {
       console.log("Gold mined! TX:", signature);
       setGoldMined(prev => prev + GOLD_PER_MINE);
       await refreshPlayerState();
+      // Refresh gold visibility — the spot we just mined should disappear
+      await updateVisibleGold();
       return true;
     } catch (err: any) {
       console.error("Mine gold failed:", err);
       if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
       return false;
     }
-  }, [sessionKeypair, sessionPubkey, playerState, position]);
+  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold]);
 
   // Move player — session key is fee payer
   const move = useCallback(

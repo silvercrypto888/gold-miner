@@ -122,8 +122,11 @@ export function GameCanvas() {
           }
         }
 
-        // Draw gold if present
-        if (hasGoldAt(x, y)) {
+        // Draw gold if present and unmined
+        const goldSpot = visibleGold.find(
+          (g) => g.x === x && g.y === y
+        );
+        if (goldSpot && goldSpot.hasGold) {
           const centerX = screenX + CELL_SIZE / 2;
           const centerY = screenY + CELL_SIZE / 2;
 
