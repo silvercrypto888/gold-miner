@@ -154,8 +154,11 @@ export function useGame(): UseGameReturn {
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
-  // Mine gold at current position — uses ON-CHAIN position for PDA derivation
-  const mineGold = useCallback(async (): Promise<boolean> => {
+  // Mine gold at current position.
+  // When called from move(), knownPosition is passed in to avoid re-fetching.
+  // When called standalone (e.g. page refresh on a gold spot), knownPosition is undefined
+  // and we fetch from chain.
+  const mineGold = useCallback(async (knownPosition?: Position): Promise<boolean> => {
     if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current || !goldiumMintRef.current) {
       return false;
     }
@@ -166,25 +169,25 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
-      // Read ON-CHAIN position using Anchor deserialization for reliability.
-      // Raw getAccountInfo() can return stale RPC cache data, causing PDA mismatch.
       const [playerPda] = getPlayerPda(walletPk, programId);
       let onChainX: number;
       let onChainY: number;
-      try {
-        // Fetch with confirmed commitment and use Anchor's own deserialization
-        // to ensure we get the latest state and parse it correctly.
-        const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-        if (!playerInfo) return false;
-        // Anchor account layout: 8 (disc) + 32 (wallet) + 32 (session_key) + 4 (pos_x) + 4 (pos_y)
-        // Position fields are u32 little-endian on-chain, but seeds use big-endian.
-        // Read as LE (on-chain storage format), then pass to getGoldSpotPda which
-        // converts to BE for PDA derivation — matching the Rust .to_be_bytes().
-        onChainX = playerInfo.data.readUInt32LE(72);
-        onChainY = playerInfo.data.readUInt32LE(76);
-      } catch (fetchErr) {
-        console.error("Failed to fetch player account for mineGold:", fetchErr);
-        return false;
+
+      if (knownPosition) {
+        // Use position passed from move() — already confirmed on-chain
+        onChainX = knownPosition.x;
+        onChainY = knownPosition.y;
+      } else {
+        // Standalone call — fetch position from chain
+        try {
+          const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+          if (!playerInfo) return false;
+          onChainX = playerInfo.data.readUInt32LE(72);
+          onChainY = playerInfo.data.readUInt32LE(76);
+        } catch (fetchErr) {
+          console.error("Failed to fetch player account for mineGold:", fetchErr);
+          return false;
+        }
       }
 
       if (!hasGoldAt(onChainX, onChainY)) return false;
@@ -192,11 +195,21 @@ export function useGame(): UseGameReturn {
       const [gameConfigPda] = getGameConfigPda(programId);
       const [goldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
 
-      // Check if gold_spot already exists and has been mined
-      const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
+      // Batch-fetch player + gold_spot in one RPC call when we need both
+      let goldSpotInfo: { data: Buffer } | null;
+      if (knownPosition) {
+        // Already have player data from move, just need gold_spot
+        goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
+      } else {
+        // Need both — batch fetch
+        const [playerAcct, goldSpotAcct] = await connectionRef.current.getMultipleAccountsInfo(
+          [playerPda, goldSpotPda], 'confirmed'
+        );
+        if (!playerAcct) return false;
+        goldSpotInfo = goldSpotAcct;
+      }
+
       if (goldSpotInfo) {
-        // GoldSpot layout: 8 (disc) + 1 (has_gold bool) + ...
-        // If has_gold is false (0), this position is already mined
         const hasGold = goldSpotInfo.data[8] === 1;
         if (!hasGold) {
           console.log(`Gold at (${onChainX}, ${onChainY}) already mined, skipping`);
@@ -260,16 +273,7 @@ export function useGame(): UseGameReturn {
 
       console.log("Gold mined! TX:", signature);
       setGoldMined(prev => prev + GOLD_PER_MINE);
-
-      // Read position directly from chain after mining (avoid stale RPC data)
-      const postMineInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-      if (postMineInfo) {
-        setPosition({
-          x: postMineInfo.data.readUInt32LE(72),
-          y: postMineInfo.data.readUInt32LE(76),
-        });
-      }
-      lastChainPositionRef.current = Date.now(); // block stale useEffect overwrites
+      lastChainPositionRef.current = Date.now();
 
       // Refresh gold visibility — the spot we just mined should disappear
       await updateVisibleGold();
@@ -340,23 +344,21 @@ export function useGame(): UseGameReturn {
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
 
         // Read the actual on-chain position after confirmation to avoid stale RPC data.
-        // Don't rely on refreshPlayerState() here — it may return cached data.
         const confirmedInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+        let confirmedPosition: Position = { x: newX, y: newY };
         if (confirmedInfo) {
-          const confirmedX = confirmedInfo.data.readUInt32LE(72);
-          const confirmedY = confirmedInfo.data.readUInt32LE(76);
-          setPosition({ x: confirmedX, y: confirmedY });
-        } else {
-          // Fallback: keep optimistic position
-          setPosition({ x: newX, y: newY });
+          confirmedPosition = {
+            x: confirmedInfo.data.readUInt32LE(72),
+            y: confirmedInfo.data.readUInt32LE(76),
+          };
+          setPosition(confirmedPosition);
         }
-        lastChainPositionRef.current = Date.now(); // block stale useEffect overwrites
+        lastChainPositionRef.current = Date.now();
 
-        // Small delay to ensure RPC has fully propagated the move before mining.
-        // Without this, getAccountInfo can return stale position data.
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        if (hasGoldAt(newX, newY)) await mineGold();
+        // Mine gold at the confirmed on-chain position (no extra RPC calls needed)
+        if (hasGoldAt(confirmedPosition.x, confirmedPosition.y)) {
+          await mineGold(confirmedPosition);
+        }
       } catch (err: any) {
         console.error("Move failed:", err);
         setPosition(playerState.position);
