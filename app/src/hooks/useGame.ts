@@ -67,6 +67,11 @@ export function useGame(): UseGameReturn {
   // Cache balance check to avoid redundant getBalance calls
   const lastFundCheckRef = useRef<number>(0);
 
+  // Pre-cached blockhash — refreshed every 30s in the background so
+  // move/mine don't have to wait for getLatestBlockhash.
+  const cachedBlockhashRef = useRef<{ blockhash: string; lastValidBlockHeight: number } | null>(null);
+  const blockhashFetchRef = useRef<boolean>(false);
+
   const toggleShowPlayers = useCallback(() => {
     setShowPlayers(prev => !prev);
   }, []);
@@ -75,6 +80,40 @@ export function useGame(): UseGameReturn {
     if (!connectionRef.current) {
       connectionRef.current = new Connection(RPC_URL);
     }
+  }, []);
+
+  // Pre-cache blockhash every 30s so moves/mines don't wait for getLatestBlockhash
+  useEffect(() => {
+    const refresh = async () => {
+      if (!connectionRef.current || blockhashFetchRef.current) return;
+      blockhashFetchRef.current = true;
+      try {
+        const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
+        cachedBlockhashRef.current = { blockhash, lastValidBlockHeight };
+        blockhashTimeRef.current = Date.now();
+      } catch (e) {
+        console.warn("Failed to pre-cache blockhash:", e);
+      } finally {
+        blockhashFetchRef.current = false;
+      }
+    };
+    refresh(); // initial fetch
+    const interval = setInterval(refresh, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get a blockhash — uses cached if fresh (<45s old), otherwise fetches from RPC
+  const blockhashTimeRef = useRef<number>(0);
+  const getBlockhash = useCallback(async (): Promise<{ blockhash: string; lastValidBlockHeight: number }> => {
+    if (!connectionRef.current) throw new Error("No connection");
+    const cached = cachedBlockhashRef.current;
+    const cacheAge = Date.now() - blockhashTimeRef.current;
+    if (cached && cacheAge < 45_000) return cached;
+    // Cache miss or stale — fetch fresh
+    const fresh = await connectionRef.current.getLatestBlockhash();
+    cachedBlockhashRef.current = fresh;
+    blockhashTimeRef.current = Date.now();
+    return fresh;
   }, []);
 
   // Fetch goldium mint address once
@@ -308,8 +347,7 @@ export function useGame(): UseGameReturn {
         data: MINE_GOLD_DISC,
       });
 
-      const { blockhash, lastValidBlockHeight } =
-        await connectionRef.current.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await getBlockhash();
 
       const tx = new Transaction({
         feePayer: sessionSigner.publicKey,
@@ -345,7 +383,7 @@ export function useGame(): UseGameReturn {
       if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
       return false;
     }
-  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold]);
+  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold, getBlockhash]);
 
   // Move player — session key is fee payer
   const move = useCallback(
@@ -380,7 +418,7 @@ export function useGame(): UseGameReturn {
           lastFundCheckRef.current = Date.now();
           if (balance < 5_000_000) {
             const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
-              await connectionRef.current.getLatestBlockhash();
+              await getBlockhash();
             try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
             catch (e) { console.warn("Failed to fund session key:", e); }
           }
@@ -401,7 +439,7 @@ export function useGame(): UseGameReturn {
           data,
         });
 
-        const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
+        const { blockhash, lastValidBlockHeight } = await getBlockhash();
         const tx = new Transaction({ feePayer: sessionSigner.publicKey, blockhash, lastValidBlockHeight });
         tx.add(ix);
         tx.sign(sessionSigner);
@@ -428,7 +466,7 @@ export function useGame(): UseGameReturn {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold, getBlockhash]
   );
 
   // Keyboard controls
