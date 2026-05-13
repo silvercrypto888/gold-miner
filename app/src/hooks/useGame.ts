@@ -343,11 +343,20 @@ export function useGame(): UseGameReturn {
 
       // Batch-fetch player account first to get on-chain position for PDA derivation
       // The program derives gold_spot PDA from the on-chain position, so we must match
-      const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-      if (!playerInfo) { console.warn("mineGold: no playerInfo"); setStatus(""); return false; }
-
-      const onChainX = playerInfo.data.readUInt32LE(72);
-      const onChainY = playerInfo.data.readUInt32LE(76);
+      // Read player position from chain with retry — RPC can be stale after a move
+      let playerInfo: { data: Buffer } | null = null;
+      let onChainX = 0, onChainY = 0;
+      const expectedX = position.x, expectedY = position.y;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+        if (!playerInfo) { console.warn("mineGold: no playerInfo"); setStatus(""); return false; }
+        onChainX = playerInfo.data.readUInt32LE(72);
+        onChainY = playerInfo.data.readUInt32LE(76);
+        if (onChainX === expectedX && onChainY === expectedY) break;
+        // Position doesn't match yet — RPC might be stale, wait and retry
+        console.log(`mineGold: position mismatch (attempt ${attempt+1}), chain=(${onChainX},${onChainY}) expected=(${expectedX},${expectedY})`);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 300));
+      }
 
       // Use on-chain position for PDA derivation (must match what the program expects)
       // but never update our tracked position from chain reads here —
