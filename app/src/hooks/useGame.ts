@@ -423,6 +423,7 @@ export function useGame(): UseGameReturn {
       return true;
     } catch (err: any) {
       const errMsg = String(err?.message || "");
+      const errLogs = err?.logs ? err.logs.join(" ") : "";
 
       // "This transaction has already been processed" means the TX went through
       if (errMsg.includes("already been processed")) {
@@ -430,6 +431,14 @@ export function useGame(): UseGameReturn {
         setStatus("Mined");
         updateVisibleGold();
         return true;
+      }
+
+      // AlreadyMined (6005 / 0x1775) — gold was mined by someone else, not a real failure
+      if (errMsg.includes("6005") || errMsg.includes("0x1775") || errMsg.includes("AlreadyMined") || errLogs.includes("AlreadyMined")) {
+        console.log("Gold already mined by another player, refreshing");
+        updateVisibleGold();
+        setStatus("");
+        return false;
       }
 
       console.error("Mine gold failed:", err);
