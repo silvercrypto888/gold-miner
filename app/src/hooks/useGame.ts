@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicKey, Connection, Transaction, TransactionInstruction, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { createAssociatedTokenAccountIdempotentInstruction, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { useSessionKey } from "./useSessionKey";
-import { Position, Direction, GoldSpot } from "@/types";
+import { Position, Direction, GoldSpot, OtherPlayer } from "@/types";
 import {
   getProgramId,
   RPC_URL,
@@ -23,6 +23,9 @@ import {
 interface UseGameReturn {
   position: Position;
   visibleGold: GoldSpot[];
+  visiblePlayers: OtherPlayer[];
+  showPlayers: boolean;
+  toggleShowPlayers: () => void;
   isMoving: boolean;
   lastMoveTime: number;
   move: (direction: Direction) => Promise<void>;
@@ -52,11 +55,17 @@ export function useGame(): UseGameReturn {
   const [isMoving, setIsMoving] = useState(false);
   const [lastMoveTime, setLastMoveTime] = useState(0);
   const [goldMined, setGoldMined] = useState(0);
+  const [visiblePlayers, setVisiblePlayers] = useState<OtherPlayer[]>([]);
+  const [showPlayers, setShowPlayers] = useState(false);
   const connectionRef = useRef<Connection | null>(null);
   const goldiumMintRef = useRef<PublicKey | null>(null);
   // Timestamp of last authoritative on-chain position read.
   // Prevents stale playerState updates from overwriting position.
   const lastChainPositionRef = useRef<number>(0);
+
+  const toggleShowPlayers = useCallback(() => {
+    setShowPlayers(prev => !prev);
+  }, []);
 
   useEffect(() => {
     if (!connectionRef.current) {
@@ -81,7 +90,64 @@ export function useGame(): UseGameReturn {
     })();
   }, []);
 
-  // Sync goldiumMinted from playerState (always safe).
+  // Fetch other players visible in the viewport when showPlayers is toggled on
+  // Player account size: 8 (disc) + 32 (wallet) + 32 (session_key) + 4 (pos_x) + 4 (pos_y) + 8 (goldium) + 8 (session_expires) + 1 (bump) = 97
+  const PLAYER_ACCOUNT_SIZE = 97;
+  const PLAYER_DISC = Buffer.from([205, 222, 112, 7, 165, 155, 206, 218]); // Anchor discriminator for "account:Player"
+
+  useEffect(() => {
+    if (!showPlayers || !connectionRef.current || !playerState?.wallet) {
+      if (!showPlayers) setVisiblePlayers([]);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchPlayers = async () => {
+      try {
+        const conn = connectionRef.current!;
+        const programId = getProgramId();
+        const myWallet = playerState.wallet!.toBase58();
+
+        // Fetch all player accounts owned by the program
+        const accounts = await conn.getProgramAccounts(programId, {
+          filters: [
+            { dataSize: PLAYER_ACCOUNT_SIZE },
+          ],
+          commitment: 'confirmed',
+        });
+
+        if (cancelled) return;
+
+        const players: OtherPlayer[] = [];
+        for (const acct of accounts) {
+          const data = acct.account.data;
+          // Verify discriminator
+          if (!data.subarray(0, 8).equals(PLAYER_DISC)) continue;
+
+          const wallet = new PublicKey(data.subarray(8, 40)).toBase58();
+          // Skip self
+          if (wallet === myWallet) continue;
+
+          const x = data.readUInt32LE(72);
+          const y = data.readUInt32LE(76);
+
+          players.push({ wallet, x, y });
+        }
+
+        setVisiblePlayers(players);
+      } catch (e) {
+        console.warn("Failed to fetch other players:", e);
+      }
+    };
+
+    fetchPlayers();
+    // Refresh every 10 seconds while toggled on
+    const interval = setInterval(fetchPlayers, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [showPlayers, playerState?.wallet]);
   // Position sync is blocked for 3 seconds after a direct on-chain read
   // to prevent stale RPC data from rubber-banding the player.
   useEffect(() => {
@@ -386,5 +452,5 @@ export function useGame(): UseGameReturn {
   }, [move]);
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
-  return { position, visibleGold, isMoving, lastMoveTime, move, canMove, goldMined };
+  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined };
 }

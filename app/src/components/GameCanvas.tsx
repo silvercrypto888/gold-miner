@@ -11,11 +11,11 @@ import {
   hasGoldAt,
   getViewportRange,
 } from "@/lib/constants";
-import { Direction } from "@/types";
+import { Direction, OtherPlayer } from "@/types";
 
 export function GameCanvas() {
   const { publicKey } = useWallet();
-  const { position, visibleGold, isMoving, move } = useGame();
+  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move } = useGame();
   const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
     useSessionKey();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -193,7 +193,49 @@ export function GameCanvas() {
     ctx.arc(playerScreenX, playerScreenY, 6, 0, Math.PI * 2);
     ctx.fillStyle = "#93c5fd";
     ctx.fill();
-  }, [displayPosition, visibleGold]);
+
+    // Draw other players (green translucent circles)
+    if (showPlayers && visiblePlayers.length > 0) {
+      const { minX: vpMinX, maxX: vpMaxX, minY: vpMinY, maxY: vpMaxY } = getViewportRange(
+        Math.round(displayPosition.x),
+        Math.round(displayPosition.y)
+      );
+      for (const other of visiblePlayers) {
+        // Only draw players within the current viewport
+        if (other.x < vpMinX || other.x > vpMaxX || other.y < vpMinY || other.y > vpMaxY) continue;
+
+        const otherScreenX = (other.x - vpMinX) * CELL_SIZE + CELL_SIZE / 2 - offsetX;
+        const otherScreenY = (vpMaxY - other.y) * CELL_SIZE + CELL_SIZE / 2 + offsetY;
+
+        // Outer glow
+        const otherGlow = ctx.createRadialGradient(
+          otherScreenX, otherScreenY, 4,
+          otherScreenX, otherScreenY, 14
+        );
+        otherGlow.addColorStop(0, "rgba(34, 197, 94, 0.5)");
+        otherGlow.addColorStop(1, "transparent");
+        ctx.fillStyle = otherGlow;
+        ctx.beginPath();
+        ctx.arc(otherScreenX, otherScreenY, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Circle
+        ctx.beginPath();
+        ctx.arc(otherScreenX, otherScreenY, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(34, 197, 94, 0.6)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(74, 222, 128, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Inner dot
+        ctx.beginPath();
+        ctx.arc(otherScreenX, otherScreenY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(187, 247, 208, 0.9)";
+        ctx.fill();
+      }
+    }
+  }, [displayPosition, visibleGold, visiblePlayers, showPlayers]);
 
   // Redraw on state changes
   useEffect(() => {
@@ -336,9 +378,21 @@ export function GameCanvas() {
           <span className="text-white font-mono bg-gray-700 px-1 rounded">Arrow Keys</span>
           {" to move"}
         </div>
-        <div className="text-sm text-gray-400">
-          Session Key: {" "}
-          <span className="text-green-400">Active</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleShowPlayers}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+              showPlayers
+                ? "bg-green-600/30 border-green-500 text-green-400"
+                : "bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500"
+            }`}
+          >
+            {showPlayers ? "👁 Players: ON" : "👁 Players: OFF"}
+          </button>
+          <div className="text-sm text-gray-400">
+            Session Key:{" "}
+            <span className="text-green-400">Active</span>
+          </div>
         </div>
       </div>
     </div>

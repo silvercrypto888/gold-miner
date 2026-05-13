@@ -5,6 +5,12 @@ export interface Position {
   y: number;
 }
 
+export interface OtherPlayer {
+  wallet: string;
+  x: number;
+  y: number;
+}
+
 export interface PlayerState {
   wallet: PublicKey | null;
   sessionKey: PublicKey | null;
