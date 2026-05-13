@@ -87,15 +87,11 @@ export function GameCanvas() {
       Math.round(displayPosition.y)
     );
 
-    // Draw grid lines
-    ctx.strokeStyle = "#374151";
-    ctx.lineWidth = 1;
-
     // Calculate offset for smooth scrolling
     const offsetX = (displayPosition.x - Math.floor(displayPosition.x)) * CELL_SIZE;
     const offsetY = (displayPosition.y - Math.floor(displayPosition.y)) * CELL_SIZE;
 
-    // Draw cells
+    // Draw cells (backgrounds + gold)
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         const screenX = (x - minX) * CELL_SIZE - offsetX;
@@ -105,9 +101,6 @@ export function GameCanvas() {
         const isDark = (x + y) % 2 === 0;
         ctx.fillStyle = isDark ? "#1f2937" : "#374151";
         ctx.fillRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
-
-        // Draw grid border
-        ctx.strokeRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
 
         // Draw coordinates on edge cells
         if (x === minX || y === maxY) {
@@ -130,12 +123,7 @@ export function GameCanvas() {
           const centerX = screenX + CELL_SIZE / 2;
           const centerY = screenY + CELL_SIZE / 2;
 
-          // Gold glow — clipped to cell interior to preserve grid borders
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(screenX + 1, screenY + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-          ctx.clip();
-
+          // Gold glow
           const gradient = ctx.createRadialGradient(
             centerX,
             centerY,
@@ -159,9 +147,18 @@ export function GameCanvas() {
           ctx.strokeStyle = "#f59e0b";
           ctx.lineWidth = 2;
           ctx.stroke();
-
-          ctx.restore();
         }
+      }
+    }
+
+    // Draw grid borders on top of everything (gold glow won't overwrite them)
+    ctx.strokeStyle = "#374151";
+    ctx.lineWidth = 1;
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        const screenX = (x - minX) * CELL_SIZE - offsetX;
+        const screenY = (maxY - y) * CELL_SIZE + offsetY;
+        ctx.strokeRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
       }
     }
 
