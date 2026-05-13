@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicKey, Connection, Transaction, TransactionInstruction, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { createAssociatedTokenAccountIdempotentInstruction, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { useSessionKey } from "./useSessionKey";
 import { Position, Direction, GoldSpot } from "@/types";
 import {
@@ -125,7 +126,17 @@ export function useGame(): UseGameReturn {
       const tokenProgram = getToken2022ProgramId();
       const ataProgram = getAtaProgramId();
 
-      // Build mineGold instruction — Anchor CPI creates ATA + gold_spot if needed
+      // Create ATA idempotently — no-op if already exists
+      const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+        sessionSigner.publicKey,  // payer
+        playerAta,                // ata
+        playerPda,                 // owner
+        goldiumMint,               // mint
+        tokenProgram,               // token program (Token-2022)
+        ataProgram                   // ATA program
+      );
+
+      // Build mineGold instruction — Anchor CPI creates gold_spot if needed
       const mineIx = new TransactionInstruction({
         keys: [
           { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut, payer)
@@ -150,6 +161,7 @@ export function useGame(): UseGameReturn {
         blockhash,
         lastValidBlockHeight,
       });
+      tx.add(createAtaIx);
       tx.add(mineIx);
       tx.sign(sessionSigner);
 
