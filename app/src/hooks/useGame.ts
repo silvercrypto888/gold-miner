@@ -306,8 +306,13 @@ export function useGame(): UseGameReturn {
 
       const onChainX = playerInfo.data.readUInt32LE(72);
       const onChainY = playerInfo.data.readUInt32LE(76);
-      setPosition({ x: onChainX, y: onChainY });
-      lastChainPositionRef.current = Date.now();
+      // Only update position if chain read differs significantly from our tracked state
+      // This prevents rubber-banding from stale RPC data while still correcting genuine drift
+      const currentPos = { x: position.x, y: position.y };
+      if (Math.abs(onChainX - currentPos.x) > 1 || Math.abs(onChainY - currentPos.y) > 1) {
+        // Chain position is way off — something unusual happened, trust the chain
+        setPosition({ x: onChainX, y: onChainY });
+      }
 
       if (!hasGoldAt(onChainX, onChainY)) return false;
 
@@ -465,16 +470,9 @@ export function useGame(): UseGameReturn {
           tx.serialize(), { skipPreflight: true }
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
-
-        // Read actual on-chain position after confirmation to correct any drift
-        const confirmedInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-        if (confirmedInfo) {
-          setPosition({
-            x: confirmedInfo.data.readUInt32LE(72),
-            y: confirmedInfo.data.readUInt32LE(76),
-          });
-        }
-        lastChainPositionRef.current = Date.now();
+        // Move confirmed — we know the position is (newX, newY)
+        // Don't read back from RPC; it can return stale data causing rubber-banding
+        setPosition({ x: newX, y: newY });
         setStatus("Moved");
 
         // Mine gold at current position (mineGold fetches fresh position from chain)
