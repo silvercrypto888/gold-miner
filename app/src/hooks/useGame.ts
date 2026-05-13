@@ -313,7 +313,7 @@ export function useGame(): UseGameReturn {
   // Mine gold at current position.
   // Always fetches position fresh from chain for PDA derivation
   // to avoid ConstraintSeeds errors from stale RPC data.
-  const mineGold = useCallback(async (): Promise<boolean> => {
+  const mineGold = useCallback(async (mineX?: number, mineY?: number): Promise<boolean> => {
     if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current || !goldiumMintRef.current) {
       return false;
     }
@@ -327,7 +327,7 @@ export function useGame(): UseGameReturn {
 
       // Fund if balance too low for a mine TX (ATA creation can cost ~150k lamports)
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-      console.log(`mineGold: position=(${position.x},${position.y}) balance=${balance}`);
+      console.log(`mineGold: position=(${position.x},${position.y}) explicit=(${mineX},${mineY}) balance=${balance}`);
       if (balance < 50_000_000) {
         // Balance too low — fund up to 0.2 XNT (requires wallet signature)
         const fundBh = await getBlockhash();
@@ -341,36 +341,36 @@ export function useGame(): UseGameReturn {
 
       const [playerPda] = getPlayerPda(walletPk, programId);
 
-      // Batch-fetch player account first to get on-chain position for PDA derivation
-      // The program derives gold_spot PDA from the on-chain position, so we must match
-      // Read player position from chain with retry — RPC can be stale after a move
+      // Use explicit position if provided (from move), otherwise fall back to tracked position
+      // This avoids the React closure stale position problem
+      const targetX = mineX ?? position.x;
+      const targetY = mineY ?? position.y;
+
+      // Read on-chain position for PDA derivation (must match what the program expects)
       let playerInfo: { data: Buffer } | null = null;
       let onChainX = 0, onChainY = 0;
-      const expectedX = position.x, expectedY = position.y;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
         if (!playerInfo) { console.warn("mineGold: no playerInfo"); setStatus(""); return false; }
         onChainX = playerInfo.data.readUInt32LE(72);
         onChainY = playerInfo.data.readUInt32LE(76);
-        if (onChainX === expectedX && onChainY === expectedY) break;
+        if (onChainX === targetX && onChainY === targetY) break;
         // Position doesn't match yet — RPC might be stale, wait and retry
-        console.log(`mineGold: position mismatch (attempt ${attempt+1}), chain=(${onChainX},${onChainY}) expected=(${expectedX},${expectedY})`);
-        if (attempt < 2) await new Promise(r => setTimeout(r, 300));
+        console.log(`mineGold: position mismatch (attempt ${attempt+1}), chain=(${onChainX},${onChainY}) expected=(${targetX},${targetY})`);
+        if (attempt < 4) await new Promise(r => setTimeout(r, 400));
       }
 
       // Use on-chain position for PDA derivation (must match what the program expects)
-      // but never update our tracked position from chain reads here —
-      // RPC data can be stale, causing momentary "teleport" glitches
-      const mineX = onChainX;
-      const mineY = onChainY;
-      const [goldSpotPda] = getGoldSpotPda(mineX, mineY, programId);
+      const pdxX = onChainX;
+      const pdxY = onChainY;
+      const [goldSpotPda] = getGoldSpotPda(pdxX, pdxY, programId);
 
       // Fetch gold_spot account
       const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
 
-      // Check worldgen using our tracked position — we know we're on gold
-      if (!hasGoldAt(position.x, position.y) && !hasGoldAt(mineX, mineY)) {
-        console.log(`mineGold: no gold at tracked (${position.x},${position.y}) or chain (${mineX},${mineY})`);
+      // Check worldgen using on-chain position (that's what the program checks)
+      if (!hasGoldAt(pdxX, pdxY)) {
+        console.log(`mineGold: no gold at on-chain position (${pdxX},${pdxY})`);
         setStatus("");
         return false;
       }
@@ -380,7 +380,7 @@ export function useGame(): UseGameReturn {
       if (goldSpotInfo) {
         const hasGold = goldSpotInfo.data[8] === 1;
         if (!hasGold) {
-          console.log(`Gold at (${mineX}, ${mineY}) already mined, skipping`);
+          console.log(`Gold at (${pdxX}, ${pdxY}) already mined, skipping`);
           setStatus("");
           return false;
         }
@@ -581,7 +581,7 @@ export function useGame(): UseGameReturn {
         const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
         const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(newX, newY);
         if (goldAvailable) {
-          const mined = await mineGold();
+          const mined = await mineGold(newX, newY);
           if (!mined) setStatus("");
         } else {
           setStatus("");
@@ -597,7 +597,7 @@ export function useGame(): UseGameReturn {
           const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
           const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(newX, newY);
           if (goldAvailable) {
-            const mined = await mineGold();
+            const mined = await mineGold(newX, newY);
             if (!mined) setStatus("");
           } else {
             setStatus("");
