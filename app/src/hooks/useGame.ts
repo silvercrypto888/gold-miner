@@ -45,7 +45,7 @@ const DIRECTION_VARIANT: Record<Direction, number> = {
 };
 
 export function useGame(): UseGameReturn {
-  const { sessionKeypair, sessionPubkey, playerState, refreshPlayerState, fundSessionKey } =
+  const { sessionKeypair, sessionPubkey, playerState, fundSessionKey } =
     useSessionKey();
   const [position, setPosition] = useState<Position>({ x: 1, y: 1 });
   const [visibleGold, setVisibleGold] = useState<GoldSpot[]>([]);
@@ -255,7 +255,16 @@ export function useGame(): UseGameReturn {
 
       console.log("Gold mined! TX:", signature);
       setGoldMined(prev => prev + GOLD_PER_MINE);
-      await refreshPlayerState();
+
+      // Read position directly from chain after mining (avoid stale RPC data)
+      const postMineInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+      if (postMineInfo) {
+        setPosition({
+          x: postMineInfo.data.readUInt32LE(72),
+          y: postMineInfo.data.readUInt32LE(76),
+        });
+      }
+
       // Refresh gold visibility — the spot we just mined should disappear
       await updateVisibleGold();
       return true;
@@ -323,7 +332,18 @@ export function useGame(): UseGameReturn {
           tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
-        await refreshPlayerState();
+
+        // Read the actual on-chain position after confirmation to avoid stale RPC data.
+        // Don't rely on refreshPlayerState() here — it may return cached data.
+        const confirmedInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+        if (confirmedInfo) {
+          const confirmedX = confirmedInfo.data.readUInt32LE(72);
+          const confirmedY = confirmedInfo.data.readUInt32LE(76);
+          setPosition({ x: confirmedX, y: confirmedY });
+        } else {
+          // Fallback: keep optimistic position
+          setPosition({ x: newX, y: newY });
+        }
 
         // Small delay to ensure RPC has fully propagated the move before mining.
         // Without this, getAccountInfo can return stale position data.
@@ -337,7 +357,7 @@ export function useGame(): UseGameReturn {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, refreshPlayerState, fundSessionKey, mineGold]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold]
   );
 
   // Keyboard controls
