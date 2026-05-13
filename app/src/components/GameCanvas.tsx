@@ -152,7 +152,8 @@ export function GameCanvas() {
     }
 
     // Draw grid borders on top of everything (gold glow won't overwrite them)
-    ctx.strokeStyle = "#374151";
+    // Use a color that contrasts with both dark (#1f2937) and light (#374151) cells
+    ctx.strokeStyle = "#4b5563";
     ctx.lineWidth = 1;
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
