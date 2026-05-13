@@ -324,42 +324,46 @@ export function useGame(): UseGameReturn {
 
       const [playerPda] = getPlayerPda(walletPk, programId);
 
-      // Use our tracked position (just confirmed by move) for PDA derivation
-      // Chain position can be stale, causing wrong gold_spot PDA
-      const mineX = position.x;
-      const mineY = position.y;
-      const [goldSpotPda] = getGoldSpotPda(mineX, mineY, programId);
-
-      // Batch-fetch player account + gold_spot account in one RPC call
-      const [playerInfo, goldSpotInfo] = await connectionRef.current.getMultipleAccountsInfo(
-        [playerPda, goldSpotPda], 'confirmed'
-      );
+      // Batch-fetch player account first to get on-chain position for PDA derivation
+      // The program derives gold_spot PDA from the on-chain position, so we must match
+      const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
       if (!playerInfo) { console.warn("mineGold: no playerInfo"); setStatus(""); return false; }
 
       const onChainX = playerInfo.data.readUInt32LE(72);
       const onChainY = playerInfo.data.readUInt32LE(76);
-      // Only update position if chain read differs significantly from our tracked state
-      // This prevents rubber-banding from stale RPC data while still correcting genuine drift
-      if (Math.abs(onChainX - mineX) > 1 || Math.abs(onChainY - mineY) > 1) {
-        // Chain position is way off — something unusual happened, trust the chain
+
+      // Use on-chain position for PDA derivation (must match what the program expects)
+      // but use our tracked position for the worldgen check (we know we moved there)
+      const mineX = onChainX;
+      const mineY = onChainY;
+      const [goldSpotPda] = getGoldSpotPda(mineX, mineY, programId);
+
+      // Fetch gold_spot account
+      const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
+
+      // Update our tracked position if chain differs significantly
+      if (Math.abs(onChainX - position.x) > 1 || Math.abs(onChainY - position.y) > 1) {
         setPosition({ x: onChainX, y: onChainY });
       }
 
-      if (!hasGoldAt(mineX, mineY)) { console.log(`mineGold: no gold at (${mineX}, ${mineY})`); setStatus(""); return false; }
+      // Check worldgen using our tracked position — we know we're on gold
+      if (!hasGoldAt(position.x, position.y) && !hasGoldAt(mineX, mineY)) {
+        console.log(`mineGold: no gold at tracked (${position.x},${position.y}) or chain (${mineX},${mineY})`);
+        setStatus("");
+        return false;
+      }
+      const goldiumMint = goldiumMintRef.current;
 
-      // No need to re-derive PDA — we always use our tracked position
-      let finalGoldSpotInfo = goldSpotInfo;
-      let finalGoldSpotPda = goldSpotPda;
-
-      if (finalGoldSpotInfo) {
-        const hasGold = finalGoldSpotInfo.data[8] === 1;
+      // Check if gold_spot already exists and is mined
+      if (goldSpotInfo) {
+        const hasGold = goldSpotInfo.data[8] === 1;
         if (!hasGold) {
           console.log(`Gold at (${mineX}, ${mineY}) already mined, skipping`);
           setStatus("");
           return false;
         }
       }
-      const goldiumMint = goldiumMintRef.current;
+
       const [gameConfigPda] = getGameConfigPda(programId);
       const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
       const tokenProgram = getToken2022ProgramId();
@@ -381,7 +385,7 @@ export function useGame(): UseGameReturn {
           { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut, payer)
           { pubkey: gameConfigPda, isSigner: false, isWritable: true },                 // game_config
           { pubkey: playerPda, isSigner: false, isWritable: true },                    // player
-          { pubkey: finalGoldSpotPda, isSigner: false, isWritable: true },             // gold_spot (init_if_needed)
+          { pubkey: goldSpotPda, isSigner: false, isWritable: true },             // gold_spot (init_if_needed)
           { pubkey: goldiumMint, isSigner: false, isWritable: true },                    // goldium_mint
           { pubkey: playerAta, isSigner: false, isWritable: true },                      // player_token_account (associated_token init_if_needed)
           { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
