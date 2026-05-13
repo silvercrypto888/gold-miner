@@ -360,6 +360,13 @@ export function useGame(): UseGameReturn {
         if (attempt < 4) await new Promise(r => setTimeout(r, 400));
       }
 
+      // Always trust on-chain position — it's the source of truth for PDA derivation
+      // Update our tracked position to match chain reality
+      if (onChainX !== position.x || onChainY !== position.y) {
+        console.log(`mineGold: syncing position from chain (${onChainX},${onChainY}), was (${position.x},${position.y})`);
+        setPosition({ x: onChainX, y: onChainY });
+      }
+
       // Use on-chain position for PDA derivation (must match what the program expects)
       const pdxX = onChainX;
       const pdxY = onChainY;
@@ -572,19 +579,35 @@ export function useGame(): UseGameReturn {
           return;
         }
 
-        // Move confirmed — position is (newX, newY)
-        // Don't read back from RPC; it can return stale data causing rubber-banding
-        setPosition({ x: newX, y: newY });
-        setStatus("Moved");
+        // Move confirmed — read actual position from chain to stay in sync
+        try {
+          const moveProgramId = getProgramId();
+          const [movePlayerPda] = getPlayerPda(walletPk, moveProgramId);
+          const moveAccountInfo = await connectionRef.current.getAccountInfo(movePlayerPda, 'confirmed');
+          if (moveAccountInfo) {
+            const chainX = moveAccountInfo.data.readUInt32LE(72);
+            const chainY = moveAccountInfo.data.readUInt32LE(76);
+            setPosition({ x: chainX, y: chainY });
+            setStatus("Moved");
 
-        // Mine gold at current position — check on-chain state if available
-        const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
-        const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(newX, newY);
-        if (goldAvailable) {
-          const mined = await mineGold(newX, newY);
-          if (!mined) setStatus("");
-        } else {
-          setStatus("");
+            // Mine gold at actual chain position
+            const goldHere = visibleGold.find(g => g.x === chainX && g.y === chainY);
+            const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(chainX, chainY);
+            if (goldAvailable) {
+              const mined = await mineGold(chainX, chainY);
+              if (!mined) setStatus("");
+            } else {
+              setStatus("");
+            }
+          } else {
+            // Fallback: use optimistic position
+            setPosition({ x: newX, y: newY });
+            setStatus("Moved");
+          }
+        } catch {
+          // Fallback: use optimistic position
+          setPosition({ x: newX, y: newY });
+          setStatus("Moved");
         }
       } catch (err: any) {
         const errMsg = String(err?.message || "");
@@ -592,14 +615,33 @@ export function useGame(): UseGameReturn {
         // "This transaction has already been processed" means the TX actually went through
         // — treat as success, not an error
         if (errMsg.includes("already been processed")) {
-          setPosition({ x: newX, y: newY });
-          setStatus("Moved");
-          const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
-          const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(newX, newY);
-          if (goldAvailable) {
-            const mined = await mineGold(newX, newY);
-            if (!mined) setStatus("");
-          } else {
+          // Read actual position from chain since the TX went through
+          try {
+            const abpProgramId = getProgramId();
+            const abpWallet = playerState?.wallet;
+            if (abpWallet) {
+              const [abpPda] = getPlayerPda(abpWallet, abpProgramId);
+              const abpInfo = await connectionRef.current.getAccountInfo(abpPda, 'confirmed');
+              if (abpInfo) {
+                const abpX = abpInfo.data.readUInt32LE(72);
+                const abpY = abpInfo.data.readUInt32LE(76);
+                setPosition({ x: abpX, y: abpY });
+                const goldHere = visibleGold.find(g => g.x === abpX && g.y === abpY);
+                const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(abpX, abpY);
+                if (goldAvailable) {
+                  const mined = await mineGold(abpX, abpY);
+                  if (!mined) setStatus("");
+                } else { setStatus(""); }
+              } else {
+                setPosition({ x: newX, y: newY });
+                setStatus("");
+              }
+            } else {
+              setPosition({ x: newX, y: newY });
+              setStatus("");
+            }
+          } catch {
+            setPosition({ x: newX, y: newY });
             setStatus("");
           }
           return;
