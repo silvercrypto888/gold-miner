@@ -377,14 +377,20 @@ export function useGame(): UseGameReturn {
 
       const signature = await connectionRef.current.sendRawTransaction(
         tx.serialize(),
-        { skipPreflight: true }
+        { skipPreflight: false, preflightCommitment: "confirmed" }
       );
 
-      await connectionRef.current.confirmTransaction({
+      const mineResult = await connectionRef.current.confirmTransaction({
         signature,
         blockhash,
         lastValidBlockHeight,
-      });
+      }, 'confirmed');
+
+      if (mineResult.value?.err) {
+        console.error("Mine TX failed on-chain:", mineResult.value.err);
+        setStatus("");
+        return false;
+      }
 
       console.log("Gold mined! TX:", signature);
       setGoldMined(prev => prev + GOLD_PER_MINE);
@@ -467,10 +473,22 @@ export function useGame(): UseGameReturn {
         tx.sign(sessionSigner);
 
         const signature = await connectionRef.current.sendRawTransaction(
-          tx.serialize(), { skipPreflight: true }
+          tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
-        await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
-        // Move confirmed — we know the position is (newX, newY)
+        const result = await connectionRef.current.confirmTransaction(
+          { signature, blockhash, lastValidBlockHeight },
+          'confirmed'
+        );
+
+        // Check for on-chain errors (e.g. instruction error even if TX landed in a block)
+        if (result.value?.err) {
+          console.error("Move TX failed on-chain:", result.value.err);
+          setPosition({ x: position.x, y: position.y }); // revert optimistic
+          setStatus("");
+          return;
+        }
+
+        // Move confirmed — position is (newX, newY)
         // Don't read back from RPC; it can return stale data causing rubber-banding
         setPosition({ x: newX, y: newY });
         setStatus("Moved");
