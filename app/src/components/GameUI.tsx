@@ -3,7 +3,6 @@
 import { WalletProvider } from "@/components/WalletProvider";
 import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
-import { DepositButtons } from "@/components/DepositButtons";
 import { Leaderboard } from "@/components/Leaderboard";
 
 export default function GameUI() {
@@ -38,7 +37,6 @@ export default function GameUI() {
 
             {/* Sidebar */}
             <div className="space-y-6">
-              <DepositButtons />
               <Leaderboard />
               
               {/* Instructions */}
@@ -49,7 +47,6 @@ export default function GameUI() {
                   <li>• Find gold squares (yellow glow)</li>
                   <li>• Step on gold to mine it</li>
                   <li>• Earn 100 GLD per mine</li>
-                  <li>• Deposit XNT for gas fees</li>
                 </ul>
                 <div className="mt-3 text-xs text-gray-500">
                   <p>Gold formula: (x &amp; y) % 7 == 0</p>
