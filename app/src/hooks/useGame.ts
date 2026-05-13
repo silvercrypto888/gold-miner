@@ -291,16 +291,16 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
-      // Only fund if critically low — avoids repeated wallet signature requests
-      // 0.2 XNT initial funding lasts ~400+ moves at 5k lamports each
+      // Fund if balance too low for a mine TX (ATA creation can cost ~150k lamports)
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-      if (balance < 5_000) {
-        // Critically low — attempt one funding, then proceed regardless
+      if (balance < 50_000_000) {
+        // Balance too low — fund up to 0.2 XNT (requires wallet signature)
         const fundBh = await getBlockhash();
         try {
           await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
         } catch (e) {
           console.warn("Failed to fund session key for mine:", e);
+          // Still try the mine — maybe there's just enough
         }
       }
 
@@ -481,12 +481,12 @@ export function useGame(): UseGameReturn {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Check balance every 30s — ensure session key has enough XNT
+        // Check balance every 30s — fund if below 50M lamports
         const fundCheckAge = Date.now() - lastFundCheckRef.current;
         if (fundCheckAge > 30_000) {
           const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
           lastFundCheckRef.current = Date.now();
-          if (balance < 10_000_000) {
+          if (balance < 50_000_000) {
             const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
               await getBlockhash();
             try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
