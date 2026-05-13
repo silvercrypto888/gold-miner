@@ -20,6 +20,23 @@ import {
   getAtaProgramId,
 } from "@/lib/constants";
 
+const CONFIRM_TIMEOUT_MS = 15_000; // 15s timeout for transaction confirmation
+
+// Wrap confirmTransaction with a timeout so hung confirmations don't lock the UI
+async function confirmWithTimeout(
+  connection: Connection,
+  args: { signature: string; blockhash: string; lastValidBlockHeight: number },
+  commitment: "confirmed",
+  timeoutMs = CONFIRM_TIMEOUT_MS
+): Promise<{ value: { err: any } | null }> {
+  return Promise.race([
+    connection.confirmTransaction(args, commitment),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Transaction confirmation timed out")), timeoutMs)
+    ),
+  ]);
+}
+
 interface UseGameReturn {
   position: Position;
   visibleGold: GoldSpot[];
@@ -395,7 +412,7 @@ export function useGame(): UseGameReturn {
       );
       invalidateBlockhash(); // blockhash consumed by this TX
 
-      const mineResult = await connectionRef.current.confirmTransaction({
+      const mineResult = await confirmWithTimeout(connectionRef.current, {
         signature,
         blockhash,
         lastValidBlockHeight,
@@ -518,7 +535,7 @@ export function useGame(): UseGameReturn {
           tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
         invalidateBlockhash(); // blockhash consumed by this TX
-        const result = await connectionRef.current.confirmTransaction(
+        const result = await confirmWithTimeout(connectionRef.current,
           { signature, blockhash, lastValidBlockHeight },
           'confirmed'
         );
@@ -571,7 +588,27 @@ export function useGame(): UseGameReturn {
             errMsg.includes("block height exceeded")) {
           invalidateBlockhash();
         }
-        setPosition(playerState.position);
+        // Revert position — try reading actual on-chain position for accuracy
+        try {
+          const fallbackProgramId = getProgramId();
+          const fallbackWalletPk = playerState.wallet;
+          if (fallbackWalletPk) {
+            const [pda] = getPlayerPda(fallbackWalletPk, fallbackProgramId);
+            const accountInfo = await connectionRef.current.getAccountInfo(pda, 'confirmed');
+            if (accountInfo) {
+              // Player account layout: 8(disc) + 32(wallet) + 32(session) + 4(x) + 4(y)
+              const posX = accountInfo.data.readUInt32LE(72);
+              const posY = accountInfo.data.readUInt32LE(76);
+              setPosition({ x: posX, y: posY });
+            } else {
+              setPosition({ x: position.x, y: position.y });
+            }
+          } else {
+            setPosition({ x: position.x, y: position.y });
+          }
+        } catch {
+          setPosition({ x: position.x, y: position.y });
+        }
       } finally {
         setIsMoving(false);
       }
