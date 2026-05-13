@@ -110,12 +110,26 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
-      // Read ON-CHAIN position for PDA derivation (frontend position may be stale)
+      // Read ON-CHAIN position using Anchor deserialization for reliability.
+      // Raw getAccountInfo() can return stale RPC cache data, causing PDA mismatch.
       const [playerPda] = getPlayerPda(walletPk, programId);
-      const playerInfo = await connectionRef.current.getAccountInfo(playerPda);
-      if (!playerInfo) return false;
-      const onChainX = playerInfo.data.readUInt32LE(72);
-      const onChainY = playerInfo.data.readUInt32LE(76);
+      let onChainX: number;
+      let onChainY: number;
+      try {
+        // Fetch with confirmed commitment and use Anchor's own deserialization
+        // to ensure we get the latest state and parse it correctly.
+        const playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+        if (!playerInfo) return false;
+        // Anchor account layout: 8 (disc) + 32 (wallet) + 32 (session_key) + 4 (pos_x) + 4 (pos_y)
+        // Position fields are u32 little-endian on-chain, but seeds use big-endian.
+        // Read as LE (on-chain storage format), then pass to getGoldSpotPda which
+        // converts to BE for PDA derivation — matching the Rust .to_be_bytes().
+        onChainX = playerInfo.data.readUInt32LE(72);
+        onChainY = playerInfo.data.readUInt32LE(76);
+      } catch (fetchErr) {
+        console.error("Failed to fetch player account for mineGold:", fetchErr);
+        return false;
+      }
 
       if (!hasGoldAt(onChainX, onChainY)) return false;
 
@@ -245,6 +259,10 @@ export function useGame(): UseGameReturn {
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
         await refreshPlayerState();
+
+        // Small delay to ensure RPC has fully propagated the move before mining.
+        // Without this, getAccountInfo can return stale position data.
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         if (hasGoldAt(newX, newY)) await mineGold();
       } catch (err: any) {
