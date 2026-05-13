@@ -102,18 +102,24 @@ export function useGame(): UseGameReturn {
     return () => clearInterval(interval);
   }, []);
 
-  // Get a blockhash — uses cached if fresh (<45s old), otherwise fetches from RPC
+  // Get a blockhash — uses cached if fresh (<30s old), otherwise fetches from RPC
   const blockhashTimeRef = useRef<number>(0);
   const getBlockhash = useCallback(async (): Promise<{ blockhash: string; lastValidBlockHeight: number }> => {
     if (!connectionRef.current) throw new Error("No connection");
     const cached = cachedBlockhashRef.current;
     const cacheAge = Date.now() - blockhashTimeRef.current;
-    if (cached && cacheAge < 45_000) return cached;
+    if (cached && cacheAge < 30_000) return cached;
     // Cache miss or stale — fetch fresh
     const fresh = await connectionRef.current.getLatestBlockhash();
     cachedBlockhashRef.current = fresh;
     blockhashTimeRef.current = Date.now();
     return fresh;
+  }, []);
+
+  // Invalidate blockhash cache — call on transaction expiry errors
+  const invalidateBlockhash = useCallback(() => {
+    cachedBlockhashRef.current = null;
+    blockhashTimeRef.current = 0;
   }, []);
 
   // Fetch goldium mint address once
@@ -380,10 +386,15 @@ export function useGame(): UseGameReturn {
     } catch (err: any) {
       console.error("Mine gold failed:", err);
       setStatus("");
+      // Invalidate cached blockhash on expiry so next action fetches fresh
+      if (err?.name === "TransactionExpiredBlockheightExceededError" ||
+          String(err?.message || "").includes("block height exceeded")) {
+        invalidateBlockhash();
+      }
       if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
       return false;
     }
-  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold, getBlockhash]);
+  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold, getBlockhash, invalidateBlockhash]);
 
   // Move player — session key is fee payer
   const move = useCallback(
@@ -448,6 +459,15 @@ export function useGame(): UseGameReturn {
           tx.serialize(), { skipPreflight: true }
         );
         await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+
+        // Read actual on-chain position after confirmation to correct any drift
+        const confirmedInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+        if (confirmedInfo) {
+          setPosition({
+            x: confirmedInfo.data.readUInt32LE(72),
+            y: confirmedInfo.data.readUInt32LE(76),
+          });
+        }
         lastChainPositionRef.current = Date.now();
         setStatus("Moved");
 
@@ -461,12 +481,17 @@ export function useGame(): UseGameReturn {
       } catch (err: any) {
         console.error("Move failed:", err);
         setStatus("");
+        // Invalidate cached blockhash on expiry so next action fetches fresh
+        if (err?.name === "TransactionExpiredBlockheightExceededError" ||
+            String(err?.message || "").includes("block height exceeded")) {
+          invalidateBlockhash();
+        }
         setPosition(playerState.position);
       } finally {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold, getBlockhash]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold, getBlockhash, invalidateBlockhash]
   );
 
   // Keyboard controls
