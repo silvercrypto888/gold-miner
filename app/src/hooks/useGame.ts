@@ -135,6 +135,18 @@ export function useGame(): UseGameReturn {
 
       const [gameConfigPda] = getGameConfigPda(programId);
       const [goldSpotPda] = getGoldSpotPda(onChainX, onChainY, programId);
+
+      // Check if gold_spot already exists and has been mined
+      const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
+      if (goldSpotInfo) {
+        // GoldSpot layout: 8 (disc) + 1 (has_gold bool) + ...
+        // If has_gold is false (0), this position is already mined
+        const hasGold = goldSpotInfo.data[8] === 1;
+        if (!hasGold) {
+          console.log(`Gold at (${onChainX}, ${onChainY}) already mined, skipping`);
+          return false;
+        }
+      }
       const goldiumMint = goldiumMintRef.current;
       const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
       const tokenProgram = getToken2022ProgramId();
