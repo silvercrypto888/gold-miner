@@ -291,23 +291,16 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) return false;
 
-      // Always check session key balance before mining — no caching
+      // Only fund if critically low — avoids repeated wallet signature requests
+      // 0.2 XNT initial funding lasts ~400+ moves at 5k lamports each
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-      if (balance < 10_000_000) {
+      if (balance < 5_000) {
+        // Critically low — attempt one funding, then proceed regardless
         const fundBh = await getBlockhash();
         try {
           await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
         } catch (e) {
           console.warn("Failed to fund session key for mine:", e);
-          setStatus("Funding wallet...");
-          // Brief delay for funding to propagate, then retry balance check
-          await new Promise(r => setTimeout(r, 2000));
-          const newBal = await connectionRef.current.getBalance(sessionSigner.publicKey);
-          if (newBal < 5_000_000) {
-            setStatus("");
-            console.error("Session key still underfunded after funding attempt");
-            return false;
-          }
         }
       }
 
