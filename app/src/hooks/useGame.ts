@@ -536,9 +536,10 @@ export function useGame(): UseGameReturn {
         setPosition({ x: newX, y: newY });
         setStatus("Moved");
 
-        // Mine gold at current position — check on-chain state, not just worldgen
+        // Mine gold at current position — check on-chain state if available
         const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
-        if (goldHere && goldHere.hasGold) {
+        const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(newX, newY);
+        if (goldAvailable) {
           const mined = await mineGold();
           if (!mined) setStatus("");
         } else {
@@ -553,7 +554,8 @@ export function useGame(): UseGameReturn {
           setPosition({ x: newX, y: newY });
           setStatus("Moved");
           const goldHere = visibleGold.find(g => g.x === newX && g.y === newY);
-          if (goldHere && goldHere.hasGold) {
+          const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(newX, newY);
+          if (goldAvailable) {
             const mined = await mineGold();
             if (!mined) setStatus("");
           } else {
