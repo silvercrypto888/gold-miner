@@ -78,12 +78,16 @@ export function useGame(): UseGameReturn {
     })();
   }, []);
 
+  // Sync position from on-chain state — but not during an active move,
+  // which would cause rubber-banding (overwriting the optimistic position).
   useEffect(() => {
     if (playerState) {
-      setPosition(playerState.position);
       setGoldMined(playerState.goldiumMinted);
+      if (!isMoving) {
+        setPosition(playerState.position);
+      }
     }
-  }, [playerState]);
+  }, [playerState, isMoving]);
 
   const updateVisibleGold = useCallback(async () => {
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
