@@ -333,18 +333,14 @@ export function useGame(): UseGameReturn {
       const onChainY = playerInfo.data.readUInt32LE(76);
 
       // Use on-chain position for PDA derivation (must match what the program expects)
-      // but use our tracked position for the worldgen check (we know we moved there)
+      // but never update our tracked position from chain reads here —
+      // RPC data can be stale, causing momentary "teleport" glitches
       const mineX = onChainX;
       const mineY = onChainY;
       const [goldSpotPda] = getGoldSpotPda(mineX, mineY, programId);
 
       // Fetch gold_spot account
       const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
-
-      // Update our tracked position if chain differs significantly
-      if (Math.abs(onChainX - position.x) > 1 || Math.abs(onChainY - position.y) > 1) {
-        setPosition({ x: onChainX, y: onChainY });
-      }
 
       // Check worldgen using our tracked position — we know we're on gold
       if (!hasGoldAt(position.x, position.y) && !hasGoldAt(mineX, mineY)) {
