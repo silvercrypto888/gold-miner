@@ -23,6 +23,7 @@ export function Leaderboard() {
   const { playerState } = useSessionKey();
   const [entries, setEntries] = useState<LeaderboardEntry[]>(MOCK_LEADERBOARD);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   // In a real implementation, fetch from an API
   useEffect(() => {
@@ -38,85 +39,86 @@ export function Leaderboard() {
     : null;
 
   return (
-    <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-gray-800/50 rounded-xl border border-gray-700">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-700/30 transition-colors"
+      >
         <h3 className="font-semibold text-gray-200 flex items-center gap-2">
           <span>🏆</span> Leaderboard
         </h3>
-        <div className="text-xs text-gray-500">Top Miners</div>
-      </div>
+        <span className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+      </button>
 
-      <div className="space-y-1">
-        {entries.slice(0, 10).map((entry, index) => (
-          <div
-            key={entry.wallet}
-            className={`flex items-center justify-between py-2 px-3 rounded-lg ${
-              index === 0
-                ? "bg-yellow-500/10 border border-yellow-500/30"
-                : index === 1
-                ? "bg-gray-400/10 border border-gray-400/30"
-                : index === 2
-                ? "bg-orange-500/10 border border-orange-500/30"
-                : "hover:bg-gray-700/50"
-            }`}
-          >
-            <div className="flex items-center gap-3">
+      {isOpen && (
+        <div className="px-4 pb-4">
+          <div className="space-y-1">
+            {entries.slice(0, 10).map((entry, index) => (
               <div
-                className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                key={entry.wallet}
+                className={`flex items-center justify-between py-2 px-3 rounded-lg ${
                   index === 0
-                    ? "bg-yellow-500 text-yellow-900"
+                    ? "bg-yellow-500/10 border border-yellow-500/30"
                     : index === 1
-                    ? "bg-gray-400 text-gray-900"
+                    ? "bg-gray-400/10 border border-gray-400/30"
                     : index === 2
-                    ? "bg-orange-500 text-orange-900"
-                    : "bg-gray-700 text-gray-400"
+                    ? "bg-orange-500/10 border border-orange-500/30"
+                    : "hover:bg-gray-700/50"
                 }`}
               >
-                {index + 1}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-200">
-                  {shortenAddress(entry.wallet)}
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                      index === 0
+                        ? "bg-yellow-500 text-yellow-900"
+                        : index === 1
+                        ? "bg-gray-400 text-gray-900"
+                        : index === 2
+                        ? "bg-orange-500 text-orange-900"
+                        : "bg-gray-700 text-gray-400"
+                    }`}
+                  >
+                    {index + 1}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-200">
+                      {shortenAddress(entry.wallet)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      at ({entry.position.x}, {entry.position.y})
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500">
-                  at ({entry.position.x}, {entry.position.y})
+                <div className="text-right">
+                  <div className="text-sm font-bold text-yellow-400">
+                    {formatGoldium(entry.goldiumMinted)}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-bold text-yellow-400">
-                {formatGoldium(entry.goldiumMinted)}
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Player rank */}
-      {playerState && playerRank && (
-        <>
-          <div className="my-3 border-t border-gray-700"></div>
-          <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-500 text-blue-900 text-xs font-bold">
-                {playerRank}
+          {/* Player rank */}
+          {playerState && playerRank && (
+            <>
+              <div className="my-3 border-t border-gray-700"></div>
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-500 text-blue-900 text-xs font-bold">
+                    {playerRank}
+                  </div>
+                  <div className="text-sm font-medium text-blue-200">You</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-blue-400">
+                    {formatGoldium(playerState.goldiumMinted)}
+                  </div>
+                </div>
               </div>
-              <div className="text-sm font-medium text-blue-200">You</div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-bold text-blue-400">
-                {formatGoldium(playerState.goldiumMinted)}
-              </div>
-            </div>
-          </div>
-        </>
+            </>
+          )}
+        </div>
       )}
-
-      <div className="mt-4 text-xs text-gray-500 text-center">
-        Total gold spots: ~1,400
-        <br />
-        Formula: (x &amp; y) % 7 == 0
-      </div>
     </div>
   );
 }

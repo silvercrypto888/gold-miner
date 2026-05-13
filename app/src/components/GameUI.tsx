@@ -37,8 +37,6 @@ export default function GameUI() {
 
             {/* Sidebar */}
             <div className="space-y-6">
-              <Leaderboard />
-              
               {/* Instructions */}
               <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
                 <h3 className="font-semibold text-gray-200 mb-2">How to Play</h3>
@@ -53,6 +51,7 @@ export default function GameUI() {
                   <p>~1,400 gold spots on the grid</p>
                 </div>
               </div>
+              <Leaderboard />
             </div>
           </div>
         </div>
