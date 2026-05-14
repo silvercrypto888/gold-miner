@@ -685,6 +685,7 @@ export function useGame(): UseGameReturn {
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return; // Ignore key repeat — only act on initial press
       const keyMap: { [key: string]: Direction } = {
         ArrowUp: Direction.Up, ArrowDown: Direction.Down,
         ArrowLeft: Direction.Left, ArrowRight: Direction.Right,
