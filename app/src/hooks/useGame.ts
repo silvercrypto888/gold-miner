@@ -82,7 +82,7 @@ export function useGame(): UseGameReturn {
   // Prevents stale playerState updates from overwriting position.
   const lastChainPositionRef = useRef<number>(0);
   // Cache balance check to avoid redundant getBalance calls
-  const lastFundCheckRef = useRef<number>(0);
+
 
   // Pre-cached blockhash — refreshed every 30s in the background so
   // move/mine don't have to wait for getLatestBlockhash.
@@ -335,6 +335,8 @@ export function useGame(): UseGameReturn {
         const fundBh = await getBlockhash();
         try {
           await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
+          // Wait for RPC to catch up after funding
+          await new Promise(r => setTimeout(r, 500));
           // Re-check balance after funding
           const newBalance = await connectionRef.current.getBalance(sessionSigner.publicKey);
           if (newBalance < 100_000) {
@@ -539,17 +541,16 @@ export function useGame(): UseGameReturn {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Check balance every 30s — fund if critically low
-        const fundCheckAge = Date.now() - lastFundCheckRef.current;
-        if (fundCheckAge > 30_000) {
-          const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-          lastFundCheckRef.current = Date.now();
-          if (balance < 500_000) {
-            const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
-              await getBlockhash();
-            try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
-            catch (e) { console.warn("Failed to fund session key:", e); }
-          }
+        // Always check session key balance before moving
+        const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
+        if (balance < 500_000) {
+          const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
+            await getBlockhash();
+          try {
+            await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb);
+            // Wait for RPC to catch up after funding
+            await new Promise(r => setTimeout(r, 500));
+          } catch (e) { console.warn("Failed to fund session key:", e); }
         }
 
         const walletPk = playerState.wallet;
