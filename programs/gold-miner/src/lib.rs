@@ -293,32 +293,22 @@ pub mod gold_miner {
 
         // Check if there's gold at the new position
         if has_gold_at(new_x, new_y) {
-            // Read gold_spot data (from remaining_accounts)
-            let data = &gold_spot_info.data.borrow();
-
-            // Check Anchor discriminator (first 8 bytes)
-            let disc = GoldSpot::DISCRIMINATOR;
-            let mut valid_data = true;
-            for i in 0..8 {
-                if data[i] != disc[i] {
-                    valid_data = false;
-                    break;
+            // Read gold_spot data, extract what we need, then drop the borrow
+            let should_mine = {
+                let data = gold_spot_info.data.borrow();
+                let disc = GoldSpot::DISCRIMINATOR;
+                let valid_data = (0..8).all(|i| data[i] == disc[i]);
+                if !valid_data {
+                    // Fresh account — gold here, hasn't been mined
+                    true
+                } else {
+                    // Existing account — check has_gold flag
+                    data[8] == 0 || data[9] == 0
                 }
-            }
+            }; // data borrow dropped here
 
-            if !valid_data {
-                // Account was just created — it's a fresh gold spot
-                // Fall through to mine logic
-            } else {
-                // Account exists — check if gold has been mined
-                let has_gold = data[8] == 1;
-                if !has_gold {
-                    let mined_flag = data[9];
-                    if mined_flag == 1 {
-                        // Previously mined — skip
-                        return Ok(());
-                    }
-                }
+            if !should_mine {
+                return Ok(());
             }
 
             // Mine the gold!
