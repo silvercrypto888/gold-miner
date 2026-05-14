@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::{Discriminator, solana_program::system_instruction};
 use anchor_lang::system_program;
 use anchor_spl::token_2022::{Token2022, MintTo, mint_to};
 use anchor_spl::token_interface::{Mint, TokenAccount as TokenAccountInterface};
@@ -197,27 +198,26 @@ pub mod gold_miner {
         new_x: u32,
         new_y: u32,
     ) -> Result<()> {
-        let player = &mut ctx.accounts.player;
         let clock = Clock::get()?;
 
         // Verify session key
         require!(
-            player.session_key == ctx.accounts.session_signer.key(),
+            ctx.accounts.player.session_key == ctx.accounts.session_signer.key(),
             GoldMinerError::InvalidSessionKey
         );
 
         // Verify session hasn't expired
         require!(
-            clock.slot <= player.session_expires_at,
+            clock.slot <= ctx.accounts.player.session_expires_at,
             GoldMinerError::SessionExpired
         );
 
         // Calculate expected new position from direction
         let (expected_x, expected_y) = match direction {
-            Direction::Up => (player.position_x, player.position_y.saturating_add(1)),
-            Direction::Down => (player.position_x, player.position_y.saturating_sub(1)),
-            Direction::Left => (player.position_x.saturating_sub(1), player.position_y),
-            Direction::Right => (player.position_x.saturating_add(1), player.position_y),
+            Direction::Up => (ctx.accounts.player.position_x, ctx.accounts.player.position_y.saturating_add(1)),
+            Direction::Down => (ctx.accounts.player.position_x, ctx.accounts.player.position_y.saturating_sub(1)),
+            Direction::Left => (ctx.accounts.player.position_x.saturating_sub(1), ctx.accounts.player.position_y),
+            Direction::Right => (ctx.accounts.player.position_x.saturating_add(1), ctx.accounts.player.position_y),
         };
 
         // Verify client-provided coords match direction calculation
@@ -231,7 +231,7 @@ pub mod gold_miner {
         require!(new_y >= 1 && new_y <= GRID_SIZE, GoldMinerError::OutOfBounds);
 
         // Verify gold_spot PDA matches the new position
-        let (expected_gold_spot, _) = Pubkey::find_program_address(
+        let (expected_gold_spot, gold_spot_bump) = Pubkey::find_program_address(
             &[
                 b"gold_spot",
                 new_x.to_be_bytes().as_ref(),
@@ -244,6 +244,14 @@ pub mod gold_miner {
             GoldMinerError::GoldSpotMismatch
         );
 
+        // Create gold_spot account if needed (before mutable borrows)
+        if has_gold_at(new_x, new_y) {
+            create_gold_spot_if_needed(&ctx, &expected_gold_spot, gold_spot_bump, new_x, new_y)?;
+        }
+
+        // Now do mutable operations
+        let player = &mut ctx.accounts.player;
+
         // Update position
         player.position_x = new_x;
         player.position_y = new_y;
@@ -252,62 +260,89 @@ pub mod gold_miner {
 
         // Check if there's gold at the new position
         if has_gold_at(new_x, new_y) {
-            let gold_spot = &mut ctx.accounts.gold_spot;
+            // Read gold_spot data manually (UncheckedAccount)
+            let gold_spot_info = ctx.accounts.gold_spot.to_account_info();
+            let data = &gold_spot_info.data.borrow();
 
-            // Check if gold hasn't been mined yet
-            let should_mine = if !gold_spot.has_gold {
-                // Check if this is a freshly created (zero-init) account
-                if gold_spot.mined_by.is_none() {
-                    gold_spot.has_gold = true;
-                    true
-                } else {
-                    false
+            // Check Anchor discriminator (first 8 bytes)
+            let disc = GoldSpot::DISCRIMINATOR;
+            let mut valid_data = true;
+            for i in 0..8 {
+                if data[i] != disc[i] {
+                    valid_data = false;
+                    break;
                 }
-            } else {
-                true
-            };
-
-            if should_mine {
-                // Mark gold as mined
-                gold_spot.has_gold = false;
-                gold_spot.mined_by = Some(player.wallet);
-
-                // Update player stats
-                player.goldium_minted = player.goldium_minted.saturating_add(GOLD_PER_MINE);
-
-                // Update global counter
-                ctx.accounts.game_config.total_gold_mined =
-                    ctx.accounts.game_config.total_gold_mined.saturating_add(1);
-
-                // Mint Goldium tokens to player
-                let config_bump = ctx.accounts.game_config.bump;
-                let signer_seeds: &[&[&[u8]]] = &[&[
-                    b"game_config",
-                    &[config_bump],
-                ]];
-
-                let cpi_accounts = MintTo {
-                    mint: ctx.accounts.goldium_mint.to_account_info(),
-                    to: ctx.accounts.player_token_account.to_account_info(),
-                    authority: ctx.accounts.game_config.to_account_info(),
-                };
-                let cpi_ctx = CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
-                    cpi_accounts,
-                    signer_seeds,
-                );
-                let amount = GOLD_PER_MINE
-                    .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
-                    .ok_or(GoldMinerError::ArithmeticOverflow)?;
-                mint_to(cpi_ctx, amount)?;
-
-                msg!(
-                    "GOLD MINED! +{} Goldium at position ({}, {})",
-                    GOLD_PER_MINE,
-                    new_x,
-                    new_y
-                );
             }
+
+            if !valid_data {
+                // Account was just created — it's a fresh gold spot
+                // This means gold is here and hasn't been mined
+                // Fall through to mine logic
+            } else {
+                // Account exists — check if gold has been mined
+                // has_gold is at byte 8 (after discriminator)
+                let has_gold = data[8] == 1;
+                if !has_gold {
+                    // Already mined — check if it was ever mined (mined_by)
+                    let mined_flag = data[9];
+                    if mined_flag == 1 {
+                        // Previously mined — skip
+                        return Ok(());
+                    }
+                    // mined_flag == 0 means fresh account with has_gold=false
+                    // This shouldn't normally happen at a gold position, but
+                    // treat it as mineable
+                }
+            }
+
+            // Mine the gold!
+            {
+                let mut data = gold_spot_info.data.borrow_mut();
+                // Set Anchor discriminator
+                let disc = GoldSpot::DISCRIMINATOR;
+                data[..8].copy_from_slice(&disc);
+                // has_gold = false (byte 8) — already mined now
+                data[8] = 0;
+                // mined_by = Some(player.wallet) (byte 9 = 1, bytes 10..42 = pubkey)
+                data[9] = 1;
+                data[10..42].copy_from_slice(player.wallet.as_ref());
+            }
+
+            // Update player stats
+            player.goldium_minted = player.goldium_minted.saturating_add(GOLD_PER_MINE);
+
+            // Update global counter
+            ctx.accounts.game_config.total_gold_mined =
+                ctx.accounts.game_config.total_gold_mined.saturating_add(1);
+
+            // Mint Goldium tokens to player
+            let config_bump = ctx.accounts.game_config.bump;
+            let signer_seeds: &[&[&[u8]]] = &[&[
+                b"game_config",
+                &[config_bump],
+            ]];
+
+            let cpi_accounts = MintTo {
+                mint: ctx.accounts.goldium_mint.to_account_info(),
+                to: ctx.accounts.player_token_account.to_account_info(),
+                authority: ctx.accounts.game_config.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                signer_seeds,
+            );
+            let amount = GOLD_PER_MINE
+                .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
+                .ok_or(GoldMinerError::ArithmeticOverflow)?;
+            mint_to(cpi_ctx, amount)?;
+
+            msg!(
+                "GOLD MINED! +{} Goldium at position ({}, {})",
+                GOLD_PER_MINE,
+                new_x,
+                new_y
+            );
         }
 
         Ok(())
@@ -541,16 +576,14 @@ pub struct MoveAndMine<'info> {
     )]
     pub player: Account<'info, Player>,
 
-    /// Gold spot PDA — must be derived from the NEW position (new_x, new_y)
-    /// The client passes new_x/new_y as instruction args and derives this PDA.
-    /// We verify the PDA matches inside the instruction.
-    /// CHECK: Verified in instruction logic against new_x/new_y coords.
+    /// Gold spot PDA — derived from NEW position (new_x, new_y).
+    /// PDA verified in instruction logic. Account creation handled manually
+    /// because init_if_needed can't use instruction args for seeds.
+    /// CHECK: PDA and data verified in instruction logic.
     #[account(
-        init_if_needed,
-        payer = session_signer,
-        space = 8 + GoldSpot::SIZE,
+        mut,
     )]
-    pub gold_spot: Account<'info, GoldSpot>,
+    pub gold_spot: UncheckedAccount<'info>,
 
     #[account(mut)]
     pub goldium_mint: InterfaceAccount<'info, Mint>,
@@ -567,6 +600,63 @@ pub struct MoveAndMine<'info> {
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+}
+
+// Helper: create gold_spot PDA account if it doesn't exist yet.
+// Uses invoke_signed with PDA signer seeds since init_if_needed
+// can't reference instruction args in its seeds constraint.
+fn create_gold_spot_if_needed(
+    ctx: &Context<MoveAndMine>,
+    gold_spot_key: &Pubkey,
+    gold_spot_bump: u8,
+    new_x: u32,
+    new_y: u32,
+) -> Result<()> {
+    let gold_spot_info = ctx.accounts.gold_spot.to_account_info();
+
+    // If account already has data or lamports, it exists — skip creation
+    if gold_spot_info.data_len() > 0 || gold_spot_info.lamports() > 0 {
+        return Ok(());
+    }
+
+    let space = 8 + GoldSpot::SIZE as usize;
+    let rent = Rent::get()?;
+    let rent_lamports = rent.minimum_balance(space);
+
+    let x_bytes = new_x.to_be_bytes();
+    let y_bytes = new_y.to_be_bytes();
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        b"gold_spot" as &[u8],
+        x_bytes.as_ref(),
+        y_bytes.as_ref(),
+        &[gold_spot_bump],
+    ]];
+
+    let create_ix = system_instruction::create_account(
+        ctx.accounts.session_signer.key,
+        gold_spot_key,
+        rent_lamports,
+        space as u64,
+        ctx.program_id,
+    );
+
+    anchor_lang::solana_program::program::invoke_signed(
+        &create_ix,
+        &[
+            ctx.accounts.session_signer.to_account_info(),
+            gold_spot_info.clone(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        signer_seeds,
+    )?;
+
+    // Initialize the account data with Anchor discriminator
+    let mut data = gold_spot_info.data.borrow_mut();
+    let disc = GoldSpot::DISCRIMINATOR;
+    data[..8].copy_from_slice(&disc);
+    // Rest is zeroed (has_gold = false, mined_by = None)
+
+    Ok(())
 }
 
 #[derive(Accounts)]
