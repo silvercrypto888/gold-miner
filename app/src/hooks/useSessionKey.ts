@@ -65,7 +65,9 @@ export function useSessionKey() {
       setPlayerState(null);
       return;
     }
-    refreshPlayerState();
+    // Delay initial fetch to let programRef initialize first
+    const timer = setTimeout(() => refreshPlayerState(), 100);
+    return () => clearTimeout(timer);
   }, [publicKey]);
 
   // Fund a session key with XNT for gas fees
@@ -167,7 +169,18 @@ export function useSessionKey() {
       setSessionKeypair(newKeypair);
       setSessionExpiry(expiresAt);
 
-      // Fetch player state
+      // Set optimistic player state so move() works immediately
+      // even if RPC indexer hasn't caught up yet
+      setPlayerState({
+        wallet: publicKey,
+        sessionKey: sessionPubkey,
+        position: { x: 1, y: 1 },
+        goldiumMinted: 0,
+        sessionExpiresAt: expiresAt,
+        escrowBalance: 0,
+      });
+
+      // Fetch player state from chain (may fail silently if indexer is behind)
       await refreshPlayerState();
     } catch (err: any) {
       console.error("Failed to start session:", err);
@@ -179,7 +192,11 @@ export function useSessionKey() {
 
   // Refresh player state from chain
   const refreshPlayerState = useCallback(async () => {
-    if (!publicKey || !programRef.current) return;
+    if (!publicKey) return;
+    if (!programRef.current) {
+      await new Promise(r => setTimeout(r, 200));
+      if (!programRef.current) return;
+    }
 
     try {
       const [playerPda] = PublicKey.findProgramAddressSync(
@@ -290,7 +307,17 @@ export function useSessionKey() {
       setSessionKeypair(newKeypair);
       setSessionExpiry(expiresAt);
 
-      // Fetch player state
+      // Set optimistic player state so move() works immediately after joinGame
+      setPlayerState({
+        wallet: publicKey,
+        sessionKey: sessionPubkey,
+        position: { x: 1, y: 1 },
+        goldiumMinted: 0,
+        sessionExpiresAt: expiresAt,
+        escrowBalance: 0,
+      });
+
+      // Fetch player state from chain
       await refreshPlayerState();
     } catch (err: any) {
       console.error("Failed to join game:", err);
