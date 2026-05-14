@@ -69,6 +69,8 @@ export function useGame(): UseGameReturn {
   const { sessionKeypair, sessionPubkey, playerState, fundSessionKey } =
     useSessionKey();
   const [position, setPosition] = useState<Position>({ x: 1, y: 1 });
+  const positionRef = useRef(position);
+  positionRef.current = position;
   const [visibleGold, setVisibleGold] = useState<GoldSpot[]>([]);
   const [isMoving, setIsMoving] = useState(false);
   const [lastMoveTime, setLastMoveTime] = useState(0);
@@ -521,14 +523,15 @@ export function useGame(): UseGameReturn {
       const now = Date.now();
       if (now - lastMoveTime < MOVE_COOLDOWN_MS) return;
 
-      let newX = position.x, newY = position.y;
+      const curPos = positionRef.current;
+      let newX = curPos.x, newY = curPos.y;
       switch (direction) {
-        case Direction.Up:    newY = Math.min(GRID_SIZE, position.y + 1); break;
-        case Direction.Down:  newY = Math.max(1, position.y - 1); break;
-        case Direction.Left:  newX = Math.max(1, position.x - 1); break;
-        case Direction.Right: newX = Math.min(GRID_SIZE, position.x + 1); break;
+        case Direction.Up:    newY = Math.min(GRID_SIZE, curPos.y + 1); break;
+        case Direction.Down:  newY = Math.max(1, curPos.y - 1); break;
+        case Direction.Left:  newX = Math.max(1, curPos.x - 1); break;
+        case Direction.Right: newX = Math.min(GRID_SIZE, curPos.x + 1); break;
       }
-      if (newX === position.x && newY === position.y) return;
+      if (newX === curPos.x && newY === curPos.y) return;
 
       setIsMoving(true);
       setLastMoveTime(now);
@@ -583,7 +586,7 @@ export function useGame(): UseGameReturn {
         // Check for on-chain errors (e.g. instruction error even if TX landed in a block)
         if (result.value?.err) {
           console.error("Move TX failed on-chain:", result.value.err);
-          setPosition({ x: position.x, y: position.y }); // revert optimistic
+          setPosition({ x: positionRef.current.x, y: positionRef.current.y }); // revert optimistic
           setStatus("");
           return;
         }
@@ -676,13 +679,13 @@ export function useGame(): UseGameReturn {
               const posY = accountInfo.data.readUInt32LE(76);
               setPosition({ x: posX, y: posY });
             } else {
-              setPosition({ x: position.x, y: position.y });
+              setPosition({ x: positionRef.current.x, y: positionRef.current.y });
             }
           } else {
-            setPosition({ x: position.x, y: position.y });
+            setPosition({ x: positionRef.current.x, y: positionRef.current.y });
           }
         } catch {
-          setPosition({ x: position.x, y: position.y });
+          setPosition({ x: positionRef.current.x, y: positionRef.current.y });
         }
       } finally {
         setIsMoving(false);
