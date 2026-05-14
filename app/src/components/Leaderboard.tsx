@@ -1,42 +1,87 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { useSessionKey } from "@/hooks/useSessionKey";
 import { LeaderboardEntry } from "@/types";
 import { shortenAddress, formatGoldium } from "@/lib/utils";
+import { getProgramId, RPC_URL } from "@/lib/constants";
 
-// Mock data - in production, this would come from a leaderboard API
-const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  { wallet: "5xrt...a1b2", goldiumMinted: 4500, position: { x: 42, y: 63 } },
-  { wallet: "3jkl...c3d4", goldiumMinted: 3200, position: { x: 17, y: 28 } },
-  { wallet: "8mno...e5f6", goldiumMinted: 2800, position: { x: 91, y: 15 } },
-  { wallet: "2pqr...g7h8", goldiumMinted: 2100, position: { x: 55, y: 77 } },
-  { wallet: "9stu...i9j0", goldiumMinted: 1800, position: { x: 33, y: 44 } },
-  { wallet: "1vwx...k1l2", goldiumMinted: 1500, position: { x: 88, y: 22 } },
-  { wallet: "4yz1...m3n4", goldiumMinted: 1200, position: { x: 12, y: 89 } },
-  { wallet: "7opq...o5p6", goldiumMinted: 900, position: { x: 66, y: 33 } },
-  { wallet: "0rst...q7r8", goldiumMinted: 600, position: { x: 44, y: 56 } },
-  { wallet: "6uvw...s9t0", goldiumMinted: 300, position: { x: 77, y: 11 } },
-];
+// Player discriminator = sha256("account:Player")[0:8]
+const PLAYER_DISC_B58 = "bSBoKNsSHuj"; // base58 of [205,222,112,7,165,155,206,218]
+const PLAYER_SIZE = 97; // 8 disc + 32 wallet + 32 session_key + 4 pos_x + 4 pos_y + 8 goldium + 8 expires + 1 bump
 
 export function Leaderboard() {
   const { playerState } = useSessionKey();
-  const [entries, setEntries] = useState<LeaderboardEntry[]>(MOCK_LEADERBOARD);
-  const [isLoading, setIsLoading] = useState(false);
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
+  const connRef = useRef<Connection | null>(null);
 
-  // In a real implementation, fetch from an API
+  const loadLeaderboard = async () => {
+    if (!connRef.current) connRef.current = new Connection(RPC_URL);
+
+    setIsLoading(true);
+    try {
+      const programId = getProgramId();
+      const accounts = await connRef.current.getProgramAccounts(programId, {
+        filters: [
+          { memcmp: { offset: 0, bytes: PLAYER_DISC_B58 } },
+          { dataSize: PLAYER_SIZE },
+        ],
+        commitment: "confirmed",
+      });
+
+      const scanned = new Map<string, bigint>();
+
+      for (const { account } of accounts) {
+        const data = account.data;
+        if (data.readUInt16LE(0) !== 0xdecd) continue;
+
+        const wallet = new PublicKey(data.slice(8, 40)).toBase58();
+        const posX = data.readUInt32LE(72);
+        const posY = data.readUInt32LE(76);
+        const goldiumMinted = data.readBigUInt64LE(80);
+
+        // If same wallet has multiple PDAs (shouldn't but be safe), keep the highest
+        if (!scanned.has(wallet) || goldiumMinted > scanned.get(wallet)!) {
+          scanned.set(wallet, goldiumMinted);
+        }
+      }
+
+      const sorted: LeaderboardEntry[] = Array.from(scanned.entries())
+        .sort((a, b) => {
+          if (b[1] > a[1]) return 1;
+          if (b[1] < a[1]) return -1;
+          return 0;
+        })
+        .slice(0, 50)
+        .map(([wallet, gold]) => ({
+          wallet,
+          goldiumMinted: Number(gold),
+          position: { x: 0, y: 0 },
+        }));
+
+      setEntries(sorted);
+    } catch (err) {
+      console.error("Leaderboard fetch failed:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // This would fetch real leaderboard data
-    // fetchLeaderboard().then(setEntries);
+    loadLeaderboard();
   }, []);
 
-  // Calculate player rank if they exist
-  const playerRank = playerState?.wallet
-    ? entries.findIndex(
-        (e) => e.wallet === playerState.wallet!.toString()
-      ) + 1 || entries.length + 1
+  // Current player's rank
+  const playerWallet = playerState?.wallet?.toBase58();
+  const playerRank = playerWallet
+    ? entries.findIndex((e) => e.wallet === playerWallet) + 1
     : null;
+
+  // Top 10 entries for display
+  const topEntries = entries.slice(0, 10);
 
   return (
     <div className="bg-gray-800/50 rounded-xl border border-gray-700">
@@ -46,62 +91,66 @@ export function Leaderboard() {
       >
         <h3 className="font-semibold text-gray-200 flex items-center gap-2">
           <span>🏆</span> Leaderboard
+          {isLoading && (
+            <span className="text-xs text-gray-500 animate-pulse">loading...</span>
+          )}
         </h3>
         <span className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
 
       {isOpen && (
         <div className="px-4 pb-4">
-          <div className="space-y-1">
-            {entries.slice(0, 10).map((entry, index) => (
-              <div
-                key={entry.wallet}
-                className={`flex items-center justify-between py-2 px-3 rounded-lg ${
-                  index === 0
-                    ? "bg-yellow-500/10 border border-yellow-500/30"
-                    : index === 1
-                    ? "bg-gray-400/10 border border-gray-400/30"
-                    : index === 2
-                    ? "bg-orange-500/10 border border-orange-500/30"
-                    : "hover:bg-gray-700/50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
-                      index === 0
-                        ? "bg-yellow-500 text-yellow-900"
-                        : index === 1
-                        ? "bg-gray-400 text-gray-900"
-                        : index === 2
-                        ? "bg-orange-500 text-orange-900"
-                        : "bg-gray-700 text-gray-400"
-                    }`}
-                  >
-                    {index + 1}
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-200">
-                      {shortenAddress(entry.wallet)}
+          {entries.length === 0 ? (
+            <p className="text-gray-500 text-sm text-center py-4">No players yet</p>
+          ) : (
+            <div className="space-y-1">
+              {topEntries.map((entry, index) => (
+                <div
+                  key={entry.wallet}
+                  className={`flex items-center justify-between py-2 px-3 rounded-lg ${
+                    index === 0
+                      ? "bg-yellow-500/10 border border-yellow-500/30"
+                      : index === 1
+                      ? "bg-gray-400/10 border border-gray-400/30"
+                      : index === 2
+                      ? "bg-orange-500/10 border border-orange-500/30"
+                      : "hover:bg-gray-700/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                        index === 0
+                          ? "bg-yellow-500 text-yellow-900"
+                          : index === 1
+                          ? "bg-gray-400 text-gray-900"
+                          : index === 2
+                          ? "bg-orange-500 text-orange-900"
+                          : "bg-gray-700 text-gray-400"
+                      }`}
+                    >
+                      {index + 1}
                     </div>
-                    <div className="text-xs text-gray-500">
-                      at ({entry.position.x}, {entry.position.y})
+                    <div>
+                      <div className="text-sm font-medium text-gray-200">
+                        {shortenAddress(entry.wallet)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-yellow-400">
+                      {formatGoldium(entry.goldiumMinted)}
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-yellow-400">
-                    {formatGoldium(entry.goldiumMinted)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
-          {/* Player rank */}
-          {playerState && playerRank && (
+          {/* Current player rank */}
+          {playerState && playerRank && playerRank > 10 && (
             <>
-              <div className="my-3 border-t border-gray-700"></div>
+              {entries.length > 0 && <div className="my-3 border-t border-gray-700"></div>}
               <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
                 <div className="flex items-center gap-3">
                   <div className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-500 text-blue-900 text-xs font-bold">
@@ -117,6 +166,14 @@ export function Leaderboard() {
               </div>
             </>
           )}
+
+          <button
+            onClick={loadLeaderboard}
+            disabled={isLoading}
+            className="mt-3 w-full text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </button>
         </div>
       )}
     </div>
