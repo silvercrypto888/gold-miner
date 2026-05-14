@@ -75,6 +75,35 @@ export const GoldMinerIDL: Idl = {
       args: [],
     },
     {
+      name: "moveAndMine",
+      discriminator: [26, 202, 228, 63, 206, 4, 137, 63],
+      accounts: [
+        { name: "sessionSigner", writable: true, signer: true },
+        { name: "gameConfig", writable: true },
+        { name: "player", writable: true },
+        { name: "goldSpot", writable: true },
+        { name: "goldiumMint", writable: true },
+        { name: "playerTokenAccount", writable: true },
+        { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
+        { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
+      ],
+      args: [
+        {
+          name: "direction",
+          type: { defined: { name: "Direction" } },
+        },
+        {
+          name: "newX",
+          type: "u32",
+        },
+        {
+          name: "newY",
+          type: "u32",
+        },
+      ],
+    },
+    {
       name: "depositXnt",
       discriminator: [174, 84, 153, 146, 93, 0, 115, 244],
       accounts: [
@@ -171,6 +200,8 @@ export const GoldMinerIDL: Idl = {
     { code: 6003, name: "NoFundsToWithdraw", msg: "No funds to withdraw" },
     { code: 6004, name: "ArithmeticOverflow", msg: "Arithmetic overflow" },
     { code: 6005, name: "AlreadyMined", msg: "Position already mined" },
+    { code: 6006, name: "NoGoldHere", msg: "No gold at this position" },
+    { code: 6007, name: "GoldSpotMismatch", msg: "Gold spot account mismatch — must be derived from new position" },
   ],
 };
 

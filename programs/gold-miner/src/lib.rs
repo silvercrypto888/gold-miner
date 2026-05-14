@@ -186,6 +186,133 @@ pub mod gold_miner {
         Ok(())
     }
 
+    /// Move player and mine gold at the new position in a single atomic TX.
+    /// If gold exists at the new position and hasn't been mined, mines it.
+    /// If no gold at the new position, just completes the move.
+    /// The client must pass new_x/new_y matching the direction result so the
+    /// gold_spot PDA can be derived from the NEW position before the move.
+    pub fn move_and_mine(
+        ctx: Context<MoveAndMine>,
+        direction: Direction,
+        new_x: u32,
+        new_y: u32,
+    ) -> Result<()> {
+        let player = &mut ctx.accounts.player;
+        let clock = Clock::get()?;
+
+        // Verify session key
+        require!(
+            player.session_key == ctx.accounts.session_signer.key(),
+            GoldMinerError::InvalidSessionKey
+        );
+
+        // Verify session hasn't expired
+        require!(
+            clock.slot <= player.session_expires_at,
+            GoldMinerError::SessionExpired
+        );
+
+        // Calculate expected new position from direction
+        let (expected_x, expected_y) = match direction {
+            Direction::Up => (player.position_x, player.position_y.saturating_add(1)),
+            Direction::Down => (player.position_x, player.position_y.saturating_sub(1)),
+            Direction::Left => (player.position_x.saturating_sub(1), player.position_y),
+            Direction::Right => (player.position_x.saturating_add(1), player.position_y),
+        };
+
+        // Verify client-provided coords match direction calculation
+        require!(
+            new_x == expected_x && new_y == expected_y,
+            GoldMinerError::GoldSpotMismatch
+        );
+
+        // Validate bounds (1..=GRID_SIZE)
+        require!(new_x >= 1 && new_x <= GRID_SIZE, GoldMinerError::OutOfBounds);
+        require!(new_y >= 1 && new_y <= GRID_SIZE, GoldMinerError::OutOfBounds);
+
+        // Verify gold_spot PDA matches the new position
+        let (expected_gold_spot, _) = Pubkey::find_program_address(
+            &[
+                b"gold_spot",
+                new_x.to_be_bytes().as_ref(),
+                new_y.to_be_bytes().as_ref(),
+            ],
+            ctx.program_id,
+        );
+        require!(
+            ctx.accounts.gold_spot.key() == expected_gold_spot,
+            GoldMinerError::GoldSpotMismatch
+        );
+
+        // Update position
+        player.position_x = new_x;
+        player.position_y = new_y;
+
+        msg!("Player moved to ({}, {})", new_x, new_y);
+
+        // Check if there's gold at the new position
+        if has_gold_at(new_x, new_y) {
+            let gold_spot = &mut ctx.accounts.gold_spot;
+
+            // Check if gold hasn't been mined yet
+            let should_mine = if !gold_spot.has_gold {
+                // Check if this is a freshly created (zero-init) account
+                if gold_spot.mined_by.is_none() {
+                    gold_spot.has_gold = true;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                true
+            };
+
+            if should_mine {
+                // Mark gold as mined
+                gold_spot.has_gold = false;
+                gold_spot.mined_by = Some(player.wallet);
+
+                // Update player stats
+                player.goldium_minted = player.goldium_minted.saturating_add(GOLD_PER_MINE);
+
+                // Update global counter
+                ctx.accounts.game_config.total_gold_mined =
+                    ctx.accounts.game_config.total_gold_mined.saturating_add(1);
+
+                // Mint Goldium tokens to player
+                let config_bump = ctx.accounts.game_config.bump;
+                let signer_seeds: &[&[&[u8]]] = &[&[
+                    b"game_config",
+                    &[config_bump],
+                ]];
+
+                let cpi_accounts = MintTo {
+                    mint: ctx.accounts.goldium_mint.to_account_info(),
+                    to: ctx.accounts.player_token_account.to_account_info(),
+                    authority: ctx.accounts.game_config.to_account_info(),
+                };
+                let cpi_ctx = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    signer_seeds,
+                );
+                let amount = GOLD_PER_MINE
+                    .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
+                    .ok_or(GoldMinerError::ArithmeticOverflow)?;
+                mint_to(cpi_ctx, amount)?;
+
+                msg!(
+                    "GOLD MINED! +{} Goldium at position ({}, {})",
+                    GOLD_PER_MINE,
+                    new_x,
+                    new_y
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     /// Deposit XNT into player escrow for gas
     pub fn deposit_xnt(ctx: Context<DepositXnt>, amount_lamports: u64) -> Result<()> {
         system_program::transfer(
@@ -398,6 +525,51 @@ pub struct MineGold<'info> {
 }
 
 #[derive(Accounts)]
+pub struct MoveAndMine<'info> {
+    /// Session key signer - pays for gold_spot creation if needed
+    #[account(mut)]
+    pub session_signer: Signer<'info>,
+
+    #[account(mut)]
+    pub game_config: Account<'info, GameConfig>,
+
+    #[account(
+        mut,
+        seeds = [b"player", player.wallet.as_ref()],
+        bump = player.bump,
+        constraint = player.session_key == session_signer.key() @ GoldMinerError::InvalidSessionKey,
+    )]
+    pub player: Account<'info, Player>,
+
+    /// Gold spot PDA — must be derived from the NEW position (new_x, new_y)
+    /// The client passes new_x/new_y as instruction args and derives this PDA.
+    /// We verify the PDA matches inside the instruction.
+    /// CHECK: Verified in instruction logic against new_x/new_y coords.
+    #[account(
+        init_if_needed,
+        payer = session_signer,
+        space = 8 + GoldSpot::SIZE,
+    )]
+    pub gold_spot: Account<'info, GoldSpot>,
+
+    #[account(mut)]
+    pub goldium_mint: InterfaceAccount<'info, Mint>,
+
+    /// Associated token account for player's Goldium
+    #[account(
+        mut,
+        associated_token::mint = goldium_mint,
+        associated_token::authority = player,
+        associated_token::token_program = token_program,
+    )]
+    pub player_token_account: InterfaceAccount<'info, TokenAccountInterface>,
+
+    pub token_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct DepositXnt<'info> {
     #[account(mut)]
     pub wallet: Signer<'info>,
@@ -454,4 +626,6 @@ pub enum GoldMinerError {
     AlreadyMined,
     #[msg("No gold at this position")]
     NoGoldHere,
+    #[msg("Gold spot account mismatch — must be derived from new position")]
+    GoldSpotMismatch,
 }

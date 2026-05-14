@@ -56,6 +56,7 @@ const MOVE_COOLDOWN_MS = 400;
 // Instruction discriminators
 const MOVE_PLAYER_DISC = Buffer.from([17, 58, 68, 221, 186, 117, 140, 231]);
 const MINE_GOLD_DISC = Buffer.from([49, 40, 243, 122, 219, 94, 234, 9]);
+const MOVE_AND_MINE_DISC = Buffer.from([26, 202, 228, 63, 206, 4, 137, 63]);
 
 // Direction enum variant index
 const DIRECTION_VARIANT: Record<Direction, number> = {
@@ -80,16 +81,11 @@ export function useGame(): UseGameReturn {
   const [status, setStatus] = useState("");
   const connectionRef = useRef<Connection | null>(null);
   const goldiumMintRef = useRef<PublicKey | null>(null);
-  // Timestamp of last authoritative on-chain position read.
-  // Prevents stale playerState updates from overwriting position.
   const lastChainPositionRef = useRef<number>(0);
-  // Cache balance check to avoid redundant getBalance calls
 
-
-  // Pre-cached blockhash — refreshed every 30s in the background so
-  // move/mine don't have to wait for getLatestBlockhash.
   const cachedBlockhashRef = useRef<{ blockhash: string; lastValidBlockHeight: number } | null>(null);
   const blockhashFetchRef = useRef<boolean>(false);
+  const blockhashTimeRef = useRef<number>(0);
 
   const toggleShowPlayers = useCallback(() => {
     setShowPlayers(prev => !prev);
@@ -101,7 +97,7 @@ export function useGame(): UseGameReturn {
     }
   }, []);
 
-  // Pre-cache blockhash every 30s so moves/mines don't wait for getLatestBlockhash
+  // Pre-cache blockhash every 30s
   useEffect(() => {
     const refresh = async () => {
       if (!connectionRef.current || blockhashFetchRef.current) return;
@@ -116,27 +112,22 @@ export function useGame(): UseGameReturn {
         blockhashFetchRef.current = false;
       }
     };
-    refresh(); // initial fetch
+    refresh();
     const interval = setInterval(refresh, 30_000);
     return () => clearInterval(interval);
   }, []);
 
-  // Get a blockhash — uses cached if fresh (<30s old), otherwise fetches from RPC
-  const blockhashTimeRef = useRef<number>(0);
   const getBlockhash = useCallback(async (): Promise<{ blockhash: string; lastValidBlockHeight: number }> => {
     if (!connectionRef.current) throw new Error("No connection");
     const cached = cachedBlockhashRef.current;
     const cacheAge = Date.now() - blockhashTimeRef.current;
     if (cached && cacheAge < 30_000) return cached;
-    // Cache miss or stale — fetch fresh
     const fresh = await connectionRef.current.getLatestBlockhash();
     cachedBlockhashRef.current = fresh;
     blockhashTimeRef.current = Date.now();
     return fresh;
   }, []);
 
-  // Invalidate blockhash cache — must be called after every TX use
-  // since each blockhash can only sign one transaction
   const invalidateBlockhash = useCallback(() => {
     cachedBlockhashRef.current = null;
     blockhashTimeRef.current = 0;
@@ -159,83 +150,20 @@ export function useGame(): UseGameReturn {
     })();
   }, []);
 
-  // Fetch other players visible in the viewport when showPlayers is toggled on
-  // Player account size: 8 (disc) + 32 (wallet) + 32 (session_key) + 4 (pos_x) + 4 (pos_y) + 8 (goldium) + 8 (session_expires) + 1 (bump) = 97
-  const PLAYER_ACCOUNT_SIZE = 97;
-  const PLAYER_DISC = Buffer.from([205, 222, 112, 7, 165, 155, 206, 218]); // Anchor discriminator for "account:Player"
-
-  useEffect(() => {
-    if (!showPlayers || !connectionRef.current || !playerState?.wallet) {
-      if (!showPlayers) setVisiblePlayers([]);
-      return;
-    }
-
-    let cancelled = false;
-    const fetchPlayers = async () => {
-      try {
-        const conn = connectionRef.current!;
-        const programId = getProgramId();
-        const myWallet = playerState.wallet!.toBase58();
-
-        // Fetch all player accounts owned by the program
-        const accounts = await conn.getProgramAccounts(programId, {
-          filters: [
-            { dataSize: PLAYER_ACCOUNT_SIZE },
-          ],
-          commitment: 'confirmed',
-        });
-
-        if (cancelled) return;
-
-        const players: OtherPlayer[] = [];
-        for (const acct of accounts) {
-          const data = acct.account.data;
-          // Verify discriminator
-          if (!data.subarray(0, 8).equals(PLAYER_DISC)) continue;
-
-          const wallet = new PublicKey(data.subarray(8, 40)).toBase58();
-          // Skip self
-          if (wallet === myWallet) continue;
-
-          const x = data.readUInt32LE(72);
-          const y = data.readUInt32LE(76);
-
-          players.push({ wallet, x, y });
-        }
-
-        setVisiblePlayers(players);
-      } catch (e) {
-        console.warn("Failed to fetch other players:", e);
-      }
-    };
-
-    fetchPlayers();
-    // Refresh every 10 seconds while toggled on
-    const interval = setInterval(fetchPlayers, 10_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [showPlayers, playerState?.wallet]);
-  // Sync gold count from playerState, but NOT position.
-  // Position is only set from optimistic updates and direct on-chain reads
-  // to prevent stale Anchor/fetch data from rubber-banding the player.
+  // Sync gold count from playerState
   useEffect(() => {
     if (playerState) {
       setGoldMined(playerState.goldiumMinted);
     }
   }, [playerState]);
 
-  // Load initial position from chain — use raw account data, not Anchor fetch,
-  // because Anchor fetch returns stale RPC data that causes position jumps on refresh
+  // Load initial position from chain
   const initializedRef = useRef(false);
   useEffect(() => {
     if (playerState?.wallet && connectionRef.current) {
-      // Immediately set position from playerState to avoid showing (1,1) corner
       if (!initializedRef.current) {
         setPosition(playerState.position);
       }
-      // Then refine with direct chain read for accuracy
       const loadPosition = async () => {
         try {
           const programId = getProgramId();
@@ -246,9 +174,7 @@ export function useGame(): UseGameReturn {
             const posY = accountInfo.data.readUInt32LE(76);
             setPosition({ x: posX, y: posY });
           }
-        } catch {
-          // playerState position already set above
-        }
+        } catch {}
         initializedRef.current = true;
       };
       loadPosition();
@@ -260,7 +186,6 @@ export function useGame(): UseGameReturn {
     const programId = getProgramId();
     const goldSpots: GoldSpot[] = [];
 
-    // Collect all positions that have gold by worldgen
     const candidatePositions: [number, number][] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
@@ -268,7 +193,6 @@ export function useGame(): UseGameReturn {
       }
     }
 
-    // Check on-chain which gold spots have been mined
     if (candidatePositions.length > 0 && connectionRef.current) {
       try {
         const pdas = candidatePositions.map(([x, y]) => {
@@ -282,10 +206,7 @@ export function useGame(): UseGameReturn {
           )[0];
         });
 
-        // Batch fetch all gold_spot accounts
         const accounts = await connectionRef.current.getMultipleAccountsInfo(pdas, 'confirmed');
-
-        // GoldSpot discriminator
         const goldSpotDisc = Buffer.from([112, 156, 149, 108, 70, 90, 135, 242]);
 
         for (let i = 0; i < candidatePositions.length; i++) {
@@ -293,16 +214,13 @@ export function useGame(): UseGameReturn {
           const acct = accounts[i];
 
           if (acct && acct.data.slice(0, 8).equals(goldSpotDisc)) {
-            // Account exists — check if gold is still there
             const hasGold = acct.data[8] === 1;
             goldSpots.push({ x, y, hasGold });
           } else {
-            // Account doesn't exist yet — gold is available
             goldSpots.push({ x, y, hasGold: true });
           }
         }
       } catch (e) {
-        // Fallback: if batch fetch fails, assume all gold is available
         console.warn("Failed to fetch gold spots, assuming all available:", e);
         for (const [x, y] of candidatePositions) {
           goldSpots.push({ x, y, hasGold: true });
@@ -315,210 +233,7 @@ export function useGame(): UseGameReturn {
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
-  // Mine gold at current position.
-  // Always fetches position fresh from chain for PDA derivation
-  // to avoid ConstraintSeeds errors from stale RPC data.
-  const mineGold = useCallback(async (mineX?: number, mineY?: number): Promise<boolean> => {
-    if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current || !goldiumMintRef.current) {
-      return false;
-    }
-
-    try {
-      setStatus("Mining...");
-      const programId = getProgramId();
-      const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
-      const walletPk = playerState.wallet;
-      if (!walletPk) { console.warn("mineGold: no walletPk"); setStatus(""); return false; }
-
-      // Fund session key if balance too low for TX fee
-      // TX fee is ~5,000 lamports on X1, plus ATA creation ~150k if first mine
-      const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-      if (balance < 200_000) {
-        // Balance critically low — need wallet signature to fund
-        console.warn(`mineGold: session key balance ${balance} below 200k, funding...`);
-        const fundBh = await getBlockhash();
-        try {
-          await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
-          // Wait for RPC to catch up after funding
-          await new Promise(r => setTimeout(r, 500));
-          // Re-check balance after funding
-          const newBalance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-          if (newBalance < 100_000) {
-            console.error(`mineGold: funding failed, balance still ${newBalance}`);
-            setStatus("");
-            return false;
-          }
-        } catch (e) {
-          console.error("Failed to fund session key for mine:", e);
-          setStatus("");
-          return false;
-        }
-      }
-
-      const [playerPda] = getPlayerPda(walletPk, programId);
-
-      // Use explicit position if provided (from move), otherwise fall back to tracked position
-      // This avoids the React closure stale position problem
-      const targetX = mineX ?? position.x;
-      const targetY = mineY ?? position.y;
-      console.log(`mineGold: tracked=(${position.x},${position.y}) target=(${targetX},${targetY}) balance=${balance}`);
-
-      // Read on-chain position for PDA derivation (must match what the program expects)
-      let playerInfo: { data: Buffer } | null = null;
-      let onChainX = 0, onChainY = 0;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        playerInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-        if (!playerInfo) { console.warn("mineGold: no playerInfo"); setStatus(""); return false; }
-        onChainX = playerInfo.data.readUInt32LE(72);
-        onChainY = playerInfo.data.readUInt32LE(76);
-        if (onChainX === targetX && onChainY === targetY) break;
-        // Position doesn't match yet — RPC might be stale, wait and retry
-        console.log(`mineGold: position mismatch (attempt ${attempt+1}), chain=(${onChainX},${onChainY}) expected=(${targetX},${targetY})`);
-        if (attempt < 4) await new Promise(r => setTimeout(r, 400));
-      }
-
-      // Use on-chain position for PDA derivation (must match program)
-      // Do NOT update React state from here — the move function handles position sync
-      // after confirmed moves. Updating here causes position jumps because chain data
-      // can be 1 move behind the optimistic position.
-
-      // Use on-chain position for PDA derivation (must match what the program expects)
-      const pdxX = onChainX;
-      const pdxY = onChainY;
-      const [goldSpotPda] = getGoldSpotPda(pdxX, pdxY, programId);
-
-      // Fetch gold_spot account
-      const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
-
-      // Check worldgen using on-chain position (that's what the program checks)
-      if (!hasGoldAt(pdxX, pdxY)) {
-        console.log(`mineGold: no gold at on-chain position (${pdxX},${pdxY})`);
-        setStatus("");
-        return false;
-      }
-      const goldiumMint = goldiumMintRef.current;
-
-      // Check if gold_spot already exists and is mined
-      if (goldSpotInfo) {
-        const hasGold = goldSpotInfo.data[8] === 1;
-        if (!hasGold) {
-          console.log(`Gold at (${pdxX}, ${pdxY}) already mined, skipping`);
-          setStatus("");
-          return false;
-        }
-      }
-
-      const [gameConfigPda] = getGameConfigPda(programId);
-      const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
-      const tokenProgram = getToken2022ProgramId();
-      const ataProgram = getAtaProgramId();
-
-      // Create ATA idempotently — no-op if already exists
-      const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
-        sessionSigner.publicKey,  // payer
-        playerAta,                // ata
-        playerPda,                 // owner
-        goldiumMint,               // mint
-        tokenProgram,               // token program (Token-2022)
-        ataProgram                   // ATA program
-      );
-
-      // Build mineGold instruction — Anchor CPI creates gold_spot if needed
-      const mineIx = new TransactionInstruction({
-        keys: [
-          { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },       // session_signer (mut, payer)
-          { pubkey: gameConfigPda, isSigner: false, isWritable: true },                 // game_config
-          { pubkey: playerPda, isSigner: false, isWritable: true },                    // player
-          { pubkey: goldSpotPda, isSigner: false, isWritable: true },             // gold_spot (init_if_needed)
-          { pubkey: goldiumMint, isSigner: false, isWritable: true },                    // goldium_mint
-          { pubkey: playerAta, isSigner: false, isWritable: true },                      // player_token_account (associated_token init_if_needed)
-          { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
-          { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
-        ],
-        programId,
-        data: MINE_GOLD_DISC,
-      });
-
-      const { blockhash, lastValidBlockHeight } = await getBlockhash();
-
-      const tx = new Transaction({
-        feePayer: sessionSigner.publicKey,
-        blockhash,
-        lastValidBlockHeight,
-      });
-      tx.add(createAtaIx);
-      tx.add(mineIx);
-      tx.sign(sessionSigner);
-
-      console.log(`mineGold: sending TX at position (${mineX}, ${mineY})`);
-      const signature = await connectionRef.current.sendRawTransaction(
-        tx.serialize(),
-        { skipPreflight: false, preflightCommitment: "confirmed" }
-      );
-      invalidateBlockhash(); // blockhash consumed by this TX
-
-      const mineResult = await confirmWithTimeout(connectionRef.current, {
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      }, 'confirmed');
-
-      if (mineResult.value?.err) {
-        // Error 6005 = AlreadyMined — gold was mined by someone else, not a real failure
-        const errStr = JSON.stringify(mineResult.value.err);
-        if (errStr.includes("6005") || errStr.includes("AlreadyMined")) {
-          console.log("Gold already mined by another player, refreshing");
-          updateVisibleGold();
-          setStatus("");
-          return false;
-        }
-        console.error("Mine TX failed on-chain:", mineResult.value.err);
-        setStatus("");
-        return false;
-      }
-
-      console.log("Gold mined! TX:", signature);
-      setGoldMined(prev => prev + GOLD_PER_MINE);
-      setStatus("Mined");
-      lastChainPositionRef.current = Date.now();
-
-      // Fire-and-forget gold visibility refresh — don't block on it
-      updateVisibleGold();
-      return true;
-    } catch (err: any) {
-      const errMsg = String(err?.message || "");
-      const errLogs = err?.logs ? err.logs.join(" ") : "";
-
-      // "This transaction has already been processed" means the TX went through
-      if (errMsg.includes("already been processed")) {
-        setGoldMined(prev => prev + GOLD_PER_MINE);
-        setStatus("Mined");
-        updateVisibleGold();
-        return true;
-      }
-
-      // AlreadyMined (6005 / 0x1775) — gold was mined by someone else, not a real failure
-      if (errMsg.includes("6005") || errMsg.includes("0x1775") || errMsg.includes("AlreadyMined") || errLogs.includes("AlreadyMined")) {
-        console.log("Gold already mined by another player, refreshing");
-        updateVisibleGold();
-        setStatus("");
-        return false;
-      }
-
-      console.error("Mine gold failed:", err);
-      setStatus("");
-      // Invalidate cached blockhash on expiry so next action fetches fresh
-      if (err?.name === "TransactionExpiredBlockheightExceededError" ||
-          errMsg.includes("block height exceeded")) {
-        invalidateBlockhash();
-      }
-      if (err?.logs) console.error("Program logs:", err.logs.join("\n"));
-      return false;
-    }
-  }, [sessionKeypair, sessionPubkey, playerState, position, updateVisibleGold, getBlockhash, invalidateBlockhash, fundSessionKey]);
-
-  // Move player — session key is fee payer
+  // Move and mine in a single atomic TX
   const move = useCallback(
     async (direction: Direction) => {
       if (!sessionKeypair || !sessionPubkey || !playerState || !connectionRef.current) return;
@@ -545,17 +260,15 @@ export function useGame(): UseGameReturn {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Always check session key balance before moving
+        // Check session key balance
         const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
         if (balance < 500_000) {
-          const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
-            await getBlockhash();
+          const { blockhash: fundBh, lastValidBlockHeight: fundLvb } = await getBlockhash();
           try {
             await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb);
-            // Wait for RPC to catch up after funding
             await new Promise(r => setTimeout(r, 500));
           } catch (e) {
-            console.error("Failed to fund session key for move:", e);
+            console.error("Failed to fund session key:", e);
             setIsMoving(false);
             setPosition({ x: positionRef.current.x, y: positionRef.current.y });
             setStatus("");
@@ -565,32 +278,54 @@ export function useGame(): UseGameReturn {
 
         const walletPk = playerState.wallet;
         if (!walletPk) { setPosition(playerState.position); return; }
+        
         const [playerPda] = getPlayerPda(walletPk, programId);
-
-        // Re-check balance right before building TX — concurrent mine TXs can drain it
-        const preTx = await connectionRef.current.getBalance(sessionSigner.publicKey);
-        if (preTx < 10_000) {
-          // Balance too low for even a simple move TX fee
-          console.warn(`Move: balance ${preTx} too low for TX fee, funding...`);
-          const { blockhash: fundBh2, lastValidBlockHeight: fundLvb2 } = await getBlockhash();
-          try {
-            await fundSessionKey(sessionSigner.publicKey, fundBh2, fundLvb2);
-            await new Promise(r => setTimeout(r, 500));
-          } catch (e2) {
-            console.error("Move: failed to refund session key:", e2);
-            setIsMoving(false);
-            setPosition({ x: positionRef.current.x, y: positionRef.current.y });
-            setStatus("");
-            return;
-          }
+        const [gameConfigPda] = getGameConfigPda();
+        const [goldSpotPda] = getGoldSpotPda(newX, newY, programId);
+        
+        if (!goldiumMintRef.current) {
+          throw new Error("Goldium mint not loaded");
         }
+        const goldiumMint = goldiumMintRef.current;
+        const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
+        const tokenProgram = getToken2022ProgramId();
+        const ataProgram = getAtaProgramId();
 
-        const data = Buffer.concat([MOVE_PLAYER_DISC, Buffer.from([DIRECTION_VARIANT[direction]])]);
+        // Build instruction data: discriminator + direction + newX + newY
+        // newX and newY are u32 (4 bytes each, little-endian as per Anchor)
+        const newXBuf = Buffer.alloc(4);
+        newXBuf.writeUInt32LE(newX, 0);
+        const newYBuf = Buffer.alloc(4);
+        newYBuf.writeUInt32LE(newY, 0);
+        
+        const data = Buffer.concat([
+          MOVE_AND_MINE_DISC,
+          Buffer.from([DIRECTION_VARIANT[direction]]),
+          newXBuf,
+          newYBuf
+        ]);
+
+        // Create ATA idempotently if needed
+        const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+          sessionSigner.publicKey,
+          playerAta,
+          playerPda,
+          goldiumMint,
+          tokenProgram,
+          ataProgram
+        );
+
         const ix = new TransactionInstruction({
           keys: [
-            { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: false },
-            { pubkey: playerPda, isSigner: false, isWritable: true },
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },   // session_signer (mut)
+            { pubkey: gameConfigPda, isSigner: false, isWritable: true },              // game_config
+            { pubkey: playerPda, isSigner: false, isWritable: true },                 // player
+            { pubkey: goldSpotPda, isSigner: false, isWritable: true },                // gold_spot
+            { pubkey: goldiumMint, isSigner: false, isWritable: true },                // goldium_mint
+            { pubkey: playerAta, isSigner: false, isWritable: true },                  // player_token_account
+            { pubkey: tokenProgram, isSigner: false, isWritable: false },                // token_program
+            { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
           ],
           programId,
           data,
@@ -598,164 +333,196 @@ export function useGame(): UseGameReturn {
 
         const { blockhash, lastValidBlockHeight } = await getBlockhash();
         const tx = new Transaction({ feePayer: sessionSigner.publicKey, blockhash, lastValidBlockHeight });
+        tx.add(createAtaIx);
         tx.add(ix);
         tx.sign(sessionSigner);
 
         const signature = await connectionRef.current.sendRawTransaction(
           tx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
         );
-        invalidateBlockhash(); // blockhash consumed by this TX
+        invalidateBlockhash();
+        
         const result = await confirmWithTimeout(connectionRef.current,
           { signature, blockhash, lastValidBlockHeight },
           'confirmed'
         );
 
-        // Check for on-chain errors (e.g. instruction error even if TX landed in a block)
         if (result.value?.err) {
           console.error("Move TX failed on-chain:", result.value.err);
-          setPosition({ x: positionRef.current.x, y: positionRef.current.y }); // revert optimistic
+          setPosition({ x: positionRef.current.x, y: positionRef.current.y });
           setStatus("");
           return;
         }
 
-        // Move confirmed — read actual position from chain to stay in sync
+        // TX confirmed — sync position from chain
         try {
-          const moveProgramId = getProgramId();
-          const [movePlayerPda] = getPlayerPda(walletPk, moveProgramId);
-          const moveAccountInfo = await connectionRef.current.getAccountInfo(movePlayerPda, 'confirmed');
-          if (moveAccountInfo) {
-            const chainX = moveAccountInfo.data.readUInt32LE(72);
-            const chainY = moveAccountInfo.data.readUInt32LE(76);
+          const accountInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+          if (accountInfo) {
+            const chainX = accountInfo.data.readUInt32LE(72);
+            const chainY = accountInfo.data.readUInt32LE(76);
             setPosition({ x: chainX, y: chainY });
-            setStatus("Moved");
-
-            // Mine gold at actual chain position
-            const goldHere = visibleGold.find(g => g.x === chainX && g.y === chainY);
-            const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(chainX, chainY);
-            if (goldAvailable) {
-              const mined = await mineGold(chainX, chainY);
-              if (!mined) setStatus("");
-            } else {
-              setStatus("");
+            
+            // Check if gold was mined by checking the transaction logs or gold_spot account
+            // For simplicity, check if gold_spot exists and is mined
+            try {
+              const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
+              if (goldSpotInfo) {
+                const hasGold = goldSpotInfo.data[8] === 1;
+                if (!hasGold) {
+                  // Gold was mined!
+                  setGoldMined(prev => prev + GOLD_PER_MINE);
+                  setStatus("Mined!");
+                } else {
+                  setStatus("Moved");
+                }
+              } else {
+                setStatus("Moved");
+              }
+            } catch {
+              setStatus("Moved");
             }
           } else {
-            // Fallback: use optimistic position
             setPosition({ x: newX, y: newY });
             setStatus("Moved");
           }
         } catch {
-          // Fallback: use optimistic position
           setPosition({ x: newX, y: newY });
           setStatus("Moved");
         }
+
+        // Refresh visible gold
+        updateVisibleGold();
+
       } catch (err: any) {
         const errMsg = String(err?.message || "");
 
-        // "This transaction has already been processed" means the TX actually went through
-        // — treat as success, not an error
+        // "This transaction has already been processed" means success
         if (errMsg.includes("already been processed")) {
-          // Read actual position from chain since the TX went through
           try {
-            const abpProgramId = getProgramId();
-            const abpWallet = playerState?.wallet;
-            if (abpWallet) {
-              const [abpPda] = getPlayerPda(abpWallet, abpProgramId);
-              const abpInfo = await connectionRef.current.getAccountInfo(abpPda, 'confirmed');
-              if (abpInfo) {
-                const abpX = abpInfo.data.readUInt32LE(72);
-                const abpY = abpInfo.data.readUInt32LE(76);
-                setPosition({ x: abpX, y: abpY });
-                const goldHere = visibleGold.find(g => g.x === abpX && g.y === abpY);
-                const goldAvailable = goldHere ? goldHere.hasGold : hasGoldAt(abpX, abpY);
-                if (goldAvailable) {
-                  const mined = await mineGold(abpX, abpY);
-                  if (!mined) setStatus("");
-                } else { setStatus(""); }
+            const programId = getProgramId();
+            const wallet = playerState?.wallet;
+            if (wallet) {
+              const [pda] = getPlayerPda(wallet, programId);
+              const info = await connectionRef.current.getAccountInfo(pda, 'confirmed');
+              if (info) {
+                const chainX = info.data.readUInt32LE(72);
+                const chainY = info.data.readUInt32LE(76);
+                setPosition({ x: chainX, y: chainY });
               } else {
                 setPosition({ x: newX, y: newY });
-                setStatus("");
               }
             } else {
               setPosition({ x: newX, y: newY });
-              setStatus("");
             }
           } catch {
             setPosition({ x: newX, y: newY });
-            setStatus("");
           }
+          setStatus("");
           return;
         }
 
         console.error("Move failed:", err);
 
-        // If insufficient funds, try funding and retrying once
-        const errMsg2 = String(err?.message || "");
-        if (errMsg2.includes("Insufficient funds") || errMsg2.includes("insufficient")) {
-          console.warn("Move: insufficient funds, attempting to fund session key and retry");
+        // Retry on insufficient funds
+        if (errMsg.includes("Insufficient funds") || errMsg.includes("insufficient")) {
           try {
             const retryProgramId = getProgramId();
             const retrySigner = Keypair.fromSecretKey(sessionKeypair!.secretKey);
             const retryWalletPk = playerState!.wallet;
             if (retryWalletPk) {
-              const [retryPda] = getPlayerPda(retryWalletPk, retryProgramId);
               const { blockhash: fundBh, lastValidBlockHeight: fundLvb } = await getBlockhash();
               await fundSessionKey(retrySigner.publicKey, fundBh, fundLvb);
               await new Promise(r => setTimeout(r, 500));
-              // Retry the move
-              const retryData = Buffer.concat([MOVE_PLAYER_DISC, Buffer.from([DIRECTION_VARIANT[direction]])]);
+              
+              // Retry with same logic
+              const [playerPda] = getPlayerPda(retryWalletPk, retryProgramId);
+              const [gameConfigPda] = getGameConfigPda();
+              const [goldSpotPda] = getGoldSpotPda(newX, newY, retryProgramId);
+              const goldiumMint = goldiumMintRef.current!;
+              const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
+              const tokenProgram = getToken2022ProgramId();
+              const ataProgram = getAtaProgramId();
+
+              const newXBuf = Buffer.alloc(4);
+              newXBuf.writeUInt32LE(newX, 0);
+              const newYBuf = Buffer.alloc(4);
+              newYBuf.writeUInt32LE(newY, 0);
+              
+              const retryData = Buffer.concat([
+                MOVE_AND_MINE_DISC,
+                Buffer.from([DIRECTION_VARIANT[direction]]),
+                newXBuf,
+                newYBuf
+              ]);
+
+              const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+                retrySigner.publicKey,
+                playerAta,
+                playerPda,
+                goldiumMint,
+                tokenProgram,
+                ataProgram
+              );
+
               const retryIx = new TransactionInstruction({
                 keys: [
-                  { pubkey: retrySigner.publicKey, isSigner: true, isWritable: false },
-                  { pubkey: retryPda, isSigner: false, isWritable: true },
+                  { pubkey: retrySigner.publicKey, isSigner: true, isWritable: true },
+                  { pubkey: gameConfigPda, isSigner: false, isWritable: true },
+                  { pubkey: playerPda, isSigner: false, isWritable: true },
+                  { pubkey: goldSpotPda, isSigner: false, isWritable: true },
+                  { pubkey: goldiumMint, isSigner: false, isWritable: true },
+                  { pubkey: playerAta, isSigner: false, isWritable: true },
+                  { pubkey: tokenProgram, isSigner: false, isWritable: false },
+                  { pubkey: ataProgram, isSigner: false, isWritable: false },
                   { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
                 ],
                 programId: retryProgramId,
                 data: retryData,
               });
+
               const { blockhash: retryBh, lastValidBlockHeight: retryLvb } = await getBlockhash();
               const retryTx = new Transaction({ feePayer: retrySigner.publicKey, blockhash: retryBh, lastValidBlockHeight: retryLvb });
+              retryTx.add(createAtaIx);
               retryTx.add(retryIx);
               retryTx.sign(retrySigner);
+
               const retrySig = await connectionRef.current!.sendRawTransaction(
                 retryTx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
               );
               invalidateBlockhash();
+              
               const retryResult = await confirmWithTimeout(connectionRef.current!,
                 { signature: retrySig, blockhash: retryBh, lastValidBlockHeight: retryLvb },
                 'confirmed'
               );
+              
               if (!retryResult.value?.err) {
-                // Retry succeeded — read position from chain
-                try {
-                  const rpAccountInfo = await connectionRef.current!.getAccountInfo(retryPda, 'confirmed');
-                  if (rpAccountInfo) {
-                    setPosition({ x: rpAccountInfo.data.readUInt32LE(72), y: rpAccountInfo.data.readUInt32LE(76) });
-                  }
-                } catch {}
+                const rpInfo = await connectionRef.current!.getAccountInfo(playerPda, 'confirmed');
+                if (rpInfo) {
+                  setPosition({ x: rpInfo.data.readUInt32LE(72), y: rpInfo.data.readUInt32LE(76) });
+                }
                 setStatus("");
                 return;
               }
             }
           } catch (retryErr) {
-            console.error("Move retry after funding also failed:", retryErr);
+            console.error("Move retry failed:", retryErr);
           }
         }
 
         setStatus("");
-        // Invalidate cached blockhash on expiry so next action fetches fresh
         if (err?.name === "TransactionExpiredBlockheightExceededError" ||
             errMsg.includes("block height exceeded")) {
           invalidateBlockhash();
         }
-        // Revert position — try reading actual on-chain position for accuracy
+        
+        // Revert position
         try {
-          const fallbackProgramId = getProgramId();
           const fallbackWalletPk = playerState.wallet;
           if (fallbackWalletPk) {
-            const [pda] = getPlayerPda(fallbackWalletPk, fallbackProgramId);
+            const [pda] = getPlayerPda(fallbackWalletPk, getProgramId());
             const accountInfo = await connectionRef.current.getAccountInfo(pda, 'confirmed');
             if (accountInfo) {
-              // Player account layout: 8(disc) + 32(wallet) + 32(session) + 4(x) + 4(y)
               const posX = accountInfo.data.readUInt32LE(72);
               const posY = accountInfo.data.readUInt32LE(76);
               setPosition({ x: posX, y: posY });
@@ -772,13 +539,13 @@ export function useGame(): UseGameReturn {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, mineGold, getBlockhash, invalidateBlockhash, visibleGold]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, getBlockhash, invalidateBlockhash, updateVisibleGold]
   );
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return; // Ignore key repeat — only act on initial press
+      if (e.repeat) return;
       const keyMap: { [key: string]: Direction } = {
         ArrowUp: Direction.Up, ArrowDown: Direction.Down,
         ArrowLeft: Direction.Left, ArrowRight: Direction.Right,
@@ -793,5 +560,5 @@ export function useGame(): UseGameReturn {
   }, [move]);
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
-  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status };
+  return { position, visibleGold, visiblePlayers: [], showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status };
 }
