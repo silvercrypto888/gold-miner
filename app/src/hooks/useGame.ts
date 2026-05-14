@@ -564,6 +564,24 @@ export function useGame(): UseGameReturn {
         if (!walletPk) { setPosition(playerState.position); return; }
         const [playerPda] = getPlayerPda(walletPk, programId);
 
+        // Re-check balance right before building TX — concurrent mine TXs can drain it
+        const preTx = await connectionRef.current.getBalance(sessionSigner.publicKey);
+        if (preTx < 10_000) {
+          // Balance too low for even a simple move TX fee
+          console.warn(`Move: balance ${preTx} too low for TX fee, funding...`);
+          const { blockhash: fundBh2, lastValidBlockHeight: fundLvb2 } = await getBlockhash();
+          try {
+            await fundSessionKey(sessionSigner.publicKey, fundBh2, fundLvb2);
+            await new Promise(r => setTimeout(r, 500));
+          } catch (e2) {
+            console.error("Move: failed to refund session key:", e2);
+            setIsMoving(false);
+            setPosition({ x: positionRef.current.x, y: positionRef.current.y });
+            setStatus("");
+            return;
+          }
+        }
+
         const data = Buffer.concat([MOVE_PLAYER_DISC, Buffer.from([DIRECTION_VARIANT[direction]])]);
         const ix = new TransactionInstruction({
           keys: [
@@ -666,6 +684,60 @@ export function useGame(): UseGameReturn {
         }
 
         console.error("Move failed:", err);
+
+        // If insufficient funds, try funding and retrying once
+        const errMsg2 = String(err?.message || "");
+        if (errMsg2.includes("Insufficient funds") || errMsg2.includes("insufficient")) {
+          console.warn("Move: insufficient funds, attempting to fund session key and retry");
+          try {
+            const retryProgramId = getProgramId();
+            const retrySigner = Keypair.fromSecretKey(sessionKeypair!.secretKey);
+            const retryWalletPk = playerState!.wallet;
+            if (retryWalletPk) {
+              const [retryPda] = getPlayerPda(retryWalletPk, retryProgramId);
+              const { blockhash: fundBh, lastValidBlockHeight: fundLvb } = await getBlockhash();
+              await fundSessionKey(retrySigner.publicKey, fundBh, fundLvb);
+              await new Promise(r => setTimeout(r, 500));
+              // Retry the move
+              const retryData = Buffer.concat([MOVE_PLAYER_DISC, Buffer.from([DIRECTION_VARIANT[direction]])]);
+              const retryIx = new TransactionInstruction({
+                keys: [
+                  { pubkey: retrySigner.publicKey, isSigner: true, isWritable: false },
+                  { pubkey: retryPda, isSigner: false, isWritable: true },
+                  { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                ],
+                programId: retryProgramId,
+                data: retryData,
+              });
+              const { blockhash: retryBh, lastValidBlockHeight: retryLvb } = await getBlockhash();
+              const retryTx = new Transaction({ feePayer: retrySigner.publicKey, blockhash: retryBh, lastValidBlockHeight: retryLvb });
+              retryTx.add(retryIx);
+              retryTx.sign(retrySigner);
+              const retrySig = await connectionRef.current!.sendRawTransaction(
+                retryTx.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" }
+              );
+              invalidateBlockhash();
+              const retryResult = await confirmWithTimeout(connectionRef.current!,
+                { signature: retrySig, blockhash: retryBh, lastValidBlockHeight: retryLvb },
+                'confirmed'
+              );
+              if (!retryResult.value?.err) {
+                // Retry succeeded — read position from chain
+                try {
+                  const rpAccountInfo = await connectionRef.current!.getAccountInfo(retryPda, 'confirmed');
+                  if (rpAccountInfo) {
+                    setPosition({ x: rpAccountInfo.data.readUInt32LE(72), y: rpAccountInfo.data.readUInt32LE(76) });
+                  }
+                } catch {}
+                setStatus("");
+                return;
+              }
+            }
+          } catch (retryErr) {
+            console.error("Move retry after funding also failed:", retryErr);
+          }
+        }
+
         setStatus("");
         // Invalidate cached blockhash on expiry so next action fetches fresh
         if (err?.name === "TransactionExpiredBlockheightExceededError" ||
