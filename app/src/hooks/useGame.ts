@@ -325,17 +325,27 @@ export function useGame(): UseGameReturn {
       const walletPk = playerState.wallet;
       if (!walletPk) { console.warn("mineGold: no walletPk"); setStatus(""); return false; }
 
-      // Fund if balance too low for a mine TX (ATA creation can cost ~150k lamports)
+      // Fund session key if balance too low for TX fee
+      // TX fee is ~5,000 lamports on X1, plus ATA creation ~150k if first mine
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
       console.log(`mineGold: position=(${position.x},${position.y}) explicit=(${mineX},${mineY}) balance=${balance}`);
-      if (balance < 50_000_000) {
-        // Balance too low — fund up to 0.2 XNT (requires wallet signature)
+      if (balance < 200_000) {
+        // Balance critically low — need wallet signature to fund
+        console.warn(`mineGold: session key balance ${balance} below 200k, funding...`);
         const fundBh = await getBlockhash();
         try {
           await fundSessionKey(sessionSigner.publicKey, fundBh.blockhash, fundBh.lastValidBlockHeight);
+          // Re-check balance after funding
+          const newBalance = await connectionRef.current.getBalance(sessionSigner.publicKey);
+          if (newBalance < 100_000) {
+            console.error(`mineGold: funding failed, balance still ${newBalance}`);
+            setStatus("");
+            return false;
+          }
         } catch (e) {
-          console.warn("Failed to fund session key for mine:", e);
-          // Still try the mine — maybe there's just enough
+          console.error("Failed to fund session key for mine:", e);
+          setStatus("");
+          return false;
         }
       }
 
@@ -529,12 +539,12 @@ export function useGame(): UseGameReturn {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-        // Check balance every 30s — fund if below 50M lamports
+        // Check balance every 30s — fund if critically low
         const fundCheckAge = Date.now() - lastFundCheckRef.current;
         if (fundCheckAge > 30_000) {
           const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
           lastFundCheckRef.current = Date.now();
-          if (balance < 50_000_000) {
+          if (balance < 500_000) {
             const { blockhash: fundBh, lastValidBlockHeight: fundLvb } =
               await getBlockhash();
             try { await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb); }
