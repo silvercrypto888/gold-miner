@@ -30,6 +30,15 @@ export function GameCanvas() {
       position.y !== lastPositionRef.current.y
     ) {
       const startPos = { ...lastPositionRef.current };
+      const distance = Math.abs(position.x - startPos.x) + Math.abs(position.y - startPos.y);
+
+      // If position jumped more than 2 tiles (e.g. initial load), snap immediately
+      if (distance > 2) {
+        setDisplayPosition({ x: position.x, y: position.y });
+        lastPositionRef.current = position;
+        return;
+      }
+
       const startTime = Date.now();
       const duration = 150; // ms for animation
 

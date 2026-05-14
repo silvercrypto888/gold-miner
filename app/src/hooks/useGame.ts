@@ -230,7 +230,12 @@ export function useGame(): UseGameReturn {
   // because Anchor fetch returns stale RPC data that causes position jumps on refresh
   const initializedRef = useRef(false);
   useEffect(() => {
-    if (playerState?.wallet && !initializedRef.current && connectionRef.current) {
+    if (playerState?.wallet && connectionRef.current) {
+      // Immediately set position from playerState to avoid showing (1,1) corner
+      if (!initializedRef.current) {
+        setPosition(playerState.position);
+      }
+      // Then refine with direct chain read for accuracy
       const loadPosition = async () => {
         try {
           const programId = getProgramId();
@@ -240,11 +245,9 @@ export function useGame(): UseGameReturn {
             const posX = accountInfo.data.readUInt32LE(72);
             const posY = accountInfo.data.readUInt32LE(76);
             setPosition({ x: posX, y: posY });
-          } else {
-            setPosition(playerState.position);
           }
         } catch {
-          setPosition(playerState.position);
+          // playerState position already set above
         }
         initializedRef.current = true;
       };
