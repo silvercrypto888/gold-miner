@@ -12,6 +12,7 @@ import {
   getViewportRange,
 } from "@/lib/constants";
 import { Direction, OtherPlayer } from "@/types";
+import { drawGoldIcosahedrons } from "@/lib/icosahedron";
 
 export function GameCanvas() {
   const { publicKey } = useWallet();
@@ -19,242 +20,180 @@ export function GameCanvas() {
   const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
     useSessionKey();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [displayPosition, setDisplayPosition] = useState(position);
-  const animationRef = useRef<number | null>(null);
-  const lastPositionRef = useRef(position);
+  const rAFRef = useRef<number>(0);
+  const displayPosRef = useRef(position);
+  const goldRef = useRef(visibleGold);
+  const playersRef = useRef(visiblePlayers);
+  const showPlayersRef = useRef(showPlayers);
+  const posSmoothRef = useRef({ start: position, end: position, startTime: 0, duration: 0 });
 
-  // Smooth interpolation of position
+  // Keep refs in sync with state
+  useEffect(() => { goldRef.current = visibleGold; }, [visibleGold]);
+  useEffect(() => { playersRef.current = visiblePlayers; }, [visiblePlayers]);
+  useEffect(() => { showPlayersRef.current = showPlayers; }, [showPlayers]);
+
+  // Smooth position interpolation — triggered when position changes
   useEffect(() => {
-    if (
-      position.x !== lastPositionRef.current.x ||
-      position.y !== lastPositionRef.current.y
-    ) {
-      const startPos = { ...lastPositionRef.current };
-      const distance = Math.abs(position.x - startPos.x) + Math.abs(position.y - startPos.y);
-
-      // If position jumped more than 2 tiles (e.g. initial load), snap immediately
-      if (distance > 2) {
-        setDisplayPosition({ x: position.x, y: position.y });
-        lastPositionRef.current = position;
-        return;
-      }
-
-      const startTime = Date.now();
-      const duration = 150; // ms for animation
-
-      const animate = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-
-        // Ease out cubic
-        const eased = 1 - Math.pow(1 - progress, 3);
-
-        setDisplayPosition({
-          x: startPos.x + (position.x - startPos.x) * eased,
-          y: startPos.y + (position.y - startPos.y) * eased,
-        });
-
-        if (progress < 1) {
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          lastPositionRef.current = position;
-        }
-      };
-
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      animationRef.current = requestAnimationFrame(animate);
-    }
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+    posSmoothRef.current = {
+      start: { ...displayPosRef.current },
+      end: { ...position },
+      startTime: performance.now(),
+      duration: 150,
     };
   }, [position]);
 
-  // Draw the grid
-  const drawGrid = useCallback(() => {
+  // ── Persistent render loop ──
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Set canvas size
     const size = VIEWPORT_SIZE * CELL_SIZE;
     canvas.width = size;
     canvas.height = size;
 
-    // Clear canvas
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(0, 0, size, size);
+    let stopped = false;
 
-    const { minX, maxX, minY, maxY } = getViewportRange(
-      Math.round(displayPosition.x),
-      Math.round(displayPosition.y)
-    );
+    function render(now: number) {
+      if (stopped) return;
+      if (!ctx) return;
 
-    // Calculate offset for smooth scrolling
-    const offsetX = (displayPosition.x - Math.floor(displayPosition.x)) * CELL_SIZE;
-    const offsetY = (displayPosition.y - Math.floor(displayPosition.y)) * CELL_SIZE;
+      // Compute interpolated display position
+      const sm = posSmoothRef.current;
+      const elapsed = now - sm.startTime;
+      const t = Math.min(elapsed / sm.duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const dx = sm.start.x + (sm.end.x - sm.start.x) * ease;
+      const dy = sm.start.y + (sm.end.y - sm.start.y) * ease;
+      displayPosRef.current = { x: dx, y: dy };
 
-    // Draw cells (backgrounds + gold)
-    for (let x = minX; x <= maxX; x++) {
-      for (let y = minY; y <= maxY; y++) {
-        const screenX = (x - minX) * CELL_SIZE - offsetX;
-        const screenY = (maxY - y) * CELL_SIZE + offsetY; // Flip Y for display
+      const goldSpots = goldRef.current;
+      const otherPlayers = playersRef.current;
+      const showP = showPlayersRef.current;
 
-        // Draw cell background
-        const isDark = (x + y) % 2 === 0;
-        ctx.fillStyle = isDark ? "#1f2937" : "#374151";
-        ctx.fillRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
+      const { minX, maxX, minY, maxY } = getViewportRange(
+        Math.round(dx), Math.round(dy)
+      );
+      const offX = (dx - Math.floor(dx)) * CELL_SIZE;
+      const offY = (dy - Math.floor(dy)) * CELL_SIZE;
 
-        // Draw coordinates on edge cells
-        if (x === minX || y === maxY) {
-          ctx.fillStyle = "#6b7280";
-          ctx.font = "10px monospace";
-          ctx.textAlign = "center";
-          if (x === minX && y % 10 === 0) {
-            ctx.fillText(String(y), screenX + 15, screenY + 20);
+      // ── Background ──
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(0, 0, size, size);
+
+      // ── Cells + gold spots ──
+      const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
+
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          const sx = (x - minX) * CELL_SIZE - offX;
+          const sy = (maxY - y) * CELL_SIZE + offY;
+
+          // Cell background
+          ctx.fillStyle = (x + y) % 2 === 0 ? "#1f2937" : "#374151";
+          ctx.fillRect(sx, sy, CELL_SIZE, CELL_SIZE);
+
+          // Edge labels
+          if (x === minX || y === maxY) {
+            ctx.fillStyle = "#6b7280";
+            ctx.font = "10px monospace";
+            ctx.textAlign = "center";
+            if (x === minX && y % 10 === 0) ctx.fillText(String(y), sx + 15, sy + 20);
+            if (y === maxY && x % 10 === 0) ctx.fillText(String(x), sx + CELL_SIZE / 2, sy + 30);
           }
-          if (y === maxY && x % 10 === 0) {
-            ctx.fillText(String(x), screenX + CELL_SIZE / 2, screenY + 30);
+
+          // Collect gold positions for icosahedron render
+          if (goldSpots.find(g => g.x === x && g.y === y && g.hasGold)) {
+            goldScreenPositions.push({
+              x, y,
+              screenX: sx + CELL_SIZE / 2,
+              screenY: sy + CELL_SIZE / 2,
+            });
           }
         }
+      }
 
-        // Draw gold if present and unmined
-        const goldSpot = visibleGold.find(
-          (g) => g.x === x && g.y === y
-        );
-        if (goldSpot && goldSpot.hasGold) {
-          const centerX = screenX + CELL_SIZE / 2;
-          const centerY = screenY + CELL_SIZE / 2;
+      // ── Draw gold icosahedrons (3D math once, drawImage many) ──
+      if (goldScreenPositions.length > 0) {
+        drawGoldIcosahedrons(ctx, goldScreenPositions, now, CELL_SIZE - 4);
+      }
 
-          // Gold glow
-          const gradient = ctx.createRadialGradient(
-            centerX,
-            centerY,
-            2,
-            centerX,
-            centerY,
-            CELL_SIZE / 2
+      // ── Grid lines ──
+      ctx.strokeStyle = "#4b5563";
+      ctx.lineWidth = 1;
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          ctx.strokeRect(
+            (x - minX) * CELL_SIZE - offX,
+            (maxY - y) * CELL_SIZE + offY,
+            CELL_SIZE, CELL_SIZE
           );
-          gradient.addColorStop(0, "#fbbf24");
-          gradient.addColorStop(0.5, "#f59e0b");
-          gradient.addColorStop(1, "transparent");
+        }
+      }
 
-          ctx.fillStyle = gradient;
-          ctx.fillRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
+      // ── Player (blue circle) ──
+      const px = (dx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+      const py = (maxY - dy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
-          // Gold core
+      const pg = ctx.createRadialGradient(px, py, 4, px, py, 16);
+      pg.addColorStop(0, "rgba(59, 130, 246, 0.8)");
+      pg.addColorStop(1, "transparent");
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(px, py, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(px, py, 12, 0, Math.PI * 2);
+      ctx.fillStyle = "#3b82f6";
+      ctx.fill();
+      ctx.strokeStyle = "#60a5fa";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fillStyle = "#93c5fd";
+      ctx.fill();
+
+      // ── Other players ──
+      if (showP) {
+        for (const op of otherPlayers) {
+          if (op.x < minX || op.x > maxX || op.y < minY || op.y > maxY) continue;
+          const opx = (op.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+          const opy = (maxY - op.y) * CELL_SIZE + CELL_SIZE / 2 + offY;
+
+          const og = ctx.createRadialGradient(opx, opy, 4, opx, opy, 14);
+          og.addColorStop(0, "rgba(34, 197, 94, 0.5)");
+          og.addColorStop(1, "transparent");
+          ctx.fillStyle = og;
           ctx.beginPath();
-          ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
-          ctx.fillStyle = "#fbbf24";
+          ctx.arc(opx, opy, 14, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = "#f59e0b";
+
+          ctx.beginPath();
+          ctx.arc(opx, opy, 10, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(34, 197, 94, 0.6)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(74, 222, 128, 0.8)";
           ctx.lineWidth = 2;
           ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(opx, opy, 4, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(187, 247, 208, 0.9)";
+          ctx.fill();
         }
       }
+
+      rAFRef.current = requestAnimationFrame(render);
     }
 
-    // Draw grid borders on top of everything (gold glow won't overwrite them)
-    // Use a color that contrasts with both dark (#1f2937) and light (#374151) cells
-    ctx.strokeStyle = "#4b5563";
-    ctx.lineWidth = 1;
-    for (let x = minX; x <= maxX; x++) {
-      for (let y = minY; y <= maxY; y++) {
-        const screenX = (x - minX) * CELL_SIZE - offsetX;
-        const screenY = (maxY - y) * CELL_SIZE + offsetY;
-        ctx.strokeRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
-      }
-    }
-
-    // Draw player
-    const playerScreenX = (displayPosition.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offsetX;
-    const playerScreenY =
-      (maxY - displayPosition.y) * CELL_SIZE + CELL_SIZE / 2 + offsetY;
-
-    // Player glow
-    const playerGradient = ctx.createRadialGradient(
-      playerScreenX,
-      playerScreenY,
-      4,
-      playerScreenX,
-      playerScreenY,
-      16
-    );
-    playerGradient.addColorStop(0, "rgba(59, 130, 246, 0.8)");
-    playerGradient.addColorStop(1, "transparent");
-    ctx.fillStyle = playerGradient;
-    ctx.beginPath();
-    ctx.arc(playerScreenX, playerScreenY, 16, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Player circle
-    ctx.beginPath();
-    ctx.arc(playerScreenX, playerScreenY, 12, 0, Math.PI * 2);
-    ctx.fillStyle = "#3b82f6";
-    ctx.fill();
-    ctx.strokeStyle = "#60a5fa";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Player inner
-    ctx.beginPath();
-    ctx.arc(playerScreenX, playerScreenY, 6, 0, Math.PI * 2);
-    ctx.fillStyle = "#93c5fd";
-    ctx.fill();
-
-    // Draw other players (green translucent circles)
-    if (showPlayers && visiblePlayers.length > 0) {
-      const { minX: vpMinX, maxX: vpMaxX, minY: vpMinY, maxY: vpMaxY } = getViewportRange(
-        Math.round(displayPosition.x),
-        Math.round(displayPosition.y)
-      );
-      for (const other of visiblePlayers) {
-        // Only draw players within the current viewport
-        if (other.x < vpMinX || other.x > vpMaxX || other.y < vpMinY || other.y > vpMaxY) continue;
-
-        const otherScreenX = (other.x - vpMinX) * CELL_SIZE + CELL_SIZE / 2 - offsetX;
-        const otherScreenY = (vpMaxY - other.y) * CELL_SIZE + CELL_SIZE / 2 + offsetY;
-
-        // Outer glow
-        const otherGlow = ctx.createRadialGradient(
-          otherScreenX, otherScreenY, 4,
-          otherScreenX, otherScreenY, 14
-        );
-        otherGlow.addColorStop(0, "rgba(34, 197, 94, 0.5)");
-        otherGlow.addColorStop(1, "transparent");
-        ctx.fillStyle = otherGlow;
-        ctx.beginPath();
-        ctx.arc(otherScreenX, otherScreenY, 14, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Circle
-        ctx.beginPath();
-        ctx.arc(otherScreenX, otherScreenY, 10, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(34, 197, 94, 0.6)";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(74, 222, 128, 0.8)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Inner dot
-        ctx.beginPath();
-        ctx.arc(otherScreenX, otherScreenY, 4, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(187, 247, 208, 0.9)";
-        ctx.fill();
-      }
-    }
-  }, [displayPosition, visibleGold, visiblePlayers, showPlayers]);
-
-  // Redraw on state changes
-  useEffect(() => {
-    drawGrid();
-  }, [drawGrid]);
+    rAFRef.current = requestAnimationFrame(render);
+    return () => { stopped = true; cancelAnimationFrame(rAFRef.current); };
+  }, []); // mount once, runs forever via rAF
 
   // Handle clicks on canvas
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -265,20 +204,16 @@ export function GameCanvas() {
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    // Convert to grid coordinates
-    const { minX, maxY } = getViewportRange(
-      Math.round(displayPosition.x),
-      Math.round(displayPosition.y)
-    );
-    const offsetX = (displayPosition.x - Math.floor(displayPosition.x)) * CELL_SIZE;
-    const offsetY = (displayPosition.y - Math.floor(displayPosition.y)) * CELL_SIZE;
+    const dp = displayPosRef.current;
+    const { minX, maxY } = getViewportRange(Math.round(dp.x), Math.round(dp.y));
+    const offX = (dp.x - Math.floor(dp.x)) * CELL_SIZE;
+    const offY = (dp.y - Math.floor(dp.y)) * CELL_SIZE;
 
-    const gridX = Math.floor((clickX + offsetX) / CELL_SIZE) + minX;
-    const gridY = maxY - Math.floor((clickY - offsetY) / CELL_SIZE);
+    const gridX = Math.floor((clickX + offX) / CELL_SIZE) + minX;
+    const gridY = maxY - Math.floor((clickY - offY) / CELL_SIZE);
 
-    // Determine direction based on click relative to player
-    const dx = gridX - Math.round(displayPosition.x);
-    const dy = gridY - Math.round(displayPosition.y);
+    const dx = gridX - Math.round(dp.x);
+    const dy = gridY - Math.round(dp.y);
 
     if (Math.abs(dx) > Math.abs(dy)) {
       if (dx > 0) move(Direction.Right);
@@ -323,9 +258,7 @@ export function GameCanvas() {
         >
           {isLoading ? "Joining..." : "Join Game"}
         </button>
-        {error && (
-          <p className="mt-4 text-sm text-red-400">{error}</p>
-        )}
+        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
     );
   }
@@ -346,16 +279,13 @@ export function GameCanvas() {
         >
           {isLoading ? "Starting..." : "Start Session"}
         </button>
-        {error && (
-          <p className="mt-4 text-sm text-red-400">{error}</p>
-        )}
+        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
     );
   }
 
   return (
     <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
-      {/* Canvas container */}
       <div className="relative">
         <canvas
           ref={canvasRef}
@@ -368,9 +298,9 @@ export function GameCanvas() {
           }}
         />
 
-        {/* Status indicator */}
-        {status && (
-          <div className="absolute top-4 right-4 flex flex-col gap-2">
+        {/* HUD overlay */}
+        <div className="absolute top-4 right-4 flex flex-col gap-2">
+          {status && (
             <div className={`backdrop-blur px-4 py-2 rounded-lg border ${
               status === "Moving..." || status === "Mining..."
                 ? "bg-yellow-900/80 border-yellow-600 text-yellow-300"
@@ -380,39 +310,22 @@ export function GameCanvas() {
             }`}>
               <div className="text-sm">{status === "Moving..." || status === "Mining..." ? "⏳" : status === "Moved" ? "👟" : "⛏️"} {status}</div>
             </div>
-            <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
-              <div className="text-sm text-gray-400">Gold Spots</div>
-              <div className="text-xl font-bold text-yellow-400">
-                {visibleGold.filter(g => g.hasGold).length} remaining
-              </div>
-            </div>
-            <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
-              <div className="text-sm text-gray-400">Position</div>
-              <div className="text-xl font-mono font-bold text-white">
-                ({Math.round(position.x)}, {Math.round(position.y)})
-              </div>
+          )}
+          <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
+            <div className="text-sm text-gray-400">Gold Spots</div>
+            <div className="text-xl font-bold text-yellow-400">
+              {goldRef.current.filter(g => g.hasGold).length} remaining
             </div>
           </div>
-        )}
-        {!status && (
-          <div className="absolute top-4 right-4 flex flex-col gap-2">
-            <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
-              <div className="text-sm text-gray-400">Gold Spots</div>
-              <div className="text-xl font-bold text-yellow-400">
-                {visibleGold.filter(g => g.hasGold).length} remaining
-              </div>
-            </div>
-            <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
-              <div className="text-sm text-gray-400">Position</div>
-              <div className="text-xl font-mono font-bold text-white">
-                ({Math.round(position.x)}, {Math.round(position.y)})
-              </div>
+          <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
+            <div className="text-sm text-gray-400">Position</div>
+            <div className="text-xl font-mono font-bold text-white">
+              ({Math.round(position.x)}, {Math.round(position.y)})
             </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Controls hint */}
       <div className="px-4 py-3 bg-gray-900/50 border-t border-gray-700 flex items-center justify-between">
         <div className="text-sm text-gray-400">
           Use <span className="text-white font-mono bg-gray-700 px-1 rounded">WASD</span>
