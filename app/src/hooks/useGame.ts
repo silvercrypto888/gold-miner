@@ -20,7 +20,7 @@ import {
   getAtaProgramId,
 } from "@/lib/constants";
 
-const CONFIRM_TIMEOUT_MS = 15_000; // 15s timeout for transaction confirmation
+const CONFIRM_TIMEOUT_MS = 30_000; // 30s timeout for transaction confirmation
 
 // Wrap confirmTransaction with a timeout so hung confirmations don't lock the UI
 async function confirmWithTimeout(
@@ -551,7 +551,13 @@ export function useGame(): UseGameReturn {
             await fundSessionKey(sessionSigner.publicKey, fundBh, fundLvb);
             // Wait for RPC to catch up after funding
             await new Promise(r => setTimeout(r, 500));
-          } catch (e) { console.warn("Failed to fund session key:", e); }
+          } catch (e) {
+            console.error("Failed to fund session key for move:", e);
+            setIsMoving(false);
+            setPosition({ x: positionRef.current.x, y: positionRef.current.y });
+            setStatus("");
+            return;
+          }
         }
 
         const walletPk = playerState.wallet;
