@@ -328,7 +328,6 @@ export function useGame(): UseGameReturn {
       // Fund session key if balance too low for TX fee
       // TX fee is ~5,000 lamports on X1, plus ATA creation ~150k if first mine
       const balance = await connectionRef.current.getBalance(sessionSigner.publicKey);
-      console.log(`mineGold: position=(${position.x},${position.y}) explicit=(${mineX},${mineY}) balance=${balance}`);
       if (balance < 200_000) {
         // Balance critically low — need wallet signature to fund
         console.warn(`mineGold: session key balance ${balance} below 200k, funding...`);
@@ -357,6 +356,7 @@ export function useGame(): UseGameReturn {
       // This avoids the React closure stale position problem
       const targetX = mineX ?? position.x;
       const targetY = mineY ?? position.y;
+      console.log(`mineGold: tracked=(${position.x},${position.y}) target=(${targetX},${targetY}) balance=${balance}`);
 
       // Read on-chain position for PDA derivation (must match what the program expects)
       let playerInfo: { data: Buffer } | null = null;
@@ -372,12 +372,10 @@ export function useGame(): UseGameReturn {
         if (attempt < 4) await new Promise(r => setTimeout(r, 400));
       }
 
-      // Always trust on-chain position — it's the source of truth for PDA derivation
-      // Update our tracked position to match chain reality
-      if (onChainX !== position.x || onChainY !== position.y) {
-        console.log(`mineGold: syncing position from chain (${onChainX},${onChainY}), was (${position.x},${position.y})`);
-        setPosition({ x: onChainX, y: onChainY });
-      }
+      // Use on-chain position for PDA derivation (must match program)
+      // Do NOT update React state from here — the move function handles position sync
+      // after confirmed moves. Updating here causes position jumps because chain data
+      // can be 1 move behind the optimistic position.
 
       // Use on-chain position for PDA derivation (must match what the program expects)
       const pdxX = onChainX;
