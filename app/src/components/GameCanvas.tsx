@@ -26,6 +26,7 @@ export function GameCanvas() {
   const playersRef = useRef(visiblePlayers);
   const showPlayersRef = useRef(showPlayers);
   const posSmoothRef = useRef({ start: position, end: position, startTime: 0, duration: 0 });
+  const size = VIEWPORT_SIZE * CELL_SIZE;
 
   // Keep refs in sync with state
   useEffect(() => { goldRef.current = visibleGold; }, [visibleGold]);
@@ -46,19 +47,15 @@ export function GameCanvas() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     if (!ctx) return;
 
-    const size = VIEWPORT_SIZE * CELL_SIZE;
     canvas.width = size;
     canvas.height = size;
-
     let stopped = false;
 
     function render(now: number) {
       if (stopped) return;
-      if (!ctx) return;
 
       // Compute interpolated display position
       const sm = posSmoothRef.current;
@@ -73,17 +70,15 @@ export function GameCanvas() {
       const otherPlayers = playersRef.current;
       const showP = showPlayersRef.current;
 
-      const { minX, maxX, minY, maxY } = getViewportRange(
-        Math.round(dx), Math.round(dy)
-      );
+      const { minX, maxX, minY, maxY } = getViewportRange(Math.round(dx), Math.round(dy));
       const offX = (dx - Math.floor(dx)) * CELL_SIZE;
       const offY = (dy - Math.floor(dy)) * CELL_SIZE;
 
-      // ── Background ──
+      // Background
       ctx.fillStyle = "#111827";
       ctx.fillRect(0, 0, size, size);
 
-      // ── Cells + gold spots ──
+      // Cells + collect gold positions for icosahedron
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       for (let x = minX; x <= maxX; x++) {
@@ -91,7 +86,6 @@ export function GameCanvas() {
           const sx = (x - minX) * CELL_SIZE - offX;
           const sy = (maxY - y) * CELL_SIZE + offY;
 
-          // Cell background
           ctx.fillStyle = (x + y) % 2 === 0 ? "#1f2937" : "#374151";
           ctx.fillRect(sx, sy, CELL_SIZE, CELL_SIZE);
 
@@ -104,23 +98,18 @@ export function GameCanvas() {
             if (y === maxY && x % 10 === 0) ctx.fillText(String(x), sx + CELL_SIZE / 2, sy + 30);
           }
 
-          // Collect gold positions for icosahedron render
           if (goldSpots.find(g => g.x === x && g.y === y && g.hasGold)) {
-            goldScreenPositions.push({
-              x, y,
-              screenX: sx + CELL_SIZE / 2,
-              screenY: sy + CELL_SIZE / 2,
-            });
+            goldScreenPositions.push({ x, y, screenX: sx + CELL_SIZE / 2, screenY: sy + CELL_SIZE / 2 });
           }
         }
       }
 
-      // ── Draw gold icosahedrons (3D math once, drawImage many) ──
+      // 3D icosahedrons (one offscreen render, drawImage N times)
       if (goldScreenPositions.length > 0) {
         drawGoldIcosahedrons(ctx, goldScreenPositions, now, CELL_SIZE - 4);
       }
 
-      // ── Grid lines ──
+      // Grid lines
       ctx.strokeStyle = "#4b5563";
       ctx.lineWidth = 1;
       for (let x = minX; x <= maxX; x++) {
@@ -133,7 +122,7 @@ export function GameCanvas() {
         }
       }
 
-      // ── Player (blue circle) ──
+      // Player (blue circle)
       const px = (dx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
       const py = (maxY - dy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
@@ -158,7 +147,7 @@ export function GameCanvas() {
       ctx.fillStyle = "#93c5fd";
       ctx.fill();
 
-      // ── Other players ──
+      // Other players
       if (showP) {
         for (const op of otherPlayers) {
           if (op.x < minX || op.x > maxX || op.y < minY || op.y > maxY) continue;
@@ -193,7 +182,7 @@ export function GameCanvas() {
 
     rAFRef.current = requestAnimationFrame(render);
     return () => { stopped = true; cancelAnimationFrame(rAFRef.current); };
-  }, []); // mount once, runs forever via rAF
+  }, []);
 
   // Handle clicks on canvas
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -205,12 +194,12 @@ export function GameCanvas() {
     const clickY = e.clientY - rect.top;
 
     const dp = displayPosRef.current;
-    const { minX, maxY } = getViewportRange(Math.round(dp.x), Math.round(dp.y));
+    const { minX: vpMinX, maxY: vpMaxY } = getViewportRange(Math.round(dp.x), Math.round(dp.y));
     const offX = (dp.x - Math.floor(dp.x)) * CELL_SIZE;
     const offY = (dp.y - Math.floor(dp.y)) * CELL_SIZE;
 
-    const gridX = Math.floor((clickX + offX) / CELL_SIZE) + minX;
-    const gridY = maxY - Math.floor((clickY - offY) / CELL_SIZE);
+    const gridX = Math.floor((clickX + offX) / CELL_SIZE) + vpMinX;
+    const gridY = vpMaxY - Math.floor((clickY - offY) / CELL_SIZE);
 
     const dx = gridX - Math.round(dp.x);
     const dy = gridY - Math.round(dp.y);
@@ -224,31 +213,29 @@ export function GameCanvas() {
     }
   };
 
-  // Not connected state
+  // ── Overlay screens ──
+
+  let overlay: React.ReactNode = null;
+
   if (!publicKey) {
-    return (
-      <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700 text-center">
+    overlay = (
+      <div className="absolute inset-0 z-10 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center p-8">
         <div className="text-6xl mb-4">⛏️</div>
         <h2 className="text-2xl font-bold text-white mb-2">Connect Your Wallet</h2>
-        <p className="text-gray-400 mb-6">
+        <p className="text-gray-400 mb-6 text-center">
           Connect your wallet to start mining gold on the X1 grid
         </p>
-        <div className="flex justify-center">
-          <div className="bg-gray-700 px-6 py-3 rounded-lg text-gray-300">
-            Click the Connect Wallet button in the header
-          </div>
+        <div className="bg-gray-700 px-6 py-3 rounded-lg text-gray-300">
+          Click the Connect Wallet button in the header
         </div>
       </div>
     );
-  }
-
-  // Not joined state
-  if (!playerState) {
-    return (
-      <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700 text-center">
+  } else if (!playerState) {
+    overlay = (
+      <div className="absolute inset-0 z-10 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center p-8">
         <div className="text-6xl mb-4">🎮</div>
         <h2 className="text-2xl font-bold text-white mb-2">Join the Game</h2>
-        <p className="text-gray-400 mb-6">
+        <p className="text-gray-400 mb-6 text-center">
           Create your player account and start your gold mining journey
         </p>
         <button
@@ -261,15 +248,12 @@ export function GameCanvas() {
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
     );
-  }
-
-  // No active session
-  if (!sessionPubkey) {
-    return (
-      <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700 text-center">
+  } else if (!sessionPubkey) {
+    overlay = (
+      <div className="absolute inset-0 z-10 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center p-8">
         <div className="text-6xl mb-4">🔑</div>
         <h2 className="text-2xl font-bold text-white mb-2">Start Session</h2>
-        <p className="text-gray-400 mb-6">
+        <p className="text-gray-400 mb-6 text-center">
           Initialize your session key to start moving without wallet popups
         </p>
         <button
@@ -284,22 +268,27 @@ export function GameCanvas() {
     );
   }
 
-  return (
-    <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="cursor-pointer block"
-          style={{
-            imageRendering: "pixelated",
-            boxShadow: "inset 0 0 50px rgba(0,0,0,0.5)",
-            marginLeft: "5%",
-          }}
-        />
+  const showHUD = publicKey && playerState && sessionPubkey;
 
-        {/* HUD overlay */}
-        <div className="absolute top-4 right-4 flex flex-col gap-2">
+  return (
+    <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden relative">
+      <canvas
+        ref={canvasRef}
+        onClick={handleCanvasClick}
+        className="cursor-pointer block"
+        style={{
+          imageRendering: "pixelated",
+          boxShadow: "inset 0 0 50px rgba(0,0,0,0.5)",
+          marginLeft: "5%",
+          width: size,
+          height: size,
+        }}
+      />
+
+      {overlay}
+
+      {showHUD && (
+        <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
           {status && (
             <div className={`backdrop-blur px-4 py-2 rounded-lg border ${
               status === "Moving..." || status === "Mining..."
@@ -314,7 +303,7 @@ export function GameCanvas() {
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
             <div className="text-sm text-gray-400">Gold Spots</div>
             <div className="text-xl font-bold text-yellow-400">
-              {goldRef.current.filter(g => g.hasGold).length} remaining
+              {visibleGold.filter(g => g.hasGold).length} remaining
             </div>
           </div>
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
@@ -324,7 +313,7 @@ export function GameCanvas() {
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="px-4 py-3 bg-gray-900/50 border-t border-gray-700 flex items-center justify-between">
         <div className="text-sm text-gray-400">
