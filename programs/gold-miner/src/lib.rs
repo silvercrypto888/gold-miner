@@ -192,8 +192,8 @@ pub mod gold_miner {
     /// If no gold at the new position, just completes the move.
     /// The client must pass new_x/new_y matching the direction result so the
     /// gold_spot PDA can be derived from the NEW position before the move.
-    pub fn move_and_mine(
-        ctx: Context<MoveAndMine>,
+    pub fn move_and_mine<'info>(
+        ctx: Context<'_, '_, '_, 'info, MoveAndMine<'info>>,
         direction: Direction,
         new_x: u32,
         new_y: u32,
@@ -230,7 +230,9 @@ pub mod gold_miner {
         require!(new_x >= 1 && new_x <= GRID_SIZE, GoldMinerError::OutOfBounds);
         require!(new_y >= 1 && new_y <= GRID_SIZE, GoldMinerError::OutOfBounds);
 
-        // Verify gold_spot PDA matches the new position
+        // Get gold_spot from remaining_accounts and verify PDA
+        let gold_spot_info = ctx.remaining_accounts.first()
+            .ok_or(GoldMinerError::GoldSpotMismatch)?;
         let (expected_gold_spot, gold_spot_bump) = Pubkey::find_program_address(
             &[
                 b"gold_spot",
@@ -240,13 +242,44 @@ pub mod gold_miner {
             ctx.program_id,
         );
         require!(
-            ctx.accounts.gold_spot.key() == expected_gold_spot,
+            gold_spot_info.key() == expected_gold_spot,
             GoldMinerError::GoldSpotMismatch
         );
 
-        // Create gold_spot account if needed (before mutable borrows)
+        // Create gold_spot account if needed (inline — avoids lifetime issues)
         if has_gold_at(new_x, new_y) {
-            create_gold_spot_if_needed(&ctx, &expected_gold_spot, gold_spot_bump, new_x, new_y)?;
+            if gold_spot_info.data_len() == 0 && gold_spot_info.lamports() == 0 {
+                let space = 8 + GoldSpot::SIZE as usize;
+                let rent = Rent::get()?;
+                let rent_lamports = rent.minimum_balance(space);
+                let x_bytes = new_x.to_be_bytes();
+                let y_bytes = new_y.to_be_bytes();
+                let signer_seeds: &[&[&[u8]]] = &[&[
+                    b"gold_spot" as &[u8],
+                    x_bytes.as_ref(),
+                    y_bytes.as_ref(),
+                    &[gold_spot_bump],
+                ]];
+                let create_ix = system_instruction::create_account(
+                    ctx.accounts.session_signer.key,
+                    gold_spot_info.key,
+                    rent_lamports,
+                    space as u64,
+                    ctx.program_id,
+                );
+                anchor_lang::solana_program::program::invoke_signed(
+                    &create_ix,
+                    &[
+                        ctx.accounts.session_signer.to_account_info(),
+                        gold_spot_info.clone(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                    signer_seeds,
+                )?;
+                // Initialize discriminator
+                let mut data = gold_spot_info.data.borrow_mut();
+                data[..8].copy_from_slice(&GoldSpot::DISCRIMINATOR);
+            }
         }
 
         // Now do mutable operations
@@ -260,8 +293,7 @@ pub mod gold_miner {
 
         // Check if there's gold at the new position
         if has_gold_at(new_x, new_y) {
-            // Read gold_spot data manually (UncheckedAccount)
-            let gold_spot_info = ctx.accounts.gold_spot.to_account_info();
+            // Read gold_spot data (from remaining_accounts)
             let data = &gold_spot_info.data.borrow();
 
             // Check Anchor discriminator (first 8 bytes)
@@ -276,35 +308,26 @@ pub mod gold_miner {
 
             if !valid_data {
                 // Account was just created — it's a fresh gold spot
-                // This means gold is here and hasn't been mined
                 // Fall through to mine logic
             } else {
                 // Account exists — check if gold has been mined
-                // has_gold is at byte 8 (after discriminator)
                 let has_gold = data[8] == 1;
                 if !has_gold {
-                    // Already mined — check if it was ever mined (mined_by)
                     let mined_flag = data[9];
                     if mined_flag == 1 {
                         // Previously mined — skip
                         return Ok(());
                     }
-                    // mined_flag == 0 means fresh account with has_gold=false
-                    // This shouldn't normally happen at a gold position, but
-                    // treat it as mineable
                 }
             }
 
             // Mine the gold!
             {
                 let mut data = gold_spot_info.data.borrow_mut();
-                // Set Anchor discriminator
                 let disc = GoldSpot::DISCRIMINATOR;
                 data[..8].copy_from_slice(&disc);
-                // has_gold = false (byte 8) — already mined now
-                data[8] = 0;
-                // mined_by = Some(player.wallet) (byte 9 = 1, bytes 10..42 = pubkey)
-                data[9] = 1;
+                data[8] = 0; // has_gold = false
+                data[9] = 1; // mined_by = Some
                 data[10..42].copy_from_slice(player.wallet.as_ref());
             }
 
@@ -576,14 +599,10 @@ pub struct MoveAndMine<'info> {
     )]
     pub player: Account<'info, Player>,
 
-    /// Gold spot PDA — derived from NEW position (new_x, new_y).
-    /// PDA verified in instruction logic. Account creation handled manually
-    /// because init_if_needed can't use instruction args for seeds.
-    /// CHECK: PDA and data verified in instruction logic.
-    #[account(
-        mut,
-    )]
-    pub gold_spot: UncheckedAccount<'info>,
+    /// NOTE: gold_spot is passed via remaining_accounts[0] instead of being
+    /// declared here. This avoids Anchor's "signer privilege escalated" error
+    /// because the PDA seeds depend on instruction args (new_x, new_y) which
+    /// can't be expressed in struct constraints.
 
     #[account(mut)]
     pub goldium_mint: InterfaceAccount<'info, Mint>,
@@ -600,63 +619,6 @@ pub struct MoveAndMine<'info> {
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
-}
-
-// Helper: create gold_spot PDA account if it doesn't exist yet.
-// Uses invoke_signed with PDA signer seeds since init_if_needed
-// can't reference instruction args in its seeds constraint.
-fn create_gold_spot_if_needed(
-    ctx: &Context<MoveAndMine>,
-    gold_spot_key: &Pubkey,
-    gold_spot_bump: u8,
-    new_x: u32,
-    new_y: u32,
-) -> Result<()> {
-    let gold_spot_info = ctx.accounts.gold_spot.to_account_info();
-
-    // If account already has data or lamports, it exists — skip creation
-    if gold_spot_info.data_len() > 0 || gold_spot_info.lamports() > 0 {
-        return Ok(());
-    }
-
-    let space = 8 + GoldSpot::SIZE as usize;
-    let rent = Rent::get()?;
-    let rent_lamports = rent.minimum_balance(space);
-
-    let x_bytes = new_x.to_be_bytes();
-    let y_bytes = new_y.to_be_bytes();
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        b"gold_spot" as &[u8],
-        x_bytes.as_ref(),
-        y_bytes.as_ref(),
-        &[gold_spot_bump],
-    ]];
-
-    let create_ix = system_instruction::create_account(
-        ctx.accounts.session_signer.key,
-        gold_spot_key,
-        rent_lamports,
-        space as u64,
-        ctx.program_id,
-    );
-
-    anchor_lang::solana_program::program::invoke_signed(
-        &create_ix,
-        &[
-            ctx.accounts.session_signer.to_account_info(),
-            gold_spot_info.clone(),
-            ctx.accounts.system_program.to_account_info(),
-        ],
-        signer_seeds,
-    )?;
-
-    // Initialize the account data with Anchor discriminator
-    let mut data = gold_spot_info.data.borrow_mut();
-    let disc = GoldSpot::DISCRIMINATOR;
-    data[..8].copy_from_slice(&disc);
-    // Rest is zeroed (has_gold = false, mined_by = None)
-
-    Ok(())
 }
 
 #[derive(Accounts)]

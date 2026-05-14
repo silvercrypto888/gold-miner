@@ -320,12 +320,13 @@ export function useGame(): UseGameReturn {
             { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },   // session_signer (mut)
             { pubkey: gameConfigPda, isSigner: false, isWritable: true },              // game_config
             { pubkey: playerPda, isSigner: false, isWritable: true },                 // player
-            { pubkey: goldSpotPda, isSigner: false, isWritable: true },                // gold_spot
             { pubkey: goldiumMint, isSigner: false, isWritable: true },                // goldium_mint
             { pubkey: playerAta, isSigner: false, isWritable: true },                  // player_token_account
             { pubkey: tokenProgram, isSigner: false, isWritable: false },                // token_program
             { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
+            // gold_spot passed as remaining_accounts[0] — PDA derived from new position
+            { pubkey: goldSpotPda, isSigner: false, isWritable: true },                // gold_spot (remaining)
           ],
           programId,
           data,
@@ -469,12 +470,13 @@ export function useGame(): UseGameReturn {
                   { pubkey: retrySigner.publicKey, isSigner: true, isWritable: true },
                   { pubkey: gameConfigPda, isSigner: false, isWritable: true },
                   { pubkey: playerPda, isSigner: false, isWritable: true },
-                  { pubkey: goldSpotPda, isSigner: false, isWritable: true },
                   { pubkey: goldiumMint, isSigner: false, isWritable: true },
                   { pubkey: playerAta, isSigner: false, isWritable: true },
                   { pubkey: tokenProgram, isSigner: false, isWritable: false },
                   { pubkey: ataProgram, isSigner: false, isWritable: false },
                   { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                  // gold_spot passed as remaining_accounts[0]
+                  { pubkey: goldSpotPda, isSigner: false, isWritable: true },
                 ],
                 programId: retryProgramId,
                 data: retryData,
