@@ -14,7 +14,7 @@ import {
 import { Direction, OtherPlayer } from "@/types";
 import { drawGoldIcosahedrons } from "@/lib/icosahedron";
 
-export function GameCanvas() {
+export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk") => void }) {
   const { publicKey } = useWallet();
   const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined } = useGame();
   const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
@@ -27,6 +27,16 @@ export function GameCanvas() {
   const showPlayersRef = useRef(showPlayers);
   const posSmoothRef = useRef({ start: position, end: position, startTime: 0, duration: 0 });
   const size = VIEWPORT_SIZE * CELL_SIZE;
+
+  // Play sound effects on status changes
+  const prevStatusRef = useRef(status);
+  useEffect(() => {
+    if (onPlaySound && status !== prevStatusRef.current) {
+      if (status === "Mined!") onPlaySound("mine");
+      else if (status === "Moved") onPlaySound("walk");
+      prevStatusRef.current = status;
+    }
+  }, [status, onPlaySound]);
 
   // Keep refs in sync with state
   useEffect(() => { goldRef.current = visibleGold; }, [visibleGold]);

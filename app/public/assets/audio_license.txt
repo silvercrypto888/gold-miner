@@ -1,0 +1,20 @@
+This license only applies to the audio files in this folder.
+
+Sounds
+
+"gold_mine.wav" and "walk.wav" are both in the public domain (taken and/or barely modified from CC0-licensed sounds at https://opengameart.org/content/library-of-game-sounds).
+
+Music
+
+"Pinball Spring" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License
+http://creativecommons.org/licenses/by/4.0/
+
+"Cognitive Dissonance" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License
+http://creativecommons.org/licenses/by/4.0/
+
+"1. Ecossaise in D major" Performer Aya Higuchi (piano)
+Publisher Info.	Palo Alto: Musopen.
+Creative Commons Attribution 4.0 
+Misc. Notes Source: Musopen (lossless file also available)

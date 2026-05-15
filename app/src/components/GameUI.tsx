@@ -4,8 +4,10 @@ import { WalletProvider } from "@/components/WalletProvider";
 import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
 import { Leaderboard } from "@/components/Leaderboard";
+import { useAudio } from "@/hooks/useAudio";
 
 export default function GameUI() {
+  const { soundEnabled, musicEnabled, toggleSound, toggleMusic, playSound } = useAudio();
   return (
     <WalletProvider>
       <main className="min-h-screen bg-gray-900 text-white">
@@ -32,7 +34,7 @@ export default function GameUI() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Game Canvas */}
             <div className="lg:col-span-3">
-              <GameCanvas />
+              <GameCanvas onPlaySound={playSound} />
             </div>
 
             {/* Sidebar */}
@@ -49,6 +51,37 @@ export default function GameUI() {
                 <div className="mt-3 text-xs text-gray-500">
                   <p>Gold formula: (x &amp; y) % 7 == 0</p>
                   <p>~1,400 gold spots on the grid</p>
+                </div>
+              </div>
+              {/* Audio Controls */}
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+                <h3 className="font-semibold text-gray-200 mb-3">Audio</h3>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={toggleSound}
+                    className={`flex items-center justify-between w-full px-3 py-2 rounded-lg border text-sm transition-all ${
+                      soundEnabled
+                        ? "bg-green-600/20 border-green-500/50 text-green-400"
+                        : "bg-gray-800 border-gray-600 text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    <span>Sound Effects</span>
+                    <span>{soundEnabled ? "🔊" : "🔇"}</span>
+                  </button>
+                  <button
+                    onClick={toggleMusic}
+                    className={`flex items-center justify-between w-full px-3 py-2 rounded-lg border text-sm transition-all ${
+                      musicEnabled
+                        ? "bg-purple-600/20 border-purple-500/50 text-purple-400"
+                        : "bg-gray-800 border-gray-600 text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    <span>Background Music</span>
+                    <span>{musicEnabled ? "🎵" : "🔇"}</span>
+                  </button>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Both start disabled. No bandwidth until you tap on.
+                  </p>
                 </div>
               </div>
               <Leaderboard />
