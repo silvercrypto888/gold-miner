@@ -145,9 +145,22 @@ export function useSessionKey() {
       const solKeypair = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
 
-      // Fee payer = session key itself, so no wallet popup needed.
-      // Leave 5000 lamports to cover the signature fee.
-      const amount = balance - 5_000;
+      // Build a dry-run tx to get the actual fee
+      const dryRunTx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
+      dryRunTx.add(SystemProgram.transfer({
+        fromPubkey: sessionPubkey,
+        toPubkey: publicKey,
+        lamports: 1,
+      }));
+      dryRunTx.sign(solKeypair);
+      const fee = (await connectionRef.current.getFeeForMessage(
+        dryRunTx.compileMessage()
+      )).value ?? 5_000;
+
+      // Send everything minus the fee — session key lands at exactly 0 after fee deduction
+      const amount = balance - fee;
+      if (amount <= 0) return false;
+
       const tx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
       tx.add(SystemProgram.transfer({
         fromPubkey: sessionPubkey,
