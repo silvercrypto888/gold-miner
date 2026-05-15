@@ -195,6 +195,119 @@ export interface GoldSpotScreenPos {
   screenY: number;
 }
 
+/** Octahedron Renderer — for the player model */
+const OCTA_VERTICES: [number, number, number][] = [
+  [ 0,  1,  0],  // 0 — top
+  [ 0, -1,  0],  // 1 — bottom
+  [ 1,  0,  0],  // 2 — right
+  [ 0,  0,  1],  // 3 — front
+  [-1,  0,  0],  // 4 — left
+  [ 0,  0, -1],  // 5 — back
+];
+
+const OCTA_FACES: [number, number, number][] = [
+  // Top cap — connecting vertex 0 (top) with equatorial pairs
+  [0, 2, 3],  // top, right, front
+  [0, 3, 4],  // top, front, left
+  [0, 4, 5],  // top, left, back
+  [0, 5, 2],  // top, back, right
+  // Bottom cap — connecting vertex 1 (bottom) with equatorial pairs
+  [1, 3, 2],  // bottom, front, right
+  [1, 4, 3],  // bottom, left, front
+  [1, 5, 4],  // bottom, back, left
+  [1, 2, 5],  // bottom, right, back
+];
+
+const PLAYER_PALETTE: Palette = {
+  glowColor: [0.1, 0.35, 0.85],
+  fill:      [0.23, 0.50, 0.95],
+  shaded:    [0.12, 0.30, 0.60],
+  spec:      [0.70, 0.85, 1.0],
+  stroke:    [0.50, 0.75, 1.0],
+};
+
+export function renderOctahedron(
+  timeMs: number,
+  size = 48,
+  rotSpeed = 1.5
+): HTMLCanvasElement {
+  const cs = document.createElement('canvas');
+  cs.width = size;
+  cs.height = size;
+  const ctx = cs.getContext('2d')!;
+
+  const colors = PLAYER_PALETTE;
+  const angle = (timeMs / 1000) * rotSpeed;
+
+  const rotated = OCTA_VERTICES.map(v => rotateY(v, angle));
+  const scale = size * 0.40;
+  const projected = rotated.map(v => [
+    v[0] * scale + size / 2,
+    -v[1] * scale + size / 2,
+    v[2],
+  ]);
+
+  interface FaceData { i0: number; i1: number; i2: number; normal: number[]; centerZ: number; }
+  const faceData: FaceData[] = OCTA_FACES.map(([i0, i1, i2]) => {
+    const a = rotated[i0], b = rotated[i1], c = rotated[i2];
+    const normal = computeFaceNormal(a, b, c);
+    const centerZ = (projected[i0][2] + projected[i1][2] + projected[i2][2]) / 3;
+    return { i0, i1, i2, normal, centerZ };
+  });
+
+  const visibleFaces = faceData.filter(f => f.normal[2] < 0).sort((a, b) => a.centerZ - b.centerZ);
+
+  // Glow behind octahedron
+  let minPX = size, maxPX = 0, minPY = size, maxPY = 0;
+  for (const p of projected) {
+    if (p[0] < minPX) minPX = p[0];
+    if (p[0] > maxPX) maxPX = p[0];
+    if (p[1] < minPY) minPY = p[1];
+    if (p[1] > maxPY) maxPY = p[1];
+  }
+  const glowCX = (minPX + maxPX) / 2;
+  const glowCY = (minPY + maxPY) / 2;
+  const glowR = Math.max(maxPX - minPX, maxPY - minPY);
+
+  const glow = ctx.createRadialGradient(glowCX, glowCY, 0, glowCX, glowCY, glowR);
+  const gc = colors.glowColor;
+  glow.addColorStop(0, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.80)`);
+  glow.addColorStop(0.4, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.35)`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(glowCX, glowCY, glowR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw each face with Blinn-Phong shading + specular highlight
+  for (const face of visibleFaces) {
+    const p0 = projected[face.i0];
+    const p1 = projected[face.i1];
+    const p2 = projected[face.i2];
+
+    const diffuse = 0.5 + 0.5 * Math.max(0, dot(face.normal, LIGHT));
+    const specular = Math.pow(Math.max(0, dot(face.normal, HALF_VEC)), 48);
+
+    const r = (colors.fill[0] * diffuse + colors.spec[0] * specular * 0.6) * 255;
+    const g = (colors.fill[1] * diffuse + colors.spec[1] * specular * 0.6) * 255;
+    const b = (colors.fill[2] * diffuse + colors.spec[2] * specular * 0.6) * 255;
+
+    ctx.beginPath();
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
+    ctx.lineTo(p2[0], p2[1]);
+    ctx.closePath();
+    ctx.fillStyle = `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
+    ctx.fill();
+
+    ctx.strokeStyle = `rgb(${clamp(colors.stroke[0]*255)},${clamp(colors.stroke[1]*255)},${clamp(colors.stroke[2]*255)})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  return cs;
+}
+
 export function drawGoldIcosahedrons(
   ctx: CanvasRenderingContext2D,
   goldSpots: GoldSpotScreenPos[],

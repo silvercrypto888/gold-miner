@@ -12,7 +12,7 @@ import {
   getViewportRange,
 } from "@/lib/constants";
 import { Direction, OtherPlayer } from "@/types";
-import { drawGoldIcosahedrons } from "@/lib/icosahedron";
+import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
 
 export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk") => void }) {
   const { publicKey } = useWallet();
@@ -132,30 +132,12 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
         }
       }
 
-      // Player (blue circle)
+      // Player (upright octahedron with specular highlight, same rot speed as gold)
       const px = (dx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
       const py = (maxY - dy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
-      const pg = ctx.createRadialGradient(px, py, 4, px, py, 16);
-      pg.addColorStop(0, "rgba(59, 130, 246, 0.8)");
-      pg.addColorStop(1, "transparent");
-      ctx.fillStyle = pg;
-      ctx.beginPath();
-      ctx.arc(px, py, 16, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(px, py, 12, 0, Math.PI * 2);
-      ctx.fillStyle = "#3b82f6";
-      ctx.fill();
-      ctx.strokeStyle = "#60a5fa";
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(px, py, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#93c5fd";
-      ctx.fill();
+      const octaCanvas = renderOctahedron(now, CELL_SIZE - 4, 1.5);
+      ctx.drawImage(octaCanvas, px - (CELL_SIZE - 4) / 2, py - (CELL_SIZE - 4) / 2);
 
       // Other players
       if (showP) {
