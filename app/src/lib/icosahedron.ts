@@ -71,8 +71,8 @@ function computeFaceNormal(a: number[], b: number[], c: number[]): number[] {
 // ── Color Palettes ──
 
 interface Palette {
-  dark:   [number, number, number];
-  bright: [number, number, number];
+  center: [number, number, number];
+  edge:   [number, number, number];
   spec:   [number, number, number];
   stroke: [number, number, number];
 }
@@ -81,20 +81,20 @@ type PaletteName = 'gold' | 'emerald' | 'amethyst';
 
 const PALETTES: Record<PaletteName, Palette> = {
   gold: {
-    dark:   [0.45, 0.25, 0.02],
-    bright: [0.95, 0.72, 0.10],
+    center: [1.0,  0.75, 0.12],
+    edge:   [0.85, 0.35, 0.03],
     spec:   [1.0,  0.90, 0.60],
     stroke: [0.85, 0.65, 0.10],
   },
   emerald: {
-    dark:   [0.0,  0.25, 0.05],
-    bright: [0.10, 0.90, 0.30],
+    center: [0.10, 0.90, 0.30],
+    edge:   [0.0,  0.45, 0.10],
     spec:   [0.60, 1.0,  0.70],
     stroke: [0.20, 0.95, 0.40],
   },
   amethyst: {
-    dark:   [0.25, 0.05, 0.30],
-    bright: [0.80, 0.25, 0.90],
+    center: [0.80, 0.25, 0.90],
+    edge:   [0.30, 0.05, 0.35],
     spec:   [0.90, 0.60, 1.0],
     stroke: [0.85, 0.35, 0.95],
   },
@@ -167,18 +167,33 @@ export function renderIcosahedron(
     const p2 = projected[face.i2];
 
     // Diffuse: how directly the face points toward the light
-    const diffuse = Math.max(0, dot(face.normal, LIGHT));
+    const diffuse = Math.max(0.3, dot(face.normal, LIGHT));
 
     // Specular: tight white highlight that sweeps facets
     const specular = Math.pow(Math.max(0, dot(face.normal, HALF_VEC)), 48);
 
-    // Blend: dark base → bright color (diffuse) → white spec highlight
-    const sr = colors.dark[0] + (colors.bright[0] - colors.dark[0]) * diffuse
-             + colors.spec[0] * specular * 0.6;
-    const sg = colors.dark[1] + (colors.bright[1] - colors.dark[1]) * diffuse
-             + colors.spec[1] * specular * 0.6;
-    const sb = colors.dark[2] + (colors.bright[2] - colors.dark[2]) * diffuse
-             + colors.spec[2] * specular * 0.6;
+    // Scale center/edge colors by diffuse lighting
+    const cR = colors.center[0] * diffuse + colors.spec[0] * specular * 0.5;
+    const cG = colors.center[1] * diffuse + colors.spec[1] * specular * 0.5;
+    const cB = colors.center[2] * diffuse + colors.spec[2] * specular * 0.5;
+    const eR = colors.edge[0] * diffuse;
+    const eG = colors.edge[1] * diffuse;
+    const eB = colors.edge[2] * diffuse;
+
+    // Face center = average of 3 vertices
+    const cx = (p0[0] + p1[0] + p2[0]) / 3;
+    const cy = (p0[1] + p1[1] + p2[1]) / 3;
+
+    // Max distance from center to any vertex (for gradient radius)
+    const d0 = Math.hypot(p0[0] - cx, p0[1] - cy);
+    const d1 = Math.hypot(p1[0] - cx, p1[1] - cy);
+    const d2 = Math.hypot(p2[0] - cx, p2[1] - cy);
+    const maxD = Math.max(d0, d1, d2);
+
+    // Radial gradient: bright gold at center, orange at edges
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxD);
+    grad.addColorStop(0, `rgb(${clamp(cR*255)},${clamp(cG*255)},${clamp(cB*255)})`);
+    grad.addColorStop(1, `rgb(${clamp(eR*255)},${clamp(eG*255)},${clamp(eB*255)})`);
 
     ctx.beginPath();
     ctx.moveTo(p0[0], p0[1]);
@@ -186,7 +201,7 @@ export function renderIcosahedron(
     ctx.lineTo(p2[0], p2[1]);
     ctx.closePath();
 
-    ctx.fillStyle = `rgb(${clamp(sr*255)},${clamp(sg*255)},${clamp(sb*255)})`;
+    ctx.fillStyle = grad;
     ctx.fill();
 
     // Facet edge — 0.5px stroke defines the polyhedron shape
