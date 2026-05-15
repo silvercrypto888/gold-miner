@@ -128,9 +128,9 @@ export function useSessionKey() {
   }, [publicKey, signTransaction]);
 
   // Sweep the stored session key's remaining XNT back to the player's wallet.
-  // The session key pays its own gas so no wallet popup is needed.
+  // Fee paid by main wallet (triggers popup) so the session key can empty completely.
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !connectionRef.current) return false;
+    if (!publicKey || !signTransaction || !connectionRef.current) return false;
 
     const loaded = loadSessionKey();
     if (!loaded) return false;
@@ -140,43 +140,36 @@ export function useSessionKey() {
 
     try {
       const balance = await connectionRef.current.getBalance(sessionPubkey);
-      if (balance <= SWEEP_DUST_THRESHOLD) return false; // nothing worth sweeping
+      if (balance <= SWEEP_DUST_THRESHOLD) return false;
 
       const solKeypair = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
 
-      // Build a dry-run tx to get the actual fee
-      const dryRunTx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
-      dryRunTx.add(SystemProgram.transfer({
-        fromPubkey: sessionPubkey,
-        toPubkey: publicKey,
-        lamports: 1,
-      }));
-      dryRunTx.sign(solKeypair);
-      const fee = (await connectionRef.current.getFeeForMessage(
-        dryRunTx.compileMessage()
-      )).value ?? 5_000;
-
-      // Send everything minus the fee — session key lands at exactly 0 after fee deduction
-      const amount = balance - fee;
-      if (amount <= 0) return false;
-
-      const tx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
+      // Build with main wallet as fee payer
+      const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
       tx.add(SystemProgram.transfer({
         fromPubkey: sessionPubkey,
         toPubkey: publicKey,
-        lamports: amount,
+        lamports: balance,
       }));
-      tx.sign(solKeypair);
 
-      const signature = await connectionRef.current.sendRawTransaction(tx.serialize());
+      // Step 1: main wallet signs as fee payer
+      const walletSigned = await signTransaction(tx);
+
+      // Step 2: session key authorizes the transfer (from its own account)
+      walletSigned.partialSign(solKeypair);
+
+      // Send — both signatures are now present
+      const signature = await connectionRef.current.sendRawTransaction(
+        walletSigned.serialize()
+      );
       await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
       return true;
     } catch (e) {
-      console.warn("Session key sweep skipped (balance or network):", e);
+      console.warn("Session key sweep skipped:", e);
       return false;
     }
-  }, [publicKey]);
+  }, [publicKey, signTransaction]);
 
   // Start a new session
   const startSession = useCallback(async () => {

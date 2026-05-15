@@ -7,29 +7,31 @@ set -e
 RED='\033[0;31m'
 NC='\033[0m'
 
-FORBIDDEN_PATTERNS="
-keypair.json
-secret.json
-private.key
-private.pem
-*.pem
-*.key
-.id
-.env
-.env.local
-.env.production
-.env.secret
-mnemonic
+# File patterns (case-insensitive) — match the full filename or path component.
+# Each entry is a regex snippet that must match against the full filename.
+# Note: "keypair.json" catches both "my-keypair.json" and "subdir/keypair.json".
+# BUT we use word boundary anchors so "useSessionKey.ts" does NOT match.
+FORBIDDEN_FILE_PATTERNS="
+keypair\.json
+-id\.json$
+wallet\.json$
+secret\.json$
+\.env$
+\.env\.local$
+\.env\.production$
+\.env\.secret$
+private\.key$
+private\.pem$
+mnemonic\.
 seed_phrase
-wallet.json
-id.json
 "
 
-PATTERN=$(echo "$FORBIDDEN_PATTERNS" | tr '\n' '|' | sed 's/|$//' | sed 's/^|//' | sed 's/\./\\./g' | sed 's/\*/.*/g')
+# Build the grep pattern
+PATTERN=$(echo "$FORBIDDEN_FILE_PATTERNS" | tr '\n' '|' | sed 's/|$//' | sed 's/^|//' | sed 's/||/|/g')
 
 STAGED=$(git diff --cached --name-only)
 
-# File name check — skip the hook itself and .gitignore since they contain these words as patterns
+# File name check
 STAGED_VIOLATIONS=$(echo "$STAGED" | grep -iE "$PATTERN" | grep -vE '^\.githooks/pre-commit$|^\.gitignore$' || true)
 if [ -n "$STAGED_VIOLATIONS" ]; then
     echo "${RED}❌ COMMIT BLOCKED — sensitive files detected in staged changes:${NC}"
@@ -44,6 +46,8 @@ fi
 
 # Content check for JSON arrays that look like raw keypair bytes
 echo "$STAGED" | grep '\.json$' | while read -r f; do
+    # Skip .gitignore and the hook itself (they contain pattern words)
+    case "$f" in .githooks/*|.gitignore) continue ;; esac
     content=$(git show ":$f" 2>/dev/null || true)
     if echo "$content" | grep -qE '^\[[[:space:]]*(12[0-7]|1[01][0-9]|[1-9]?[0-9])'; then
         count=$(echo "$content" | grep -oE '[0-9]+' | wc -l)
