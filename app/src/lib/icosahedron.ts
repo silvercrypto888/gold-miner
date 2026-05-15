@@ -66,11 +66,11 @@ type PaletteName = 'gold' | 'emerald' | 'amethyst';
 
 const PALETTES: Record<PaletteName, Palette> = {
   gold: {
-    glowColor: [0.95, 0.45, 0.04],
-    fill:      [0.95, 0.75, 0.15],
-    shaded:    [0.75, 0.55, 0.08],
-    spec:      [1.0,  0.95, 0.65],
-    stroke:    [1.0,  0.80, 0.20],
+    glowColor: [1.0,  0.50, 0.0],
+    fill:      [0.95, 0.65, 0.10],
+    shaded:    [0.65, 0.40, 0.05],
+    spec:      [1.0,  0.90, 0.50],
+    stroke:    [0.95, 0.70, 0.15],
   },
   emerald: {
     glowColor: [0.05, 0.60, 0.15],
@@ -146,8 +146,8 @@ export function renderIcosahedron(
 
   const glow = ctx.createRadialGradient(glowCX, glowCY, 0, glowCX, glowCY, glowR);
   const gc = colors.glowColor;
-  glow.addColorStop(0, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.55)`);
-  glow.addColorStop(0.6, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.2)`);
+  glow.addColorStop(0, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.85)`);
+  glow.addColorStop(0.4, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.45)`);
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
