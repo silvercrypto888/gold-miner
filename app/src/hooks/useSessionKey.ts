@@ -156,23 +156,17 @@ export function useSessionKey() {
         lamports: balance, // all of it — main wallet pays the fee
       }));
 
-      // Wallet adapter signs FIRST (one popup on a clean tx — no pre-existing sigs)
-      const walletSigned = await signTransaction(tx);
+      // Session key signs FIRST via tx.sign() — this properly populates
+      // the signatures array at index 0 (the first non-fee-payer signer).
+      // Then wallet adapter signs — it should recognize the existing sig
+      // and only add the fee payer's signature at position 0.
+      tx.sign(solKeypair);
 
-      // Then manually sign the serialized message with the session key
-      // and addSignature — avoids the adapter dropping pre-signed sigs.
-      const messageBytes = walletSigned.serializeMessage();
-      const sessionSignature = nacl.sign.detached(
-        messageBytes,
-        solKeypair.secretKey
-      );
-      walletSigned.addSignature(
-        sessionPubkey,
-        Buffer.from(sessionSignature)
-      );
+      // Wallet adapter adds fee payer signature
+      const signed = await signTransaction(tx);
 
       const signature = await connectionRef.current.sendRawTransaction(
-        walletSigned.serialize()
+        signed.serialize()
       );
       await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
       return true;
