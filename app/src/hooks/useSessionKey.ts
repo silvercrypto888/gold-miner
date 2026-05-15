@@ -22,6 +22,8 @@ import { PlayerState } from "@/types";
 
 // Amount of XNT to fund the session key for gas fees (0.2 XNT - enough for moves + mining)
 const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
+// Minimum dust threshold — skip sweep if balance is below this
+const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
 export function useSessionKey() {
   const { publicKey, signTransaction } = useWallet();
@@ -59,7 +61,31 @@ export function useSessionKey() {
     }
   }, []);
 
-  // Auto-detect existing player when wallet connects
+  // On tab close / refresh, sweep the session key's XNT back to wallet
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Use sendBeacon is ideal, but we can't sign a tx synchronously.
+      // Instead, store a flag so next mount sweeps before starting a new session.
+      const loaded = loadSessionKey();
+      if (loaded && Date.now() > loaded.expiresAt - 5_000) {
+        // Mark for sweep on next mount
+        try {
+          localStorage.setItem('_goldminer_sweep_pending', '1');
+        } catch {}
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  // On mount, if a sweep was pending, do it now
+  useEffect(() => {
+    const pending = localStorage.getItem('_goldminer_sweep_pending');
+    if (pending) {
+      localStorage.removeItem('_goldminer_sweep_pending');
+      sweepSessionKey();
+    }
+  }, []);
   useEffect(() => {
     if (!publicKey) {
       setPlayerState(null);
@@ -101,12 +127,53 @@ export function useSessionKey() {
     await connectionRef.current!.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
   }, [publicKey, signTransaction]);
 
+  // Sweep the stored session key's remaining XNT back to the player's wallet.
+  // The session key pays its own gas so no wallet popup is needed.
+  const sweepSessionKey = useCallback(async (): Promise<boolean> => {
+    if (!publicKey || !connectionRef.current) return false;
+
+    const loaded = loadSessionKey();
+    if (!loaded) return false;
+
+    const naclKp = loaded.keypair;
+    const sessionPubkey = new PublicKey(naclKp.publicKey);
+
+    try {
+      const balance = await connectionRef.current.getBalance(sessionPubkey);
+      if (balance <= SWEEP_DUST_THRESHOLD) return false; // nothing worth sweeping
+
+      const solKeypair = Keypair.fromSecretKey(naclKp.secretKey);
+      const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
+
+      // Fee payer = session key itself, so no wallet popup needed.
+      // Leave 5000 lamports to cover the signature fee.
+      const amount = balance - 5_000;
+      const tx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
+      tx.add(SystemProgram.transfer({
+        fromPubkey: sessionPubkey,
+        toPubkey: publicKey,
+        lamports: amount,
+      }));
+      tx.sign(solKeypair);
+
+      const signature = await connectionRef.current.sendRawTransaction(tx.serialize());
+      await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+      return true;
+    } catch (e) {
+      console.warn("Session key sweep skipped (balance or network):", e);
+      return false;
+    }
+  }, [publicKey]);
+
   // Start a new session
   const startSession = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) {
       setError("Wallet not connected");
       return;
     }
+
+    // --- Sweep any existing session key before creating a new one ---
+    await sweepSessionKey();
 
     setIsLoading(true);
     setError(null);
@@ -188,7 +255,7 @@ export function useSessionKey() {
     } finally {
       setIsLoading(false);
     }
-  }, [publicKey, signTransaction]);
+  }, [publicKey, signTransaction, sweepSessionKey]);
 
   // Refresh player state from chain
   const refreshPlayerState = useCallback(async () => {
@@ -234,6 +301,9 @@ export function useSessionKey() {
       setError("Wallet not connected");
       return;
     }
+
+    // --- Sweep any existing session key before creating a new one ---
+    await sweepSessionKey();
 
     setIsLoading(true);
     setError(null);
@@ -325,7 +395,7 @@ export function useSessionKey() {
     } finally {
       setIsLoading(false);
     }
-  }, [publicKey, signTransaction, refreshPlayerState]);
+  }, [publicKey, signTransaction, refreshPlayerState, sweepSessionKey]);
 
   // Check if player exists and has session
   const checkSession = useCallback(async () => {
@@ -375,5 +445,6 @@ export function useSessionKey() {
     refreshPlayerState,
     clearSession,
     fundSessionKey,
+    sweepSessionKey,
   };
 }

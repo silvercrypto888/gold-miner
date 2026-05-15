@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useSessionKey } from "@/hooks/useSessionKey";
@@ -11,10 +12,23 @@ import { shortenAddress, getTimeRemaining } from "@/lib/utils";
 export function PlayerHUD() {
   const { publicKey, disconnect } = useWallet();
   const { setVisible, visible } = useWalletModal();
-  const { sessionPubkey, playerState, isSessionValid, clearSession } =
-    useSessionKey();
+  const {
+    sessionPubkey,
+    playerState,
+    isSessionValid,
+    clearSession,
+    sweepSessionKey,
+  } = useSessionKey();
   const { goldMined } = useGame();
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
+  const [sweepStatus, setSweepStatus] = useState<string | null>(null);
+
+  const handleWithdraw = useCallback(async () => {
+    setSweepStatus("Sweeping...");
+    const swept = await sweepSessionKey();
+    setSweepStatus(swept ? "Withdrawn ✓" : "Nothing to withdraw");
+    setTimeout(() => setSweepStatus(null), 3000);
+  }, [sweepSessionKey]);
 
   if (!publicKey) {
     return (
@@ -43,16 +57,25 @@ export function PlayerHUD() {
         )}
       </div>
 
-      {/* Session indicator */}
+      {/* Session indicator + withdraw */}
       {sessionPubkey && (
-        <div
-          className={`hidden md:block px-3 py-1 rounded-full text-xs font-medium ${
-            isSessionValid()
-              ? "bg-green-500/20 text-green-400 border border-green-500/50"
-              : "bg-red-500/20 text-red-400 border border-red-500/50"
-          }`}
-        >
-          {isSessionValid() ? "Session Active" : "Session Expired"}
+        <div className="flex items-center gap-2">
+          <div
+            className={`hidden md:block px-3 py-1 rounded-full text-xs font-medium ${
+              isSessionValid()
+                ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                : "bg-red-500/20 text-red-400 border border-red-500/50"
+            }`}
+          >
+            {isSessionValid() ? "Session Active" : "Session Expired"}
+          </div>
+          <button
+            onClick={handleWithdraw}
+            className="px-2 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+            title="Withdraw remaining XNT from session key"
+          >
+            {sweepStatus || "Withdraw"}
+          </button>
         </div>
       )}
 
