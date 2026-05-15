@@ -128,9 +128,11 @@ export function useSessionKey() {
   }, [publicKey, signTransaction]);
 
   // Sweep the stored session key's remaining XNT back to the player's wallet.
-  // Fee paid by main wallet (triggers popup) so the session key can empty completely.
+  // Session key pays its own fee — no wallet popup, no multi-sign complexity.
+  // We use a fixed fee cushion of 10,000 lamports (X1 base fee ~5,000) and
+  // leave a tiny dust for next sweep. This avoids getFeeForMessage (returns 0 on X1).
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !signTransaction || !connectionRef.current) return false;
+    if (!publicKey || !connectionRef.current) return false;
 
     const loaded = loadSessionKey();
     if (!loaded) return false;
@@ -145,23 +147,22 @@ export function useSessionKey() {
       const solKeypair = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
 
-      // Build with main wallet as fee payer
-      const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
+      // Fixed fee estimate: 10_000 lamports covers base fee + compute budget
+      // on X1. Send the rest, leave tiny dust for next sweep cycle.
+      const FEE_CUSHION = 10_000;
+      const amount = balance - FEE_CUSHION;
+      if (amount <= 0) return false;
+
+      const tx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
       tx.add(SystemProgram.transfer({
         fromPubkey: sessionPubkey,
         toPubkey: publicKey,
-        lamports: balance,
+        lamports: amount,
       }));
+      tx.sign(solKeypair);
 
-      // Step 1: main wallet signs as fee payer
-      const walletSigned = await signTransaction(tx);
-
-      // Step 2: session key authorizes the transfer (from its own account)
-      walletSigned.partialSign(solKeypair);
-
-      // Send — both signatures are now present
       const signature = await connectionRef.current.sendRawTransaction(
-        walletSigned.serialize()
+        tx.serialize()
       );
       await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
       return true;
@@ -169,7 +170,7 @@ export function useSessionKey() {
       console.warn("Session key sweep skipped:", e);
       return false;
     }
-  }, [publicKey, signTransaction]);
+  }, [publicKey]);
 
   // Start a new session
   const startSession = useCallback(async () => {
