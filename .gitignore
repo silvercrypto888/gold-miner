@@ -8,6 +8,6 @@ app/.next/
 app/.env.local
 
 # Keys (sensitive)
-**/*-keypair.jsonapp/tsconfig.tsbuildinfo
+**/*-keypair.json
 *.keypair.json
 app/tsconfig.tsbuildinfo
