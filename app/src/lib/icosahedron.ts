@@ -239,6 +239,10 @@ export function renderOctahedron(
   const colors = PLAYER_PALETTE;
   const angle = (timeMs / 1000) * rotSpeed;
 
+  // Local light from top-right (negative Y world = top of screen after Y-inversion)
+  const light = normalize([0.7, -0.7, 0.3]);
+  const halfVec = normalize([light[0], light[1], light[2] - 1]);
+
   const rotated = OCTA_VERTICES.map(v => rotateY(v, angle));
   const scale = size * 0.40;
   const projected = rotated.map(v => [
@@ -285,8 +289,8 @@ export function renderOctahedron(
     const p1 = projected[face.i1];
     const p2 = projected[face.i2];
 
-    const diffuse = 0.5 + 0.5 * Math.max(0, dot(face.normal, LIGHT));
-    const specular = Math.pow(Math.max(0, dot(face.normal, HALF_VEC)), 48);
+    const diffuse = 0.5 + 0.5 * Math.max(0, dot(face.normal, light));
+    const specular = Math.pow(Math.max(0, dot(face.normal, halfVec)), 48);
 
     const r = (colors.fill[0] * diffuse + colors.spec[0] * specular * 0.6) * 255;
     const g = (colors.fill[1] * diffuse + colors.spec[1] * specular * 0.6) * 255;
