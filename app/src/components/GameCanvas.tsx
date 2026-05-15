@@ -11,14 +11,20 @@ import {
   hasGoldAt,
   getViewportRange,
 } from "@/lib/constants";
-import { Direction, OtherPlayer } from "@/types";
+import { Direction, OtherPlayer, PlayerState } from "@/types";
 import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
 
 export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk") => void }) {
   const { publicKey } = useWallet();
-  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined } = useGame();
-  const { sessionPubkey, playerState, joinGame, startSession, isLoading, error } =
+  const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
     useSessionKey();
+  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined } = useGame({
+    sessionKeypair,
+    sessionPubkey,
+    playerState,
+    fundSessionKey,
+    startSession,
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rAFRef = useRef<number>(0);
   const displayPosRef = useRef(position);

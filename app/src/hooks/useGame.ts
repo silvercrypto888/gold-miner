@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicKey, Connection, Transaction, TransactionInstruction, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { createAssociatedTokenAccountIdempotentInstruction, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { useSessionKey } from "./useSessionKey";
-import { Position, Direction, GoldSpot, OtherPlayer } from "@/types";
+import * as nacl from "tweetnacl";
+import { Position, Direction, GoldSpot, OtherPlayer, PlayerState } from "@/types";
 import {
   getProgramId,
   RPC_URL,
@@ -37,6 +37,14 @@ async function confirmWithTimeout(
   ]);
 }
 
+interface UseGameProps {
+  sessionKeypair: nacl.SignKeyPair | null;
+  sessionPubkey: PublicKey | null;
+  playerState: PlayerState | null;
+  fundSessionKey: (pubkey: PublicKey, blockhash: string, lvb: number) => Promise<void>;
+  startSession: () => Promise<void>;
+}
+
 interface UseGameReturn {
   position: Position;
   visibleGold: GoldSpot[];
@@ -66,9 +74,8 @@ const DIRECTION_VARIANT: Record<Direction, number> = {
   Right: 3,
 };
 
-export function useGame(): UseGameReturn {
-  const { sessionKeypair, sessionPubkey, playerState, fundSessionKey, startSession } =
-    useSessionKey();
+export function useGame(props?: UseGameProps): UseGameReturn {
+  const { sessionKeypair = null, sessionPubkey = null, playerState = null, fundSessionKey = async () => {}, startSession = async () => {} } = props ?? {};
   const [position, setPosition] = useState<Position>({ x: 1, y: 1 });
   const positionRef = useRef(position);
   positionRef.current = position;
