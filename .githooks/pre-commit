@@ -1,0 +1,59 @@
+#!/bin/sh
+# Pre-commit hook: block sensitive files from being committed.
+# Installed by running: git config core.hooksPath .githooks
+
+set -e
+
+RED='\033[0;31m'
+NC='\033[0m'
+
+FORBIDDEN_PATTERNS="
+keypair.json
+secret.json
+private.key
+private.pem
+*.pem
+*.key
+.id
+.env
+.env.local
+.env.production
+.env.secret
+mnemonic
+seed_phrase
+wallet.json
+id.json
+"
+
+PATTERN=$(echo "$FORBIDDEN_PATTERNS" | tr '\n' '|' | sed 's/|$//' | sed 's/^|//' | sed 's/\./\\./g' | sed 's/\*/.*/g')
+
+STAGED=$(git diff --cached --name-only)
+
+# File name check — skip the hook itself and .gitignore since they contain these words as patterns
+STAGED_VIOLATIONS=$(echo "$STAGED" | grep -iE "$PATTERN" | grep -vE '^\.githooks/pre-commit$|^\.gitignore$' || true)
+if [ -n "$STAGED_VIOLATIONS" ]; then
+    echo "${RED}❌ COMMIT BLOCKED — sensitive files detected in staged changes:${NC}"
+    echo "$STAGED_VIOLATIONS" | sed 's/^/   /'
+    echo ""
+    echo "${RED}These files look like keys, secrets, or credentials. Remove them from the commit,"
+    echo "add them to .gitignore, and use environment variables or hardware wallets instead.${NC}"
+    echo ""
+    echo "If this is a false positive, skip the hook with: git commit --no-verify"
+    exit 1
+fi
+
+# Content check for JSON arrays that look like raw keypair bytes
+echo "$STAGED" | grep '\.json$' | while read -r f; do
+    content=$(git show ":$f" 2>/dev/null || true)
+    if echo "$content" | grep -qE '^\[[[:space:]]*(12[0-7]|1[01][0-9]|[1-9]?[0-9])'; then
+        count=$(echo "$content" | grep -oE '[0-9]+' | wc -l)
+        if [ "$count" -ge 32 ] && [ "$count" -le 128 ]; then
+            echo "${RED}❌ COMMIT BLOCKED — $f appears to contain raw keypair bytes${NC}"
+            echo "${RED}   Detected a JSON numeric array with $count elements (looks like a private key).${NC}"
+            echo "${RED}   Remove this file from the commit and store keys securely.${NC}"
+            exit 1
+        fi
+    fi
+done || exit 1
+
+exit 0

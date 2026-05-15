@@ -9,3 +9,5 @@ app/.env.local
 
 # Keys (sensitive)
 **/*-keypair.jsonapp/tsconfig.tsbuildinfo
+*.keypair.json
+app/tsconfig.tsbuildinfo
