@@ -128,12 +128,12 @@ export function useSessionKey() {
   }, [publicKey, signTransaction]);
 
   // Sweep the stored session key's remaining XNT back to the player's wallet.
-  // Main wallet pays the fee so the session key can empty to exactly 0 —
-  // no rent-exempt issue, no orphan XNT.
-  // Session key signs first via tx.sign() (no popup, no partialSign),
-  // then wallet adapter signs as fee payer (one popup).
+  // Session key pays its own fee — no wallet popup, no signature issues.
+  // We query rent-exempt minimum from RPC and send everything above it,
+  // leaving exactly rent_exempt lamports behind so the runtime doesn't reject.
+  // The ~890k lamport (<0.001 XNT) dust is recovered on next sweep.
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !signTransaction || !connectionRef.current) return false;
+    if (!publicKey || !connectionRef.current) return false;
 
     const loaded = loadSessionKey();
     if (!loaded) return false;
@@ -148,25 +148,26 @@ export function useSessionKey() {
       const solKeypair = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
 
-      // Build with main wallet as fee payer
-      const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
+      // Rent-exempt minimum for a 0-byte system account (~890,880 on X1)
+      const rentExempt = await connectionRef.current.getMinimumBalanceForRentExemption(0);
+
+      // Fee is deducted from session key AFTER the transfer. We need to
+      // leave rentExempt + fee cushion in the account. Use 10_000 buffer
+      // (X1 fee is ~5,000). Leaves ~5k lamport dust, recovered next cycle.
+      const FEE_CUSHION = 10_000;
+      const amount = balance - rentExempt - FEE_CUSHION;
+      if (amount <= 0) return false;
+
+      const tx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
       tx.add(SystemProgram.transfer({
         fromPubkey: sessionPubkey,
         toPubkey: publicKey,
-        lamports: balance, // all of it — main wallet pays the fee
+        lamports: amount,
       }));
-
-      // Session key signs FIRST via tx.sign() — this properly populates
-      // the signatures array at index 0 (the first non-fee-payer signer).
-      // Then wallet adapter signs — it should recognize the existing sig
-      // and only add the fee payer's signature at position 0.
       tx.sign(solKeypair);
 
-      // Wallet adapter adds fee payer signature
-      const signed = await signTransaction(tx);
-
       const signature = await connectionRef.current.sendRawTransaction(
-        signed.serialize()
+        tx.serialize()
       );
       await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
       return true;
@@ -174,7 +175,7 @@ export function useSessionKey() {
       console.warn("Session key sweep skipped:", e);
       return false;
     }
-  }, [publicKey, signTransaction]);
+  }, [publicKey, connectionRef]);
 
   // Start a new session
   const startSession = useCallback(async () => {
