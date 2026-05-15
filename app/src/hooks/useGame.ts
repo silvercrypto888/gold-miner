@@ -67,7 +67,7 @@ const DIRECTION_VARIANT: Record<Direction, number> = {
 };
 
 export function useGame(): UseGameReturn {
-  const { sessionKeypair, sessionPubkey, playerState, fundSessionKey } =
+  const { sessionKeypair, sessionPubkey, playerState, fundSessionKey, startSession } =
     useSessionKey();
   const [position, setPosition] = useState<Position>({ x: 1, y: 1 });
   const positionRef = useRef(position);
@@ -512,6 +512,26 @@ export function useGame(): UseGameReturn {
           }
         }
 
+        // Auto-renew session if expired (0x1771 = 6001 = SessionExpired)
+        if (errMsg.includes("SessionExpired") || errMsg.includes("0x1771") || errMsg.includes("6001")) {
+          setStatus("Session expired... renewing automatically");
+          console.log("Session expired, attempting auto-renew...");
+          try {
+            await new Promise(r => setTimeout(r, 1000));
+            await startSession();
+            await new Promise(r => setTimeout(r, 1500));
+            setIsMoving(false);
+            setLastMoveTime(0);
+            move(direction);
+            return;
+          } catch (renewErr) {
+            console.error("Session auto-renewal failed:", renewErr);
+            setStatus("Session expired. Click &#39;Start Session&#39; to renew.");
+            setIsMoving(false);
+            return;
+          }
+        }
+
         setStatus("");
         if (err?.name === "TransactionExpiredBlockheightExceededError" ||
             errMsg.includes("block height exceeded")) {
@@ -541,7 +561,7 @@ export function useGame(): UseGameReturn {
         setIsMoving(false);
       }
     },
-    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, getBlockhash, invalidateBlockhash, updateVisibleGold]
+    [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, startSession, getBlockhash, invalidateBlockhash, updateVisibleGold]
   );
 
   // Keyboard controls
