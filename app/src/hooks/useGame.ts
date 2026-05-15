@@ -564,7 +564,9 @@ export function useGame(): UseGameReturn {
     [sessionKeypair, sessionPubkey, playerState, position, lastMoveTime, fundSessionKey, startSession, getBlockhash, invalidateBlockhash, updateVisibleGold]
   );
 
-  // Keyboard controls
+  // Keyboard controls — use a ref so the listener is registered once and always calls the latest move
+  const moveRef = useRef(move);
+  moveRef.current = move;
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -575,11 +577,11 @@ export function useGame(): UseGameReturn {
         a: Direction.Left, A: Direction.Left, d: Direction.Right, D: Direction.Right,
       };
       const direction = keyMap[e.key];
-      if (direction) { e.preventDefault(); move(direction); }
+      if (direction) { e.preventDefault(); moveRef.current(direction); }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [move]);
+  }, []); // empty deps — registered once for the lifetime of the component
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
   return { position, visibleGold, visiblePlayers: [], showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status };
