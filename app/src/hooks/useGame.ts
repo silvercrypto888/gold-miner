@@ -354,15 +354,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         const ix = new TransactionInstruction({
           keys: [
             { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },   // session_signer (mut)
-            { pubkey: gameConfigPda, isSigner: false, isWritable: true },              // game_config
             { pubkey: playerPda, isSigner: false, isWritable: true },                 // player
-            // wallet comes before goldium_mint so index matches Rust struct order
-            { pubkey: walletPk, isSigner: false, isWritable: true },                    // wallet (GLD owner)
-            { pubkey: goldiumMint, isSigner: false, isWritable: true },                // goldium_mint
-            { pubkey: tokenProgram, isSigner: false, isWritable: false },                // token_program
-            { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
-            { pubkey: playerAta, isSigner: false, isWritable: true },                  // player_token_account
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
+            // wallet must come after player since Anchor resolves seeds from player
+            { pubkey: walletPk, isSigner: false, isWritable: true },                    // wallet
           ],
           programId,
           data,
@@ -370,8 +364,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
         const { blockhash, lastValidBlockHeight } = await getBlockhash();
         const tx = new Transaction({ feePayer: sessionSigner.publicKey, blockhash, lastValidBlockHeight });
-        tx.add(createAtaIx);
-        tx.add(ix);
+        tx.add(ix);  // No ATA creation — move doesn't need it
         tx.sign(sessionSigner);
 
         const signature = await connectionRef.current.sendRawTransaction(
@@ -485,14 +478,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
               const retryIx = new TransactionInstruction({
                 keys: [
                   { pubkey: retrySigner.publicKey, isSigner: true, isWritable: true },
-                  { pubkey: gameConfigPda, isSigner: false, isWritable: true },
                   { pubkey: playerPda, isSigner: false, isWritable: true },
                   { pubkey: retryWalletPk, isSigner: false, isWritable: true },
-                  { pubkey: goldiumMint, isSigner: false, isWritable: true },
-                  { pubkey: tokenProgram, isSigner: false, isWritable: false },
-                  { pubkey: ataProgram, isSigner: false, isWritable: false },
-                  { pubkey: playerAta, isSigner: false, isWritable: true },
-                  { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
                 ],
                 programId: retryProgramId,
                 data: retryData,
@@ -500,8 +487,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
               const { blockhash: retryBh, lastValidBlockHeight: retryLvb } = await getBlockhash();
               const retryTx = new Transaction({ feePayer: retrySigner.publicKey, blockhash: retryBh, lastValidBlockHeight: retryLvb });
-              retryTx.add(createAtaIx);
-              retryTx.add(retryIx);
+              retryTx.add(retryIx);  // No ATA — move doesn't need it
               retryTx.sign(retrySigner);
 
               const retrySig = await connectionRef.current!.sendRawTransaction(
