@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useSessionKey } from "@/hooks/useSessionKey";
@@ -22,6 +22,15 @@ export function PlayerHUD() {
   const { goldMined } = useGame();
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
   const [sweepStatus, setSweepStatus] = useState<string | null>(null);
+  const prevGoldMined = useRef(goldMined);
+
+  // Auto-refresh GLD balance whenever a mine completes
+  useEffect(() => {
+    if (goldMined > prevGoldMined.current) {
+      fetchGoldiumBalance();
+    }
+    prevGoldMined.current = goldMined;
+  }, [goldMined, fetchGoldiumBalance]);
 
   const handleWithdraw = useCallback(async () => {
     setSweepStatus("Sweeping...");
