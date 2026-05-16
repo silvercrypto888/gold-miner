@@ -263,7 +263,15 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       setPosition({ x: newX, y: newY }); // Optimistic
       setStatus("Moving...");
 
-      const preMineGold = playerState.goldiumMinted;
+      // Read pre-mine Goldium count directly from on-chain PDA (avoids stale closure)
+      let preMineGold = 0;
+      try {
+        const preInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+        if (preInfo) {
+          const preDv = new DataView(preInfo.data.buffer, preInfo.data.byteOffset, preInfo.data.byteLength);
+          preMineGold = Number(preDv.getBigUint64(80, true));
+        }
+      } catch {}
 
       try {
         const programId = getProgramId();
@@ -374,8 +382,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             const chainY = accountInfo.data.readUInt32LE(76);
             setPosition({ x: chainX, y: chainY });
             
-            // Read goldiumMinted from player PDA (offset 80, u64 LE) — authoritative
-            const postMineGold = Number(Buffer.from(accountInfo.data).readBigUint64LE(80));
+            // Read goldiumMinted from player PDA — safely read as two u32 (LE) and combine
+            const low32 = accountInfo.data.readUInt32LE(80);
+            const high32 = accountInfo.data.readUInt32LE(84);
+            const postMineGold = low32 + high32 * 0x100000000;
             if (postMineGold > preMineGold) {
               setGoldMined(postMineGold);
               setStatus("Mined!");
