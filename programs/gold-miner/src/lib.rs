@@ -276,9 +276,10 @@ pub mod gold_miner {
                     ],
                     signer_seeds,
                 )?;
-                // Initialize discriminator
+                // Initialize discriminator + mark has_gold = true for fresh account
                 let mut data = gold_spot_info.data.borrow_mut();
                 data[..8].copy_from_slice(&GoldSpot::DISCRIMINATOR);
+                data[8] = 1; // has_gold = true
             }
         }
 
