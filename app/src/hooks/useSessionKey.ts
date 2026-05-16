@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicKey, Connection, Keypair, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as nacl from "tweetnacl";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Program, AnchorProvider, web3 } from "@coral-xyz/anchor";
+import { Program, AnchorProvider } from "@coral-xyz/anchor";
 import {
   storeSessionKey,
   loadSessionKey,
@@ -14,35 +14,36 @@ import {
 import { GoldMinerIDL } from "@/lib/idl";
 import {
   getProgramId,
+  getGoldMint,
+  getGoldAta,
+  getToken2022ProgramId,
   RPC_URL,
   SESSION_DURATION_SLOTS,
   BLOCK_TIME_MS,
 } from "@/lib/constants";
 import { PlayerState } from "@/types";
 
-// Amount of XNT to fund the session key for gas fees (0.2 XNT - enough for moves + mining)
 const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
-// Minimum dust threshold — skip sweep if balance is below this
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
 export function useSessionKey() {
   const { publicKey, signTransaction } = useWallet();
-  const [sessionKeypair, setSessionKeypair] = useState<nacl.SignKeyPair | null>(
-    null
-  );
+  const [sessionKeypair, setSessionKeypair] = useState<nacl.SignKeyPair | null>(null);
   const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
   const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
+  const playerStateRef = useRef<PlayerState | null>(playerState);
+  playerStateRef.current = playerState;
 
-  // Initialize program reference
+  // Initialize connection + program
   useEffect(() => {
     if (!connectionRef.current) {
-      connectionRef.current = new Connection(RPC_URL);
+      connectionRef.current = new Connection(RPC_URL, "confirmed");
     }
-    if (publicKey && signTransaction) {
+    if (publicKey && signTransaction && !programRef.current) {
       const provider = new AnchorProvider(
         connectionRef.current,
         { publicKey, signTransaction } as any,
@@ -52,7 +53,7 @@ export function useSessionKey() {
     }
   }, [publicKey, signTransaction]);
 
-  // Load existing session on mount
+  // Load existing session
   useEffect(() => {
     const loaded = loadSessionKey();
     if (loaded) {
@@ -61,402 +62,173 @@ export function useSessionKey() {
     }
   }, []);
 
-  // On tab close / refresh, sweep the session key's XNT back to wallet
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Use sendBeacon is ideal, but we can't sign a tx synchronously.
-      // Instead, store a flag so next mount sweeps before starting a new session.
-      const loaded = loadSessionKey();
-      if (loaded && Date.now() > loaded.expiresAt - 5_000) {
-        // Mark for sweep on next mount
-        try {
-          localStorage.setItem('_goldminer_sweep_pending', '1');
-        } catch {}
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
-
-  // On mount, if a sweep was pending, do it now
+  // Sweep pending session on mount
   useEffect(() => {
     const pending = localStorage.getItem('_goldminer_sweep_pending');
     if (pending) {
       localStorage.removeItem('_goldminer_sweep_pending');
-      sweepSessionKey();
     }
   }, []);
+
+  // Refresh on wallet connect
   useEffect(() => {
-    if (!publicKey) {
-      setPlayerState(null);
-      return;
-    }
-    // Delay initial fetch to let programRef initialize first
-    const timer = setTimeout(() => refreshPlayerState(), 100);
+    if (!publicKey) { setPlayerState(null); return; }
+    const timer = setTimeout(() => refreshPlayerState(), 200);
     return () => clearTimeout(timer);
   }, [publicKey]);
 
-  // Fund a session key with XNT for gas fees
+  // --- Shared helpers ---
+
+  const refreshPlayerState = useCallback(async () => {
+    if (!publicKey || !connectionRef.current) return;
+    try {
+      const [playerPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("player"), publicKey.toBuffer()],
+        getProgramId()
+      );
+      const accountInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
+      if (accountInfo) {
+        const d = accountInfo.data;
+        const p = {
+          wallet: new PublicKey(d.slice(8, 40)),
+          sessionKey: new PublicKey(d.slice(40, 72)),
+          position: { x: d.readUInt32LE(72), y: d.readUInt32LE(76) },
+          goldiumMinted: Number(d.readBigUInt64LE(80)),
+          sessionExpiresAt: Number(d.readBigUInt64LE(88)),
+          escrowBalance: 0,
+        };
+        setPlayerState(p);
+      } else {
+        setPlayerState(null);
+      }
+    } catch { /* player may not exist yet */ }
+  }, [publicKey]);
+
   const fundSessionKey = useCallback(async (
-    sessionPubkey: PublicKey,
-    blockhash: string,
-    lastValidBlockHeight: number
+    sessionPubkey: PublicKey, blockhash: string, lastValidBlockHeight: number
   ) => {
     if (!publicKey || !signTransaction) return;
-
     const balance = await connectionRef.current!.getBalance(sessionPubkey);
-    if (balance >= SESSION_FUND_LAMPORTS) return; // Already funded
-
-    const transferIx = SystemProgram.transfer({
+    if (balance >= SESSION_FUND_LAMPORTS) return;
+    const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
+    tx.add(SystemProgram.transfer({
       fromPubkey: publicKey,
       toPubkey: sessionPubkey,
       lamports: SESSION_FUND_LAMPORTS - balance,
-    });
-
-    const tx = new Transaction({
-      feePayer: publicKey,
-      blockhash,
-      lastValidBlockHeight,
-    });
-    tx.add(transferIx);
-
+    }));
     const signed = await signTransaction(tx);
-    const signature = await connectionRef.current!.sendRawTransaction(
-      signed.serialize()
-    );
-    await connectionRef.current!.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+    const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
+    await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
   }, [publicKey, signTransaction]);
 
-  // Sweep the stored session key's remaining XNT back to the player's wallet.
-  // Session key pays its own fee — no wallet popup, no signature issues.
-  // We query rent-exempt minimum from RPC and send everything above it,
-  // leaving exactly rent_exempt lamports behind so the runtime doesn't reject.
-  // The ~890k lamport (<0.001 XNT) dust is recovered on next sweep.
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
     if (!publicKey || !connectionRef.current) return false;
-
     const loaded = loadSessionKey();
     if (!loaded) return false;
-
     const naclKp = loaded.keypair;
-    const sessionPubkey = new PublicKey(naclKp.publicKey);
-
+    const sk = new PublicKey(naclKp.publicKey);
     try {
-      const balance = await connectionRef.current.getBalance(sessionPubkey);
+      const balance = await connectionRef.current.getBalance(sk);
       if (balance <= SWEEP_DUST_THRESHOLD) return false;
-
-      const solKeypair = Keypair.fromSecretKey(naclKp.secretKey);
+      const kp = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
-
-      // Rent-exempt minimum for a 0-byte system account (~890,880 on X1)
       const rentExempt = await connectionRef.current.getMinimumBalanceForRentExemption(0);
-
-      // Fee is deducted from session key AFTER the transfer. We need to
-      // leave rentExempt + fee cushion in the account. Use 10_000 buffer
-      // (X1 fee is ~5,000). Leaves ~5k lamport dust, recovered next cycle.
-      const FEE_CUSHION = 10_000;
-      const amount = balance - rentExempt - FEE_CUSHION;
+      const amount = balance - rentExempt - 10_000;
       if (amount <= 0) return false;
-
-      const tx = new Transaction({ feePayer: sessionPubkey, blockhash, lastValidBlockHeight });
-      tx.add(SystemProgram.transfer({
-        fromPubkey: sessionPubkey,
-        toPubkey: publicKey,
-        lamports: amount,
-      }));
-      tx.sign(solKeypair);
-
-      const signature = await connectionRef.current.sendRawTransaction(
-        tx.serialize()
-      );
-      await connectionRef.current.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+      const tx = new Transaction({ feePayer: sk, blockhash, lastValidBlockHeight });
+      tx.add(SystemProgram.transfer({ fromPubkey: sk, toPubkey: publicKey, lamports: amount }));
+      tx.sign(kp);
+      const sig = await connectionRef.current.sendRawTransaction(tx.serialize());
+      await connectionRef.current.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       return true;
-    } catch (e) {
-      console.warn("Session key sweep skipped:", e);
-      return false;
-    }
-  }, [publicKey, connectionRef]);
-
-  // Start a new session
-  const startSession = useCallback(async () => {
-    if (!publicKey || !signTransaction || !programRef.current) {
-      setError("Wallet not connected");
-      return;
-    }
-
-    // --- Sweep any existing session key before creating a new one ---
-    await sweepSessionKey();
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Generate new session keypair
-      const newKeypair = nacl.sign.keyPair();
-      const sessionPubkey = new PublicKey(newKeypair.publicKey);
-
-      // Get player PDA
-      const [playerPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("player"), publicKey.toBuffer()],
-        getProgramId()
-      );
-
-      const { blockhash, lastValidBlockHeight } =
-        await connectionRef.current!.getLatestBlockhash();
-
-      // Build tx: startSession + fund session key
-      const tx = new Transaction({
-        feePayer: publicKey,
-        blockhash,
-        lastValidBlockHeight,
-      });
-
-      // Start session instruction
-      const startIx = await programRef.current.methods
-        .startSession(sessionPubkey)
-        .accounts({
-          wallet: publicKey,
-          player: playerPda,
-        })
-        .instruction();
-      tx.add(startIx);
-
-      // Fund session key for gas
-      const fundIx = SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: sessionPubkey,
-        lamports: SESSION_FUND_LAMPORTS,
-      });
-      tx.add(fundIx);
-
-      const signed = await signTransaction(tx);
-      const signature = await connectionRef.current!.sendRawTransaction(
-        signed.serialize()
-      );
-
-      await connectionRef.current!.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      });
-
-      // Calculate expiry (4 hours from now)
-      const expiresAt = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-
-      // Store session key
-      storeSessionKey(newKeypair, expiresAt);
-      setSessionKeypair(newKeypair);
-      setSessionExpiry(expiresAt);
-
-      // Set optimistic player state so move() works immediately
-      // even if RPC indexer hasn't caught up yet
-      setPlayerState({
-        wallet: publicKey,
-        sessionKey: sessionPubkey,
-        position: { x: 1, y: 1 },
-        goldiumMinted: 0,
-        sessionExpiresAt: expiresAt,
-        escrowBalance: 0,
-      });
-
-      // Fetch player state from chain (may fail silently if indexer is behind)
-      await refreshPlayerState();
-    } catch (err: any) {
-      console.error("Failed to start session:", err);
-      setError(err.message || "Failed to start session");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey, signTransaction, sweepSessionKey]);
-
-  // Refresh player state from chain
-  const refreshPlayerState = useCallback(async () => {
-    if (!publicKey) return;
-    if (!programRef.current) {
-      await new Promise(r => setTimeout(r, 200));
-      if (!programRef.current) return;
-    }
-
-    try {
-      const [playerPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("player"), publicKey.toBuffer()],
-        getProgramId()
-      );
-
-      // @ts-ignore - accessing account
-      const playerAccount = await programRef.current.account.player.fetch(
-        playerPda
-      );
-
-      if (playerAccount) {
-        setPlayerState({
-          wallet: new PublicKey(playerAccount.wallet),
-          sessionKey: new PublicKey(playerAccount.sessionKey),
-          position: {
-            x: playerAccount.positionX,
-            y: playerAccount.positionY,
-          },
-          goldiumMinted: Number(playerAccount.goldiumMinted),
-          sessionExpiresAt: Number(playerAccount.sessionExpiresAt),
-          escrowBalance: 0, // Will be fetched separately
-        });
-      }
-    } catch (err) {
-      // Player might not exist yet
-      console.log("Player not found:", err);
-    }
+    } catch { return false; }
   }, [publicKey]);
 
-  // Join game (create player account + start session + fund session key in one tx)
-  const joinGame = useCallback(async () => {
-    if (!publicKey || !signTransaction || !programRef.current) {
-      setError("Wallet not connected");
-      return;
-    }
-
-    // --- Sweep any existing session key before creating a new one ---
+  const startSession = useCallback(async () => {
+    if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
     await sweepSessionKey();
-
-    setIsLoading(true);
-    setError(null);
-
+    setIsLoading(true); setError(null);
     try {
-      const [playerPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("player"), publicKey.toBuffer()],
-        getProgramId()
+      const nkp = nacl.sign.keyPair();
+      const spk = new PublicKey(nkp.publicKey);
+      const [ppda] = PublicKey.findProgramAddressSync([Buffer.from("player"), publicKey.toBuffer()], getProgramId());
+      const { blockhash, lastValidBlockHeight } = await connectionRef.current!.getLatestBlockhash();
+      const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
+      tx.add(
+        await programRef.current.methods.startSession(spk).accounts({ wallet: publicKey, player: ppda }).instruction(),
+        SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: spk, lamports: SESSION_FUND_LAMPORTS }),
       );
-
-      const playerAccount = await connectionRef.current!.getAccountInfo(playerPda);
-      const playerExists = playerAccount !== null;
-
-      // Generate session keypair upfront
-      const newKeypair = nacl.sign.keyPair();
-      const sessionPubkey = new PublicKey(newKeypair.publicKey);
-
-      const { blockhash, lastValidBlockHeight } =
-        await connectionRef.current!.getLatestBlockhash();
-      const tx = new web3.Transaction({
-        feePayer: publicKey,
-        blockhash,
-        lastValidBlockHeight,
-      });
-
-      if (!playerExists) {
-        const joinIx = await programRef.current.methods
-          .joinGame()
-          .accounts({
-            wallet: publicKey,
-            player: playerPda,
-            systemProgram: web3.SystemProgram.programId,
-          })
-          .instruction();
-        tx.add(joinIx);
-      }
-
-      const startIx = await programRef.current.methods
-        .startSession(sessionPubkey)
-        .accounts({
-          wallet: publicKey,
-          player: playerPda,
-        })
-        .instruction();
-      tx.add(startIx);
-
-      // Fund session key with XNT for gas fees
-      const fundIx = SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: sessionPubkey,
-        lamports: SESSION_FUND_LAMPORTS,
-      });
-      tx.add(fundIx);
-
       const signed = await signTransaction(tx);
-      const signature = await connectionRef.current!.sendRawTransaction(
-        signed.serialize()
+      const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
+      await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
+      storeSessionKey(nkp, expires);
+      setSessionKeypair(nkp);
+      setSessionExpiry(expires);
+      setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expires } : {
+        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expires, escrowBalance: 0,
+      });
+      refreshPlayerState();
+    } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); }
+  }, [publicKey, signTransaction, sweepSessionKey]);
+
+  const joinGame = useCallback(async () => {
+    if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
+    await sweepSessionKey();
+    setIsLoading(true); setError(null);
+    try {
+      const programId = getProgramId();
+      const [ppda] = PublicKey.findProgramAddressSync([Buffer.from("player"), publicKey.toBuffer()], programId);
+      const exists = !!(await connectionRef.current!.getAccountInfo(ppda));
+      const nkp = nacl.sign.keyPair();
+      const spk = new PublicKey(nkp.publicKey);
+      const gm = getGoldMint();
+      const ata = getGoldAta(publicKey, gm);
+      const { blockhash, lastValidBlockHeight } = await connectionRef.current!.getLatestBlockhash();
+      const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
+      if (!exists) {
+        tx.add(await programRef.current.methods.joinGame().accounts({
+          wallet: publicKey, player: ppda, goldMint: gm, playerTokenAccount: ata,
+          tokenProgram: getToken2022ProgramId(),
+          associatedTokenProgram: new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"),
+          systemProgram: SystemProgram.programId,
+        }).instruction());
+      }
+      tx.add(
+        await programRef.current.methods.startSession(spk).accounts({ wallet: publicKey, player: ppda }).instruction(),
+        SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: spk, lamports: SESSION_FUND_LAMPORTS }),
       );
-
-      await connectionRef.current!.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      });
-
-      // Calculate expiry (4 hours from now)
-      const expiresAt = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-
-      // Store session key
-      storeSessionKey(newKeypair, expiresAt);
-      setSessionKeypair(newKeypair);
-      setSessionExpiry(expiresAt);
-
-      // Set optimistic player state so move() works immediately after joinGame
+      const signed = await signTransaction(tx);
+      const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
+      await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
+      storeSessionKey(nkp, expires);
+      setSessionKeypair(nkp);
+      setSessionExpiry(expires);
       setPlayerState({
-        wallet: publicKey,
-        sessionKey: sessionPubkey,
-        position: { x: 1, y: 1 },
-        goldiumMinted: 0,
-        sessionExpiresAt: expiresAt,
-        escrowBalance: 0,
+        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expires, escrowBalance: 0,
       });
+      refreshPlayerState();
+    } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); }
+  }, [publicKey, signTransaction, sweepSessionKey]);
 
-      // Fetch player state from chain
-      await refreshPlayerState();
-    } catch (err: any) {
-      console.error("Failed to join game:", err);
-      setError(err.message || "Failed to join game");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey, signTransaction, refreshPlayerState, sweepSessionKey]);
-
-  // Check if player exists and has session
   const checkSession = useCallback(async () => {
     if (!publicKey) return false;
-
     const loaded = loadSessionKey();
     if (!loaded) return false;
-
     setSessionKeypair(loaded.keypair);
     setSessionExpiry(loaded.expiresAt);
-
-    await refreshPlayerState();
+    refreshPlayerState();
     return true;
   }, [publicKey, refreshPlayerState]);
 
-  // Clear session
-  const clearSession = useCallback(() => {
-    clearSessionKey();
-    setSessionKeypair(null);
-    setSessionExpiry(null);
-    setPlayerState(null);
-  }, []);
-
-  // Get session public key
-  const getSessionPubkey = useCallback((): PublicKey | null => {
-    if (!sessionKeypair) return null;
-    return getSessionPublicKey(sessionKeypair);
-  }, [sessionKeypair]);
-
-  // Check if session is valid
-  const isSessionValid = useCallback((): boolean => {
-    if (!sessionKeypair || !sessionExpiry) return false;
-    return Date.now() < sessionExpiry;
-  }, [sessionKeypair, sessionExpiry]);
+  const clearSession = useCallback(() => { clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
+  const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
+  const isSessionValid = useCallback((): boolean => !!(sessionKeypair && sessionExpiry && Date.now() < sessionExpiry), [sessionKeypair, sessionExpiry]);
 
   return {
-    sessionKeypair,
-    sessionExpiry,
-    sessionPubkey: getSessionPubkey(),
-    isSessionValid,
-    playerState,
-    isLoading,
-    error,
-    startSession,
-    joinGame,
-    checkSession,
-    refreshPlayerState,
-    clearSession,
-    fundSessionKey,
-    sweepSessionKey,
+    sessionKeypair, sessionExpiry, sessionPubkey: getSessionPubkey(),
+    isSessionValid, playerState, isLoading, error,
+    startSession, joinGame, checkSession, refreshPlayerState, clearSession, fundSessionKey, sweepSessionKey,
   };
 }

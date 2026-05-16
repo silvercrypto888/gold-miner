@@ -12,3 +12,5 @@ app/.env.local
 *.keypair.json
 app/tsconfig.tsbuildinfo
 .vercel
+*.json
+/*.json

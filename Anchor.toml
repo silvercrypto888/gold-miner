@@ -8,13 +8,13 @@ seeds = true
 skip-lint = false
 
 [programs.localnet]
-gold_miner = "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
+gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
 [programs.testnet]
-gold_miner = "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
+gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
 [programs.mainnet]
-gold_miner = "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
+gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
 [registry]
 url = "https://api.apr.dev"
@@ -27,5 +27,5 @@ wallet = "~/.config/solana/id.json"
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 
 [[test.genesis]]
-address = "TokenzQgBNY1bUK1n5T2Q6Q6WKFk5CQu9upH5hF9jQ"
+address = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
 program = "token_2022.so"

@@ -5,18 +5,26 @@ let _PROGRAM_ID: PublicKey | null = null;
 export function getProgramId(): PublicKey {
   if (!_PROGRAM_ID) {
     _PROGRAM_ID = new PublicKey(
-      process.env.NEXT_PUBLIC_PROGRAM_ID || "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf"
+      process.env.NEXT_PUBLIC_PROGRAM_ID || "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
     );
   }
   return _PROGRAM_ID;
 }
 
+let _GOLD_MINT: PublicKey | null = null;
+export function getGoldMint(): PublicKey {
+  if (!_GOLD_MINT) {
+    _GOLD_MINT = new PublicKey(
+      process.env.NEXT_PUBLIC_GOLD_MINT || PublicKey.default.toString()
+    );
+  }
+  return _GOLD_MINT;
+}
+
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.x1.xyz";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws.testnet.x1.xyz";
 
-// Token-2022 program on X1 — constructed from raw bytes to avoid
-// browser web3.js rejecting off-curve PDAs via new PublicKey(string)
-// Hex: 06ddf6e1ee758fde18425dbce46ccddab61afc4d83b90d27febdf928d8a18bfc
+// Token-2022 program on X1
 const X1_TOKEN_2022_BYTES = Uint8Array.from([
   0x06, 0xdd, 0xf6, 0xe1, 0xee, 0x75, 0x8f, 0xde,
   0x18, 0x42, 0x5d, 0xbc, 0xe4, 0x6c, 0xcd, 0xda,
@@ -39,27 +47,30 @@ export function getAtaProgramId(): PublicKey {
   return _ATA_PROGRAM_ID;
 }
 
-// Derive player's Goldium ATA (Token-2022) — owned by the wallet, not the Player PDA
-// This ensures GLD goes directly to the wallet that mined it
-export function getPlayerGoldiumAta(goldiumMint: PublicKey, wallet: PublicKey): PublicKey {
+// Derive player's GOLD ATA (Token-2022) — wallet-owned
+export function getGoldAta(wallet: PublicKey, goldMint?: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [
       wallet.toBuffer(),
       getToken2022ProgramId().toBuffer(),
-      goldiumMint.toBuffer(),
+      (goldMint || getGoldMint()).toBuffer(),
     ],
     getAtaProgramId()
   )[0];
 }
 
-// Game Constants
-export const GRID_SIZE = 100;
+// ─── Game Constants ───
+
+const BITMAP_KEYPAIR_ADDRESS = process.env.NEXT_PUBLIC_GOLD_BITMAP || "7DVVV8f7mzXLW3pB3Xx1z9LQxVpTpNQ1Cm9NiggXDT8A";
 export const VIEWPORT_SIZE = 15;
 export const CELL_SIZE = 40;
+export const GRID_SIZE = 1024;
+export const BITMAP_BYTES = 131072; // 1024 * 1024 bits (not including discriminator)
 export const GOLD_PER_MINE = 100;
-export const MOVE_FEE_LAMPORTS = 2_000_000;
-export const SESSION_DURATION_SLOTS = 36000;
+export const SESSION_DURATION_SLOTS = 36000; // ~4 hours
 export const BLOCK_TIME_MS = 400;
+export const SESSION_KEY_STORAGE = "gold_miner_session_key";
+export const LAMPORTS_PER_SOL = 1_000_000_000;
 
 export const DEPOSIT_AMOUNTS = [
   { label: "0.02", value: 0.02 },
@@ -67,13 +78,12 @@ export const DEPOSIT_AMOUNTS = [
   { label: "1", value: 1.0 },
 ];
 
-export const LAMPORTS_PER_SOL = 1_000_000_000;
-export const SESSION_KEY_STORAGE = "gold_miner_session_key";
-
+/// Check if a grid position has gold based on worldgen formula
 export function hasGoldAt(x: number, y: number): boolean {
   return ((x & y) % 7) === 0;
 }
 
+/// Count total gold spots on the grid
 export function estimateGoldSpots(): number {
   let count = 0;
   for (let x = 1; x <= GRID_SIZE; x++) {
@@ -84,6 +94,20 @@ export function estimateGoldSpots(): number {
   return count;
 }
 
+/// Position (x,y) to bitmap bit index
+export function posToBitIndex(x: number, y: number): number {
+  return (y - 1) * GRID_SIZE + (x - 1);
+}
+
+/// Bitmap helper: check if a cell is mined
+export function isCellMined(bits: Uint8Array, x: number, y: number): boolean {
+  const bitIdx = posToBitIndex(x, y);
+  const byteIdx = Math.floor(bitIdx / 8);
+  const bitPos = bitIdx % 8;
+  return (bits[byteIdx] & (1 << bitPos)) !== 0;
+}
+
+/// Get viewport range centered on player
 export function getViewportRange(playerX: number, playerY: number): {
   minX: number; maxX: number; minY: number; maxY: number;
 } {
@@ -103,12 +127,17 @@ export function getViewportRange(playerX: number, playerY: number): {
   return { minX, maxX, minY, maxY };
 }
 
-// PDA derivation helpers
+// ─── PDA Derivation Helpers ───
+
 export function getGameConfigPda(programId?: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("game_config")],
     programId || getProgramId()
   );
+}
+
+export function getGoldBitmapPda(programId?: PublicKey): [PublicKey, number] {
+  return [new PublicKey(BITMAP_KEYPAIR_ADDRESS), 255]; // keypair, not PDA
 }
 
 export function getPlayerPda(wallet: PublicKey, programId?: PublicKey): [PublicKey, number] {
@@ -118,16 +147,7 @@ export function getPlayerPda(wallet: PublicKey, programId?: PublicKey): [PublicK
   );
 }
 
-export function getGoldSpotPda(x: number, y: number, programId?: PublicKey): [PublicKey, number] {
-  const xBuffer = Buffer.alloc(4);
-  xBuffer.writeUInt32BE(x, 0);
-  const yBuffer = Buffer.alloc(4);
-  yBuffer.writeUInt32BE(y, 0);
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("gold_spot"), xBuffer, yBuffer],
-    programId || getProgramId()
-  );
-}
+// ─── Formatting ───
 
 export function formatXNT(lamports: number, decimals: number = 4): string {
   const xnt = lamports / LAMPORTS_PER_SOL;
@@ -135,5 +155,5 @@ export function formatXNT(lamports: number, decimals: number = 4): string {
 }
 
 export function formatGoldium(amount: number): string {
-  return `${amount.toLocaleString()} GLD`;
+  return `${amount.toLocaleString()} GOLD`;
 }

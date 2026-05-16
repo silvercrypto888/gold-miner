@@ -1,13 +1,14 @@
-// Generated IDL for Gold Miner program — Anchor v0.30 format
+// Gold Miner v2 IDL — Bitmap Architecture (Anchor v0.30 format)
+// Generated program ID: GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6
 import { Idl } from "@coral-xyz/anchor";
 
 export const GoldMinerIDL: Idl = {
-  address: "EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf",
+  address: "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6",
   metadata: {
     name: "gold_miner",
-    version: "0.1.0",
+    version: "0.2.0",
     spec: "0.1.0",
-    description: "Gold Miner game on X1/Solana",
+    description: "Gold Miner v2 - Bitmap grid game on X1",
   },
   instructions: [
     {
@@ -16,7 +17,8 @@ export const GoldMinerIDL: Idl = {
       accounts: [
         { name: "authority", writable: true, signer: true },
         { name: "gameConfig", writable: true },
-        { name: "goldiumMint", writable: true },
+        { name: "goldBitmap", writable: true },
+        { name: "goldMint", writable: true },
         { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
         { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
@@ -28,6 +30,10 @@ export const GoldMinerIDL: Idl = {
       accounts: [
         { name: "wallet", writable: true, signer: true },
         { name: "player", writable: true },
+        { name: "goldMint", writable: true },
+        { name: "playerTokenAccount", writable: true },
+        { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
+        { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
         { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [],
@@ -44,62 +50,23 @@ export const GoldMinerIDL: Idl = {
       ],
     },
     {
-      name: "movePlayer",
-      discriminator: [17, 58, 68, 221, 186, 117, 140, 231],
-      accounts: [
-        { name: "sessionSigner", signer: true },
-        { name: "player", writable: true },
-        { name: "systemProgram", address: "11111111111111111111111111111111" },
-      ],
-      args: [
-        {
-          name: "direction",
-          type: { defined: { name: "Direction" } },
-        },
-      ],
-    },
-    {
-      name: "mineGold",
-      discriminator: [49, 40, 243, 122, 219, 94, 234, 9],
-      accounts: [
-        { name: "sessionSigner", signer: true },
-        { name: "gameConfig", writable: true },
-        { name: "player", writable: true },
-        { name: "goldSpot", writable: true },
-        { name: "goldiumMint", writable: true },
-        { name: "playerTokenAccount", writable: true },
-        { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
-        { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
-        { name: "systemProgram", address: "11111111111111111111111111111111" },
-      ],
-      args: [],
-    },
-    {
       name: "moveAndMine",
       discriminator: [26, 202, 228, 63, 206, 4, 137, 63],
       accounts: [
-        { name: "sessionSigner", writable: true, signer: true },
-        { name: "gameConfig", writable: true },
+        { name: "sessionSigner", signer: true },
         { name: "player", writable: true },
-        { name: "wallet", writable: true },
-        { name: "goldiumMint", writable: true },
+        { name: "gameConfig", writable: true },
+        { name: "goldBitmap", writable: true },
+        { name: "goldMint", writable: true },
+        { name: "playerTokenAccount", writable: true },
         { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
         { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
-        { name: "playerTokenAccount", writable: true },
         { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [
         {
           name: "direction",
           type: { defined: { name: "Direction" } },
-        },
-        {
-          name: "newX",
-          type: "u32",
-        },
-        {
-          name: "newY",
-          type: "u32",
         },
       ],
     },
@@ -135,10 +102,6 @@ export const GoldMinerIDL: Idl = {
       name: "Player",
       discriminator: [205, 222, 112, 7, 165, 155, 206, 218],
     },
-    {
-      name: "GoldSpot",
-      discriminator: [112, 156, 149, 108, 70, 90, 135, 242],
-    },
   ],
   types: [
     {
@@ -148,9 +111,8 @@ export const GoldMinerIDL: Idl = {
         fields: [
           { name: "authority", type: "pubkey" },
           { name: "gridSize", type: "u32" },
-          { name: "goldiumMint", type: "pubkey" },
+          { name: "goldMint", type: "pubkey" },
           { name: "totalGoldMined", type: "u64" },
-          { name: "moveFeeLamports", type: "u64" },
           { name: "bump", type: "u8" },
         ],
       },
@@ -167,16 +129,6 @@ export const GoldMinerIDL: Idl = {
           { name: "goldiumMinted", type: "u64" },
           { name: "sessionExpiresAt", type: "u64" },
           { name: "bump", type: "u8" },
-        ],
-      },
-    },
-    {
-      name: "GoldSpot",
-      type: {
-        kind: "struct",
-        fields: [
-          { name: "hasGold", type: "bool" },
-          { name: "minedBy", type: { option: "pubkey" } },
         ],
       },
     },
@@ -198,10 +150,9 @@ export const GoldMinerIDL: Idl = {
     { code: 6001, name: "SessionExpired", msg: "Session has expired" },
     { code: 6002, name: "OutOfBounds", msg: "Move out of bounds" },
     { code: 6003, name: "NoFundsToWithdraw", msg: "No funds to withdraw" },
-    { code: 6004, name: "ArithmeticOverflow", msg: "Arithmetic overflow" },
+    { code: 6004, name: "ArithmeticError", msg: "Arithmetic error" },
     { code: 6005, name: "AlreadyMined", msg: "Position already mined" },
     { code: 6006, name: "NoGoldHere", msg: "No gold at this position" },
-    { code: 6007, name: "GoldSpotMismatch", msg: "Gold spot account mismatch — must be derived from new position" },
   ],
 };
 
@@ -209,9 +160,8 @@ export const GoldMinerIDL: Idl = {
 export interface GameConfigAccount {
   authority: string;
   gridSize: number;
-  goldiumMint: string;
+  goldMint: string;
   totalGoldMined: string;
-  moveFeeLamports: string;
   bump: number;
 }
 
@@ -223,15 +173,4 @@ export interface PlayerAccount {
   goldiumMinted: string;
   sessionExpiresAt: string;
   bump: number;
-}
-
-export interface GoldSpotAccount {
-  hasGold: boolean;
-  minedBy: string | null;
-}
-
-export type Direction = "Up" | "Down" | "Left" | "Right";
-
-export function directionToAnchor(direction: Direction): Record<string, {}> {
-  return { [direction]: {} };
 }

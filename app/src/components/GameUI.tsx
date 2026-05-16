@@ -50,7 +50,7 @@ export default function GameUI() {
                 </ul>
                 <div className="mt-3 text-xs text-gray-500">
                   <p>Gold formula: (x &amp; y) % 7 == 0</p>
-                  <p>~1,400 gold spots on the grid</p>
+                  <p>~150,000 gold spots on 1024×1024 grid</p>
                 </div>
               </div>
               {/* Audio Controls */}
