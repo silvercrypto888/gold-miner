@@ -363,8 +363,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
             { pubkey: playerAta, isSigner: false, isWritable: true },                  // player_token_account
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
-            // gold_spot passed as remaining_accounts[0] — deployed program reads it from there
-            { pubkey: goldSpotPda, isSigner: false, isWritable: true },                // gold_spot (remaining)
           ],
           programId,
           data,
@@ -495,8 +493,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
                   { pubkey: ataProgram, isSigner: false, isWritable: false },
                   { pubkey: playerAta, isSigner: false, isWritable: true },
                   { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-                  // gold_spot passed as remaining_accounts[0]
-                  { pubkey: goldSpotPda, isSigner: false, isWritable: true },
                 ],
                 programId: retryProgramId,
                 data: retryData,
