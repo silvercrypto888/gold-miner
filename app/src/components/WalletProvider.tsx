@@ -1,7 +1,9 @@
 "use client";
 
 import { ReactNode, useMemo } from "react";
+// @ts-ignore - React 19 types incompatibility with wallet-adapter
 import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@solana/wallet-adapter-react";
+// @ts-ignore
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { RPC_URL } from "@/lib/constants";
 
@@ -17,8 +19,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const wallets = useMemo(() => [], []);
 
   return (
+    // @ts-ignore
     <ConnectionProvider endpoint={endpoint}>
+      {/* @ts-ignore */}
       <SolanaWalletProvider wallets={wallets} autoConnect>
+        {/* @ts-ignore */}
         <WalletModalProvider>{children}</WalletModalProvider>
       </SolanaWalletProvider>
     </ConnectionProvider>
