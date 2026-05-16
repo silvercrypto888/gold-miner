@@ -304,6 +304,25 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         const [playerPda] = getPlayerPda(walletPk, programId);
         const [gameConfigPda] = getGameConfigPda();
         const [goldSpotPda] = getGoldSpotPda(newX, newY, programId);
+
+        // Pre-check: if gold_spot already exists and is depleted, don't waste a TX
+        if (hasGoldAt(newX, newY)) {
+          try {
+            const spotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
+            if (spotInfo && spotInfo.data.length > 8) {
+              const hasGold = spotInfo.data[8] !== 0;
+              if (!hasGold) {
+                // Spot already mined — just move, no TX needed
+                setPosition({ x: newX, y: newY });
+                setGoldMined(preMineGold);
+                setIsMoving(false);
+                setStatus("Moved");
+                updateVisibleGold();
+                return;
+              }
+            }
+          } catch {}
+        }
         
         if (!goldiumMintRef.current) {
           throw new Error("Goldium mint not loaded");
