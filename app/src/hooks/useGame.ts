@@ -248,8 +248,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const now = Date.now();
       if (now - lastMoveTime < MOVE_COOLDOWN_MS) return;
 
-      // Sync position AND pre-mine gold from on-chain PDA (single read, source of truth)
-      let chainX: number, chainY: number;
+      // Use local position for direction calc (always accurate after confirmed TX)
+      // Chain read is only for preMineGold — RPC may lag behind confirm state
+      const curPos = positionRef.current;
       let preMineGold = 0;
       try {
         const walletPk = playerState?.wallet;
@@ -257,34 +258,23 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           const [prePda] = getPlayerPda(walletPk, getProgramId());
           const info = await connectionRef.current.getAccountInfo(prePda, 'confirmed');
           if (info && info.data.length >= 88) {
-            chainX = info.data.readUInt32LE(72);
-            chainY = info.data.readUInt32LE(76);
             const low32 = info.data.readUInt32LE(80);
             const high32 = info.data.readUInt32LE(84);
             preMineGold = low32 + high32 * 0x100000000;
-          } else {
-            chainX = positionRef.current.x;
-            chainY = positionRef.current.y;
           }
-        } else {
-          chainX = positionRef.current.x;
-          chainY = positionRef.current.y;
         }
-      } catch {
-        chainX = positionRef.current.x;
-        chainY = positionRef.current.y;
-      }
+      } catch {}
 
-      let newX = chainX, newY = chainY;
+      let newX = curPos.x, newY = curPos.y;
       switch (direction) {
-        case Direction.Up:    newY = chainY + 1; break;
-        case Direction.Down:  newY = chainY - 1; break;
-        case Direction.Left:  newX = chainX - 1; break;
-        case Direction.Right: newX = chainX + 1; break;
+        case Direction.Up:    newY = curPos.y + 1; break;
+        case Direction.Down:  newY = curPos.y - 1; break;
+        case Direction.Left:  newX = curPos.x - 1; break;
+        case Direction.Right: newX = curPos.x + 1; break;
       }
       // Quick bounds check — if out of bounds the program will reject with OutOfBounds
       if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) return;
-      if (newX === chainX && newY === chainY) return;
+      if (newX === curPos.x && newY === curPos.y) return;
 
       setIsMoving(true);
       setLastMoveTime(now);
@@ -411,15 +401,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           return;
         }
 
-        // TX confirmed — sync position from chain
+        // TX confirmed — position on chain matches what we sent
+        // Don't trust RPC read for position (may lag), use newX/newY directly
+        // Only read chain to check if gold was mined
         try {
           const accountInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
           if (accountInfo) {
-            const chainX = accountInfo.data.readUInt32LE(72);
-            const chainY = accountInfo.data.readUInt32LE(76);
-            setPosition({ x: chainX, y: chainY });
-            
-            // Read goldiumMinted from player PDA — safely read as two u32 (LE) and combine
             const low32 = accountInfo.data.readUInt32LE(80);
             const high32 = accountInfo.data.readUInt32LE(84);
             const postMineGold = low32 + high32 * 0x100000000;
@@ -430,13 +417,13 @@ export function useGame(props?: UseGameProps): UseGameReturn {
               setStatus("Moved");
             }
           } else {
-            setPosition({ x: newX, y: newY });
             setStatus("Moved");
           }
         } catch {
-          setPosition({ x: newX, y: newY });
           setStatus("Moved");
         }
+        // Always trust the destination we sent — chain accepted it
+        setPosition({ x: newX, y: newY });
 
         // Refresh visible gold
         updateVisibleGold();
