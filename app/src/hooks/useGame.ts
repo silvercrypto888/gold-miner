@@ -375,7 +375,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             setPosition({ x: chainX, y: chainY });
             
             // Read goldiumMinted from player PDA (offset 80, u64 LE) — authoritative
-            const postMineGold = Number(accountInfo.data.readBigUint64LE(80));
+            const postMineGold = Number(Buffer.from(accountInfo.data).readBigUint64LE(80));
             if (postMineGold > preMineGold) {
               setGoldMined(postMineGold);
               setStatus("Mined!");
