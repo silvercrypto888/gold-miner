@@ -48,9 +48,9 @@ export function PlayerHUD() {
         {playerState && (
           <>
             <div className="text-right">
-              <div className="text-xs text-gray-400">GLD Mined</div>
+              <div className="text-xs text-gray-400">GLD in Wallet</div>
               <div className="text-sm font-bold text-yellow-400">
-                {formatGoldium(goldMined)}
+                {formatGoldium(goldiumBalance)}
               </div>
             </div>
           </>
