@@ -250,8 +250,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     setPosition({ x: newX, y: newY }); // optimistic
     setStatus("Moving...");
 
+    const programId = getProgramId();
+    const walletPk = playerState.wallet;
+    let playerPda: PublicKey | undefined;
+
     try {
-      const programId = getProgramId();
       const signerKp = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
       // Check session key balance
@@ -262,7 +265,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         catch { setIsMoving(false); setPosition(positionRef.current); setStatus(""); return; }
       }
 
-      const walletPk = playerState.wallet;
       if (!walletPk) return;
 
       const [playerPda] = getPlayerPda(walletPk, programId);

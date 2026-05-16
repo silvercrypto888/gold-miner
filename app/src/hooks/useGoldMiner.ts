@@ -58,7 +58,7 @@ export function useGoldMiner() {
     if (!publicKey || !programRef.current) return;
     try {
       const [playerPda] = getPlayerPda(publicKey, getProgramId());
-      const account = await programRef.current.account.player.fetch(playerPda) as any;
+      const account = await (programRef.current.account as any).player.fetch(playerPda);
       if (account) {
         setPlayerAccount(account as PlayerAccount);
         const balance = await connectionRef.current!.getBalance(playerPda);
@@ -74,7 +74,7 @@ export function useGoldMiner() {
     if (!programRef.current) return;
     try {
       const [configPda] = getGameConfigPda(getProgramId());
-      const config = await programRef.current.account.gameConfig.fetch(configPda) as any;
+      const config = await (programRef.current.account as any).gameConfig.fetch(configPda);
       if (config) setGameConfig(config as GameConfigAccount);
     } catch {}
   }, []);
