@@ -266,10 +266,15 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // Read pre-mine Goldium count directly from on-chain PDA (avoids stale closure)
       let preMineGold = 0;
       try {
-        const preInfo = await connectionRef.current.getAccountInfo(playerPda, 'confirmed');
-        if (preInfo) {
-          const preDv = new DataView(preInfo.data.buffer, preInfo.data.byteOffset, preInfo.data.byteLength);
-          preMineGold = Number(preDv.getBigUint64(80, true));
+        const walletPk = playerState?.wallet;
+        if (walletPk) {
+          const [prePda] = getPlayerPda(walletPk, getProgramId());
+          const preInfo = await connectionRef.current.getAccountInfo(prePda, 'confirmed');
+          if (preInfo) {
+            const low32 = preInfo.data.readUInt32LE(80);
+            const high32 = preInfo.data.readUInt32LE(84);
+            preMineGold = low32 + high32 * 0x100000000;
+          }
         }
       } catch {}
 
