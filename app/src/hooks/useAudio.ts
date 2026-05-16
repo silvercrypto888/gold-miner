@@ -21,10 +21,27 @@ export function useAudio() {
   const trackListRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
   const musicInitRef = useRef(false);
+  // Sound cache — lazy, only creates Audio on first play
   const soundCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
-  // Discover existing tracks
+  const getSound = useCallback((url: string): HTMLAudioElement => {
+    let audio = soundCacheRef.current.get(url);
+    if (!audio) {
+      audio = new Audio(url);
+      audio.preload = "none";
+      soundCacheRef.current.set(url, audio);
+    }
+    return audio;
+  }, []);
+
+  // Discover existing tracks — HEAD probes are cheap (just headers, not body)
+  // but we cache the result so it only runs once per session
   const discoverTracks = useCallback(async () => {
+    const cached = sessionStorage.getItem("goldminer_tracks");
+    if (cached) {
+      trackListRef.current = JSON.parse(cached);
+      return trackListRef.current;
+    }
     const found: string[] = [];
     const promises = TRACK_CANDIDATES.map(url =>
       fetch(url, { method: "HEAD" })
@@ -33,6 +50,7 @@ export function useAudio() {
     );
     await Promise.all(promises);
     trackListRef.current = found;
+    try { sessionStorage.setItem("goldminer_tracks", JSON.stringify(found)); } catch {}
     return found;
   }, []);
 
@@ -78,34 +96,17 @@ export function useAudio() {
     });
   }, [discoverTracks, playNextTrack]);
 
-  // Pre-cache sound effects when enabled
-  useEffect(() => {
-    if (!soundEnabled) return;
-    Object.values(SOUND_CANDIDATES).forEach(url => {
-      if (!soundCacheRef.current.has(url)) {
-        const audio = new Audio(url);
-        audio.preload = "auto";
-        soundCacheRef.current.set(url, audio);
-      }
-    });
-  }, [soundEnabled]);
-
   const playSound = useCallback(
     (name: "mine" | "walk") => {
       if (!soundEnabled) return;
       const url = SOUND_CANDIDATES[name];
       if (!url) return;
 
-      // Use cached or create one-shot
-      let audio = soundCacheRef.current.get(url);
-      if (!audio) {
-        audio = new Audio(url);
-        soundCacheRef.current.set(url, audio);
-      }
+      const audio = getSound(url);
       audio.currentTime = 0;
       audio.play().catch(() => {});
     },
-    [soundEnabled]
+    [soundEnabled, getSound]
   );
 
   return {
