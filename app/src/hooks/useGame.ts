@@ -248,37 +248,48 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const now = Date.now();
       if (now - lastMoveTime < MOVE_COOLDOWN_MS) return;
 
-      const curPos = positionRef.current;
-      let newX = curPos.x, newY = curPos.y;
-      switch (direction) {
-        case Direction.Up:    newY = curPos.y + 1; break;
-        case Direction.Down:  newY = curPos.y - 1; break;
-        case Direction.Left:  newX = curPos.x - 1; break;
-        case Direction.Right: newX = curPos.x + 1; break;
-      }
-      // Quick bounds check — if out of bounds the program will reject with OutOfBounds
-      if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) return;
-      if (newX === curPos.x && newY === curPos.y) return;
-
-      setIsMoving(true);
-      setLastMoveTime(now);
-      setPosition({ x: newX, y: newY }); // Optimistic
-      setStatus("Moving...");
-
-      // Read pre-mine Goldium count directly from on-chain PDA (avoids stale closure)
+      // Sync position AND pre-mine gold from on-chain PDA (single read, source of truth)
+      let chainX: number, chainY: number;
       let preMineGold = 0;
       try {
         const walletPk = playerState?.wallet;
         if (walletPk) {
           const [prePda] = getPlayerPda(walletPk, getProgramId());
-          const preInfo = await connectionRef.current.getAccountInfo(prePda, 'confirmed');
-          if (preInfo) {
-            const low32 = preInfo.data.readUInt32LE(80);
-            const high32 = preInfo.data.readUInt32LE(84);
+          const info = await connectionRef.current.getAccountInfo(prePda, 'confirmed');
+          if (info && info.data.length >= 88) {
+            chainX = info.data.readUInt32LE(72);
+            chainY = info.data.readUInt32LE(76);
+            const low32 = info.data.readUInt32LE(80);
+            const high32 = info.data.readUInt32LE(84);
             preMineGold = low32 + high32 * 0x100000000;
+          } else {
+            chainX = positionRef.current.x;
+            chainY = positionRef.current.y;
           }
+        } else {
+          chainX = positionRef.current.x;
+          chainY = positionRef.current.y;
         }
-      } catch {}
+      } catch {
+        chainX = positionRef.current.x;
+        chainY = positionRef.current.y;
+      }
+
+      let newX = chainX, newY = chainY;
+      switch (direction) {
+        case Direction.Up:    newY = chainY + 1; break;
+        case Direction.Down:  newY = chainY - 1; break;
+        case Direction.Left:  newX = chainX - 1; break;
+        case Direction.Right: newX = chainX + 1; break;
+      }
+      // Quick bounds check — if out of bounds the program will reject with OutOfBounds
+      if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) return;
+      if (newX === chainX && newY === chainY) return;
+
+      setIsMoving(true);
+      setLastMoveTime(now);
+      setPosition({ x: newX, y: newY }); // Optimistic
+      setStatus("Moving...");
 
       try {
         const programId = getProgramId();
