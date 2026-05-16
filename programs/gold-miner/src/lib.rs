@@ -190,13 +190,14 @@ pub mod gold_miner {
     /// Move player and mine gold at the new position in a single atomic TX.
     /// If gold exists at the new position and hasn't been mined, mines it.
     /// If no gold at the new position, just completes the move.
-    /// The client must pass new_x/new_y matching the direction result so the
-    /// gold_spot PDA can be derived from the NEW position before the move.
+    /// Move player and mine gold at the new position in a single atomic TX.
+    /// Computes new position from on-chain PDA + direction — no client-provided coords.
+    /// The client passes remaining_accounts[0] = gold_spot PDA for the new position.
+    /// If the gold_spot PDA doesn't match the computed position, the move still succeeds
+    /// (no gold mined). This avoids race conditions from RPC propagation delay.
     pub fn move_and_mine<'info>(
         ctx: Context<'_, '_, '_, 'info, MoveAndMine<'info>>,
         direction: Direction,
-        new_x: u32,
-        new_y: u32,
     ) -> Result<()> {
         let clock = Clock::get()?;
 
@@ -212,28 +213,34 @@ pub mod gold_miner {
             GoldMinerError::SessionExpired
         );
 
-        // Calculate expected new position from direction
-        let (expected_x, expected_y) = match direction {
+        // Compute new position from on-chain PDA + direction (always source of truth)
+        let (new_x, new_y) = match direction {
             Direction::Up => (ctx.accounts.player.position_x, ctx.accounts.player.position_y.saturating_add(1)),
             Direction::Down => (ctx.accounts.player.position_x, ctx.accounts.player.position_y.saturating_sub(1)),
             Direction::Left => (ctx.accounts.player.position_x.saturating_sub(1), ctx.accounts.player.position_y),
             Direction::Right => (ctx.accounts.player.position_x.saturating_add(1), ctx.accounts.player.position_y),
         };
 
-        // Verify client-provided coords match direction calculation
-        require!(
-            new_x == expected_x && new_y == expected_y,
-            GoldMinerError::GoldSpotMismatch
-        );
-
         // Validate bounds (1..=GRID_SIZE)
         require!(new_x >= 1 && new_x <= GRID_SIZE, GoldMinerError::OutOfBounds);
         require!(new_y >= 1 && new_y <= GRID_SIZE, GoldMinerError::OutOfBounds);
 
-        // Get gold_spot from remaining_accounts and verify PDA
-        let gold_spot_info = ctx.remaining_accounts.first()
-            .ok_or(GoldMinerError::GoldSpotMismatch)?;
-        let (expected_gold_spot, gold_spot_bump) = Pubkey::find_program_address(
+        // Move first — always succeeds
+        ctx.accounts.player.position_x = new_x;
+        ctx.accounts.player.position_y = new_y;
+        msg!("Player moved to ({}, {})", new_x, new_y);
+
+        // Now try to mine — check if gold exists at new position
+        if !has_gold_at(new_x, new_y) {
+            return Ok(());
+        }
+
+        // Get gold_spot from remaining_accounts, verify PDA
+        let gold_spot_info = match ctx.remaining_accounts.first() {
+            Some(info) => info,
+            None => return Ok(()), // No gold_spot passed — just moved
+        };
+        let gold_spot_key = Pubkey::find_program_address(
             &[
                 b"gold_spot",
                 new_x.to_be_bytes().as_ref(),
@@ -241,123 +248,106 @@ pub mod gold_miner {
             ],
             ctx.program_id,
         );
-        require!(
-            gold_spot_info.key() == expected_gold_spot,
-            GoldMinerError::GoldSpotMismatch
-        );
-
-        // Create gold_spot account if needed (inline — avoids lifetime issues)
-        if has_gold_at(new_x, new_y) {
-            if gold_spot_info.data_len() == 0 && gold_spot_info.lamports() == 0 {
-                let space = 8 + GoldSpot::SIZE as usize;
-                let rent = Rent::get()?;
-                let rent_lamports = rent.minimum_balance(space);
-                let x_bytes = new_x.to_be_bytes();
-                let y_bytes = new_y.to_be_bytes();
-                let signer_seeds: &[&[&[u8]]] = &[&[
-                    b"gold_spot" as &[u8],
-                    x_bytes.as_ref(),
-                    y_bytes.as_ref(),
-                    &[gold_spot_bump],
-                ]];
-                let create_ix = system_instruction::create_account(
-                    ctx.accounts.session_signer.key,
-                    gold_spot_info.key,
-                    rent_lamports,
-                    space as u64,
-                    ctx.program_id,
-                );
-                anchor_lang::solana_program::program::invoke_signed(
-                    &create_ix,
-                    &[
-                        ctx.accounts.session_signer.to_account_info(),
-                        gold_spot_info.clone(),
-                        ctx.accounts.system_program.to_account_info(),
-                    ],
-                    signer_seeds,
-                )?;
-                // Initialize discriminator + mark has_gold = true for fresh account
-                let mut data = gold_spot_info.data.borrow_mut();
-                data[..8].copy_from_slice(&GoldSpot::DISCRIMINATOR);
-                data[8] = 1; // has_gold = true
-            }
+        if gold_spot_info.key() != gold_spot_key.0 {
+            // Client passed wrong gold_spot PDA — just move, skip mining
+            msg!("Gold spot PDA mismatch — move only, no mine");
+            return Ok(());
         }
 
-        // Now do mutable operations
-        let player = &mut ctx.accounts.player;
+        let gold_spot_bump = gold_spot_key.1;
 
-        // Update position
-        player.position_x = new_x;
-        player.position_y = new_y;
-
-        msg!("Player moved to ({}, {})", new_x, new_y);
-
-        // Check if there's gold at the new position
-        if has_gold_at(new_x, new_y) {
-            // Read gold_spot data, extract what we need, then drop the borrow
-            let should_mine = {
-                let data = gold_spot_info.data.borrow();
-                let disc = GoldSpot::DISCRIMINATOR;
-                let valid_data = (0..8).all(|i| data[i] == disc[i]);
-                if !valid_data {
-                    // Fresh account — gold here, hasn't been mined
-                    true
-                } else {
-                    // Existing account — check has_gold flag
-                    data[8] != 0
-                }
-            }; // data borrow dropped here
-
-            if !should_mine {
-                return Ok(());
-            }
-
-            // Mine the gold!
-            {
-                let mut data = gold_spot_info.data.borrow_mut();
-                let disc = GoldSpot::DISCRIMINATOR;
-                data[..8].copy_from_slice(&disc);
-                data[8] = 0; // has_gold = false
-                data[9] = 1; // mined_by = Some
-                data[10..42].copy_from_slice(player.wallet.as_ref());
-            }
-
-            // Update player stats
-            player.goldium_minted = player.goldium_minted.saturating_add(GOLD_PER_MINE);
-
-            // Update global counter
-            ctx.accounts.game_config.total_gold_mined =
-                ctx.accounts.game_config.total_gold_mined.saturating_add(1);
-
-            // Mint Goldium tokens to player
-            let config_bump = ctx.accounts.game_config.bump;
+        // Create gold_spot if needed
+        if gold_spot_info.data_len() == 0 && gold_spot_info.lamports() == 0 {
+            let space = 8 + GoldSpot::SIZE as usize;
+            let rent = Rent::get()?;
+            let rent_lamports = rent.minimum_balance(space);
+            let x_bytes = new_x.to_be_bytes();
+            let y_bytes = new_y.to_be_bytes();
             let signer_seeds: &[&[&[u8]]] = &[&[
-                b"game_config",
-                &[config_bump],
+                b"gold_spot" as &[u8],
+                x_bytes.as_ref(),
+                y_bytes.as_ref(),
+                &[gold_spot_bump],
             ]];
-
-            let cpi_accounts = MintTo {
-                mint: ctx.accounts.goldium_mint.to_account_info(),
-                to: ctx.accounts.player_token_account.to_account_info(),
-                authority: ctx.accounts.game_config.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
+            let create_ix = system_instruction::create_account(
+                ctx.accounts.session_signer.key,
+                gold_spot_info.key,
+                rent_lamports,
+                space as u64,
+                ctx.program_id,
+            );
+            anchor_lang::solana_program::program::invoke_signed(
+                &create_ix,
+                &[
+                    ctx.accounts.session_signer.to_account_info(),
+                    gold_spot_info.clone(),
+                    ctx.accounts.system_program.to_account_info(),
+                ],
                 signer_seeds,
-            );
-            let amount = GOLD_PER_MINE
-                .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
-                .ok_or(GoldMinerError::ArithmeticOverflow)?;
-            mint_to(cpi_ctx, amount)?;
-
-            msg!(
-                "GOLD MINED! +{} Goldium at position ({}, {})",
-                GOLD_PER_MINE,
-                new_x,
-                new_y
-            );
+            )?;
+            // Initialize discriminator + mark has_gold = true for fresh account
+            let mut data = gold_spot_info.data.borrow_mut();
+            data[..8].copy_from_slice(&GoldSpot::DISCRIMINATOR);
+            data[8] = 1; // has_gold = true
         }
+
+        // Check if gold is available to mine
+        let should_mine = {
+            let data = gold_spot_info.data.borrow();
+            let disc = GoldSpot::DISCRIMINATOR;
+            let valid_data = (0..8).all(|i| data[i] == disc[i]);
+            if !valid_data {
+                true
+            } else {
+                data[8] != 0
+            }
+        };
+
+        if !should_mine {
+            return Ok(());
+        }
+
+        // Mine the gold!
+        {
+            let mut data = gold_spot_info.data.borrow_mut();
+            let disc = GoldSpot::DISCRIMINATOR;
+            data[..8].copy_from_slice(&disc);
+            data[8] = 0;
+            data[9] = 1;
+            data[10..42].copy_from_slice(ctx.accounts.player.wallet.as_ref());
+        }
+
+        ctx.accounts.player.goldium_minted = ctx.accounts.player.goldium_minted.saturating_add(GOLD_PER_MINE);
+        ctx.accounts.game_config.total_gold_mined =
+            ctx.accounts.game_config.total_gold_mined.saturating_add(1);
+
+        let config_bump = ctx.accounts.game_config.bump;
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"game_config",
+            &[config_bump],
+        ]];
+
+        let cpi_accounts = MintTo {
+            mint: ctx.accounts.goldium_mint.to_account_info(),
+            to: ctx.accounts.player_token_account.to_account_info(),
+            authority: ctx.accounts.game_config.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
+            signer_seeds,
+        );
+        let amount = GOLD_PER_MINE
+            .checked_mul(10u64.pow(GOLDIUM_DECIMALS as u32))
+            .ok_or(GoldMinerError::ArithmeticOverflow)?;
+        mint_to(cpi_ctx, amount)?;
+
+        msg!(
+            "GOLD MINED! +{} Goldium at position ({}, {})",
+            GOLD_PER_MINE,
+            new_x,
+            new_y
+        );
 
         Ok(())
     }

@@ -335,18 +335,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         const tokenProgram = getToken2022ProgramId();
         const ataProgram = getAtaProgramId();
 
-        // Build instruction data: discriminator + direction + newX + newY
-        // newX and newY are u32 (4 bytes each, little-endian as per Anchor)
-        const newXBuf = Buffer.alloc(4);
-        newXBuf.writeUInt32LE(newX, 0);
-        const newYBuf = Buffer.alloc(4);
-        newYBuf.writeUInt32LE(newY, 0);
-        
+        // Build instruction data: discriminator + direction (program computes coords from PDA)
         const data = Buffer.concat([
           MOVE_AND_MINE_DISC,
           Buffer.from([DIRECTION_VARIANT[direction]]),
-          newXBuf,
-          newYBuf
         ]);
 
         // Create ATA idempotently if needed — owned by wallet, not Player PDA
@@ -478,16 +470,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
               const tokenProgram = getToken2022ProgramId();
               const ataProgram = getAtaProgramId();
 
-              const newXBuf = Buffer.alloc(4);
-              newXBuf.writeUInt32LE(newX, 0);
-              const newYBuf = Buffer.alloc(4);
-              newYBuf.writeUInt32LE(newY, 0);
-              
               const retryData = Buffer.concat([
                 MOVE_AND_MINE_DISC,
                 Buffer.from([DIRECTION_VARIANT[direction]]),
-                newXBuf,
-                newYBuf
               ]);
 
               const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
