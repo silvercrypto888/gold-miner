@@ -303,7 +303,7 @@ pub mod gold_miner {
                     true
                 } else {
                     // Existing account — check has_gold flag
-                    data[8] == 0 || data[9] == 0
+                    data[8] != 0
                 }
             }; // data borrow dropped here
 

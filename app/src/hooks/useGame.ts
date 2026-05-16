@@ -263,6 +263,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       setPosition({ x: newX, y: newY }); // Optimistic
       setStatus("Moving...");
 
+      const preMineGold = playerState.goldiumMinted;
+
       try {
         const programId = getProgramId();
         const sessionSigner = Keypair.fromSecretKey(sessionKeypair.secretKey);
@@ -372,23 +374,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             const chainY = accountInfo.data.readUInt32LE(76);
             setPosition({ x: chainX, y: chainY });
             
-            // Check if gold was mined by checking the transaction logs or gold_spot account
-            // For simplicity, check if gold_spot exists and is mined
-            try {
-              const goldSpotInfo = await connectionRef.current.getAccountInfo(goldSpotPda, 'confirmed');
-              if (goldSpotInfo) {
-                const hasGold = goldSpotInfo.data[8] === 1;
-                if (!hasGold) {
-                  // Gold was mined!
-                  setGoldMined(prev => prev + GOLD_PER_MINE);
-                  setStatus("Mined!");
-                } else {
-                  setStatus("Moved");
-                }
-              } else {
-                setStatus("Moved");
-              }
-            } catch {
+            // Read goldiumMinted from player PDA (offset 80, u64 LE) — authoritative
+            const postMineGold = Number(accountInfo.data.readBigUint64LE(80));
+            if (postMineGold > preMineGold) {
+              setGoldMined(postMineGold);
+              setStatus("Mined!");
+            } else {
               setStatus("Moved");
             }
           } else {
