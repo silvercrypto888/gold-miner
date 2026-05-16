@@ -251,11 +251,13 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const curPos = positionRef.current;
       let newX = curPos.x, newY = curPos.y;
       switch (direction) {
-        case Direction.Up:    newY = Math.min(GRID_SIZE, curPos.y + 1); break;
-        case Direction.Down:  newY = Math.max(1, curPos.y - 1); break;
-        case Direction.Left:  newX = Math.max(1, curPos.x - 1); break;
-        case Direction.Right: newX = Math.min(GRID_SIZE, curPos.x + 1); break;
+        case Direction.Up:    newY = curPos.y + 1; break;
+        case Direction.Down:  newY = curPos.y - 1; break;
+        case Direction.Left:  newX = curPos.x - 1; break;
+        case Direction.Right: newX = curPos.x + 1; break;
       }
+      // Quick bounds check — if out of bounds the program will reject with OutOfBounds
+      if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) return;
       if (newX === curPos.x && newY === curPos.y) return;
 
       setIsMoving(true);
