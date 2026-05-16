@@ -52,6 +52,14 @@ export function useGoldMiner() {
     }
   }, [publicKey, signTransaction]);
 
+  // Fetch Goldium balance when gameConfig loads
+  // Fetch GLD balance on wallet connect — no longer depends on Anchor IDL
+  useEffect(() => {
+    if (publicKey) {
+      fetchGoldiumBalance();
+    }
+  }, [publicKey]);
+
   // Fetch player data
   const fetchPlayerData = useCallback(async () => {
     if (!publicKey || !programRef.current) return;
@@ -183,13 +191,23 @@ export function useGoldMiner() {
     }
   }, [publicKey, signTransaction, fetchPlayerData]);
 
-  // Get Goldium token balance
+  // Get Goldium token balance — reads GameConfig from raw RPC, bypassing Anchor IDL
   const fetchGoldiumBalance = useCallback(async () => {
-    if (!publicKey || !gameConfig) return;
+    if (!publicKey) return;
 
     try {
+      const [configPda] = getGameConfigPda(getProgramId());
+      const configInfo = await connectionRef.current!.getAccountInfo(configPda);
+      if (!configInfo) {
+        setGoldiumBalance(0);
+        return;
+      }
+
+      // GameConfig: discriminator(8) + authority(32) + gridSize(4) + goldiumMint(32)
+      const goldiumMint = new PublicKey(configInfo.data.slice(44, 76));
+
       const tokenAccount = getAssociatedTokenAddressSync(
-        new PublicKey(gameConfig.goldiumMint),
+        goldiumMint,
         publicKey,
         false,
         getToken2022ProgramId()
@@ -202,7 +220,7 @@ export function useGoldMiner() {
     } catch (err) {
       setGoldiumBalance(0);
     }
-  }, [publicKey, gameConfig]);
+  }, [publicKey]);
 
   return {
     playerAccount,
