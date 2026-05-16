@@ -593,21 +593,35 @@ pub struct MoveAndMine<'info> {
     /// declared here. This avoids Anchor's "signer privilege escalated" error
     /// because the PDA seeds depend on instruction args (new_x, new_y) which
     /// can't be expressed in struct constraints.
+    ///
+    /// IMPORTANT: wallet MUST come before player_token_account so Anchor can
+    /// resolve the associated_token::authority and token_program references.
+    /// Otherwise it reads the wrong account index.
+
+    /// CHECK: the wallet that owns this player account
+    #[account(
+        mut,
+        address = player.wallet @ GoldMinerError::InvalidSessionKey,
+    )]
+    pub wallet: AccountInfo<'info>,
 
     #[account(mut)]
     pub goldium_mint: InterfaceAccount<'info, Mint>,
 
-    /// Associated token account for player's Goldium
+    /// Token-2022 and ATA programs declared before player_token_account so
+    /// Anchor can resolve associated_token constraints by name, not by index
+    pub token_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+
+    /// Player's Goldium ATA, owned by wallet (not Player PDA)
     #[account(
         mut,
         associated_token::mint = goldium_mint,
-        associated_token::authority = player,
+        associated_token::authority = wallet,
         associated_token::token_program = token_program,
     )]
     pub player_token_account: InterfaceAccount<'info, TokenAccountInterface>,
 
-    pub token_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 

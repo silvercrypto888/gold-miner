@@ -39,11 +39,12 @@ export function getAtaProgramId(): PublicKey {
   return _ATA_PROGRAM_ID;
 }
 
-// Derive player's Goldium ATA (Token-2022)
-export function getPlayerGoldiumAta(goldiumMint: PublicKey, playerPda: PublicKey): PublicKey {
+// Derive player's Goldium ATA (Token-2022) — owned by the wallet, not the Player PDA
+// This ensures GLD goes directly to the wallet that mined it
+export function getPlayerGoldiumAta(goldiumMint: PublicKey, wallet: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [
-      playerPda.toBuffer(),
+      wallet.toBuffer(),
       getToken2022ProgramId().toBuffer(),
       goldiumMint.toBuffer(),
     ],

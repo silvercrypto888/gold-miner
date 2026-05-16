@@ -81,11 +81,11 @@ export const GoldMinerIDL: Idl = {
         { name: "sessionSigner", writable: true, signer: true },
         { name: "gameConfig", writable: true },
         { name: "player", writable: true },
-        { name: "goldSpot", writable: true },
+        { name: "wallet", writable: true },
         { name: "goldiumMint", writable: true },
-        { name: "playerTokenAccount", writable: true },
         { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
         { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
+        { name: "playerTokenAccount", writable: true },
         { name: "systemProgram", address: "11111111111111111111111111111111" },
       ],
       args: [

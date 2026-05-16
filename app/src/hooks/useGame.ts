@@ -294,7 +294,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           throw new Error("Goldium mint not loaded");
         }
         const goldiumMint = goldiumMintRef.current;
-        const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
+        const playerAta = getPlayerGoldiumAta(goldiumMint, walletPk);
         const tokenProgram = getToken2022ProgramId();
         const ataProgram = getAtaProgramId();
 
@@ -312,11 +312,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           newYBuf
         ]);
 
-        // Create ATA idempotently if needed
+        // Create ATA idempotently if needed — owned by wallet, not Player PDA
         const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
           sessionSigner.publicKey,
           playerAta,
-          playerPda,
+          walletPk,
           goldiumMint,
           tokenProgram,
           ataProgram
@@ -327,10 +327,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             { pubkey: sessionSigner.publicKey, isSigner: true, isWritable: true },   // session_signer (mut)
             { pubkey: gameConfigPda, isSigner: false, isWritable: true },              // game_config
             { pubkey: playerPda, isSigner: false, isWritable: true },                 // player
+            // wallet comes before goldium_mint so index matches Rust struct order
+            { pubkey: walletPk, isSigner: false, isWritable: true },                    // wallet (GLD owner)
             { pubkey: goldiumMint, isSigner: false, isWritable: true },                // goldium_mint
-            { pubkey: playerAta, isSigner: false, isWritable: true },                  // player_token_account
             { pubkey: tokenProgram, isSigner: false, isWritable: false },                // token_program
             { pubkey: ataProgram, isSigner: false, isWritable: false },                   // associated_token_program
+            { pubkey: playerAta, isSigner: false, isWritable: true },                  // player_token_account
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },      // system_program
             // gold_spot passed as remaining_accounts[0] — deployed program reads it from there
             { pubkey: goldSpotPda, isSigner: false, isWritable: true },                // gold_spot (remaining)
@@ -447,7 +449,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
               const [gameConfigPda] = getGameConfigPda();
               const [goldSpotPda] = getGoldSpotPda(newX, newY, retryProgramId);
               const goldiumMint = goldiumMintRef.current!;
-              const playerAta = getPlayerGoldiumAta(goldiumMint, playerPda);
+              const playerAta = getPlayerGoldiumAta(goldiumMint, retryWalletPk);
               const tokenProgram = getToken2022ProgramId();
               const ataProgram = getAtaProgramId();
 
@@ -466,7 +468,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
               const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
                 retrySigner.publicKey,
                 playerAta,
-                playerPda,
+                retryWalletPk,
                 goldiumMint,
                 tokenProgram,
                 ataProgram
@@ -477,10 +479,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
                   { pubkey: retrySigner.publicKey, isSigner: true, isWritable: true },
                   { pubkey: gameConfigPda, isSigner: false, isWritable: true },
                   { pubkey: playerPda, isSigner: false, isWritable: true },
+                  { pubkey: retryWalletPk, isSigner: false, isWritable: true },
                   { pubkey: goldiumMint, isSigner: false, isWritable: true },
-                  { pubkey: playerAta, isSigner: false, isWritable: true },
                   { pubkey: tokenProgram, isSigner: false, isWritable: false },
                   { pubkey: ataProgram, isSigner: false, isWritable: false },
+                  { pubkey: playerAta, isSigner: false, isWritable: true },
                   { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
                   // gold_spot passed as remaining_accounts[0]
                   { pubkey: goldSpotPda, isSigner: false, isWritable: true },
