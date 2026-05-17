@@ -38,7 +38,7 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const prevStatusRef = useRef(status);
   useEffect(() => {
     if (onPlaySound && status !== prevStatusRef.current) {
-      if (status === "Mined!") onPlaySound("mine");
+      if (status.startsWith("Mined")) onPlaySound("mine");
       else if (status === "Moved") onPlaySound("walk");
       prevStatusRef.current = status;
     }

@@ -320,12 +320,15 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const sig = await connRef.current.sendRawTransaction(tx.serialize());
       await confirmWithTimeout(connRef.current, sig as any, "confirmed");
 
-      // Check if we mined gold at the target cell
-      const minedGold = hasGoldAt(newX, newY);
+      // Check if gold was actually mined: cell has gold formula AND was NOT already mined in bitmap
+      const bitsBefore = bitmapRef.current;
+      const goldFormula = hasGoldAt(newX, newY);
+      const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
+      const newMine = goldFormula && !alreadyMined;
 
       // Refresh bitmap after mining — force fresh fetch AND update visibleGold immediately
       const freshBits = await fetchBitmap(true);
-      if (minedGold && freshBits) {
+      if (freshBits) {
         const cellMined = isCellMined(freshBits, newX, newY);
         if (cellMined) {
           // Immediately remove that gold spot from visibleGold
@@ -342,7 +345,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       } catch {}
 
       // Show success status for 3 seconds
-      setStatus(minedGold ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
+      setStatus(newMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
       setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();
     } catch (err: any) {
