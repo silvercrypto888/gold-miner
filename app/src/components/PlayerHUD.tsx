@@ -5,7 +5,6 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useSessionKey } from "@/hooks/useSessionKey";
 import { useGoldMiner } from "@/hooks/useGoldMiner";
-import { useGame } from "@/hooks/useGame";
 import { formatXNT, formatGoldium } from "@/lib/constants";
 import { shortenAddress, getTimeRemaining } from "@/lib/utils";
 
@@ -19,7 +18,6 @@ export function PlayerHUD() {
     clearSession,
     sweepSessionKey,
   } = useSessionKey();
-  const { goldMined } = useGame();
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
   const [sweepStatus, setSweepStatus] = useState<string | null>(null);
 
@@ -51,18 +49,8 @@ export function PlayerHUD() {
 
   return (
     <div className="flex items-center gap-3">
-      {/* GOLD Mined in this session */}
-      {sessionPubkey && (
-        <div className="text-right">
-          <div className="text-xs text-gray-400">GOLD Mined</div>
-          <div className="text-sm font-bold text-yellow-400">
-            {formatGoldium(goldMined)}
-          </div>
-        </div>
-      )}
-
       {/* GOLD in Wallet (ATA balance) */}
-      <div className="hidden sm:block text-right">
+      <div className="text-right">
         <div className="text-xs text-gray-400">GOLD in Wallet</div>
         <div className="text-sm font-bold text-yellow-400">
           {formatGoldium(goldiumBalance)}

@@ -139,12 +139,27 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     return bitmapRef.current;
   }, []);
 
-  // Update visible gold using the bitmap
-  const updateVisibleGold = useCallback(async () => {
-    const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
-    const bits = await fetchBitmap();
+  // Force bitmap+gold refresh (call after mining so new data is reflected)
+  const forceRefreshGold = useCallback(async () => {
+    const bits = await fetchBitmap(true);
+    const { minX, maxX, minY, maxY } = getViewportRange(positionRef.current.x, positionRef.current.y);
     const spots: GoldSpot[] = [];
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        if (hasGoldAt(x, y)) {
+          const mined = bits ? isCellMined(bits, x, y) : false;
+          spots.push({ x, y, hasGold: !mined });
+        }
+      }
+    }
+    setVisibleGold(spots);
+  }, [fetchBitmap]);
 
+  // Periodic gold refresh (every 5s, also on position change)
+  const updateVisibleGold = useCallback(async () => {
+    const bits = await fetchBitmap();
+    const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
+    const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
@@ -157,6 +172,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [position, fetchBitmap]);
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
+  // Extra periodic refresh so gold spots stay synced
+  useEffect(() => {
+    const interval = setInterval(() => fetchBitmap(), 5000);
+    return () => clearInterval(interval);
+  }, [fetchBitmap]);
 
   const getBlockhash = useCallback(async () => {
     const cached = cachedBlockhash.current;
@@ -300,8 +320,18 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const sig = await connRef.current.sendRawTransaction(tx.serialize());
       await confirmWithTimeout(connRef.current, sig as any, "confirmed");
 
-      // Refresh bitmap after mining
-      await fetchBitmap(true);
+      // Check if we mined gold at the target cell
+      const minedGold = hasGoldAt(newX, newY);
+
+      // Refresh bitmap after mining — force fresh fetch AND update visibleGold immediately
+      const freshBits = await fetchBitmap(true);
+      if (minedGold && freshBits) {
+        const cellMined = isCellMined(freshBits, newX, newY);
+        if (cellMined) {
+          // Immediately remove that gold spot from visibleGold
+          setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
+        }
+      }
 
       // Read final position from chain
       try {
@@ -311,7 +341,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         }
       } catch {}
 
-      setStatus("");
+      // Show success status for 3 seconds
+      setStatus(minedGold ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
+      setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();
     } catch (err: any) {
       const errMsg = err.message || String(err);

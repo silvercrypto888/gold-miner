@@ -291,11 +291,11 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
             <div className={`backdrop-blur px-4 py-2 rounded-lg border ${
               status === "Moving..." || status === "Mining..."
                 ? "bg-yellow-900/80 border-yellow-600 text-yellow-300"
-                : status === "Moved"
-                  ? "bg-blue-900/80 border-blue-600 text-blue-300"
-                  : "bg-green-900/80 border-green-600 text-green-300"
+                : status.startsWith("Mined")
+                  ? "bg-green-900/80 border-green-600 text-green-300"
+                  : "bg-blue-900/80 border-blue-600 text-blue-300"
             }`}>
-              <div className="text-sm">{status === "Moving..." || status === "Mining..." ? "⏳" : status === "Moved" ? "👟" : "⛏️"} {status}</div>
+              <div className="text-sm">{status === "Moving..." || status === "Mining..." ? "⏳" : status.startsWith("Mined") ? "⛏️" : "👟"} {status}</div>
             </div>
           )}
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
