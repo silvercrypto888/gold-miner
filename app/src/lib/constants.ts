@@ -24,6 +24,10 @@ export function getGoldMint(): PublicKey {
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.x1.xyz";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws.testnet.x1.xyz";
 
+const JOIN_GAME_DISC = Buffer.from([107, 112, 18, 38, 56, 173, 60, 128]);
+const START_SESSION_DISC = Buffer.from([23, 227, 111, 142, 212, 230, 3, 175]);
+const MOVE_AND_MINE_DISC = Buffer.from([26, 202, 228, 63, 206, 4, 137, 63]);
+
 // Token-2022 program on X1
 const X1_TOKEN_2022_BYTES = Uint8Array.from([
   0x06, 0xdd, 0xf6, 0xe1, 0xee, 0x75, 0x8f, 0xde,

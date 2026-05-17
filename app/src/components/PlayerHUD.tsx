@@ -23,7 +23,7 @@ export function PlayerHUD() {
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
   const [sweepStatus, setSweepStatus] = useState<string | null>(null);
 
-  // Poll GLD balance every 5s
+  // Poll GOLD balance every 5s
   useEffect(() => {
     if (!publicKey) return;
     fetchGoldiumBalance();
@@ -51,19 +51,19 @@ export function PlayerHUD() {
 
   return (
     <div className="flex items-center gap-3">
-      {/* GLD Mined in this session */}
+      {/* GOLD Mined in this session */}
       {sessionPubkey && (
         <div className="text-right">
-          <div className="text-xs text-gray-400">GLD Mined</div>
+          <div className="text-xs text-gray-400">GOLD Mined</div>
           <div className="text-sm font-bold text-yellow-400">
             {formatGoldium(goldMined)}
           </div>
         </div>
       )}
 
-      {/* GLD in Wallet (ATA balance) */}
+      {/* GOLD in Wallet (ATA balance) */}
       <div className="hidden sm:block text-right">
-        <div className="text-xs text-gray-400">GLD in Wallet</div>
+        <div className="text-xs text-gray-400">GOLD in Wallet</div>
         <div className="text-sm font-bold text-yellow-400">
           {formatGoldium(goldiumBalance)}
         </div>

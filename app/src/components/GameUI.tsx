@@ -46,7 +46,7 @@ export default function GameUI() {
                   <li>• Use Arrow Keys or WASD to move</li>
                   <li>• Find gold squares (yellow glow)</li>
                   <li>• Step on gold to mine it</li>
-                  <li>• Earn 100 GLD per mine</li>
+                  <li>• Earn 100 GOLD per mine</li>
                 </ul>
                 <div className="mt-3 text-xs text-gray-500">
                   <p>Gold formula: (x &amp; y) % 7 == 0</p>
