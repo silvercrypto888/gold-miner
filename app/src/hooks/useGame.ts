@@ -127,9 +127,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     try {
       const [bpda] = getGoldBitmapPda();
       const info = await connRef.current.getAccountInfo(bpda, "confirmed");
-      if (info && info.data.length >= 8 + BITMAP_BYTES) {
-        // Skip 8-byte Anchor discriminator
-        bitmapRef.current = new Uint8Array(info.data.slice(8, 8 + BITMAP_BYTES));
+      if (info && info.data.length >= BITMAP_BYTES) {
+        // Raw bitmap — no Anchor discriminator (unchecked account, owner = program)
+        bitmapRef.current = new Uint8Array(info.data.slice(0, BITMAP_BYTES));
         bitmapLastFetch.current = now;
         return bitmapRef.current;
       }
