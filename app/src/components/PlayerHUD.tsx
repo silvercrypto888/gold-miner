@@ -23,7 +23,7 @@ export function PlayerHUD() {
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
   const [sweepStatus, setSweepStatus] = useState<string | null>(null);
 
-  // Poll GLD balance every 5s — useGame hook instances are independent
+  // Poll GLD balance every 5s
   useEffect(() => {
     if (!publicKey) return;
     fetchGoldiumBalance();
@@ -50,26 +50,30 @@ export function PlayerHUD() {
   }
 
   return (
-    <div className="flex items-center gap-4">
-      {/* Stats */}
-      <div className="hidden sm:flex items-center gap-4">
-        {playerState && (
-          <>
-            <div className="text-right">
-              <div className="text-xs text-gray-400">GLD in Wallet</div>
-              <div className="text-sm font-bold text-yellow-400">
-                {formatGoldium(goldiumBalance)}
-              </div>
-            </div>
-          </>
-        )}
+    <div className="flex items-center gap-3">
+      {/* GLD Mined in this session */}
+      {sessionPubkey && (
+        <div className="text-right">
+          <div className="text-xs text-gray-400">GLD Mined</div>
+          <div className="text-sm font-bold text-yellow-400">
+            {formatGoldium(goldMined)}
+          </div>
+        </div>
+      )}
+
+      {/* GLD in Wallet (ATA balance) */}
+      <div className="hidden sm:block text-right">
+        <div className="text-xs text-gray-400">GLD in Wallet</div>
+        <div className="text-sm font-bold text-yellow-400">
+          {formatGoldium(goldiumBalance)}
+        </div>
       </div>
 
       {/* Session indicator + withdraw */}
       {sessionPubkey && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <div
-            className={`hidden md:block px-3 py-1 rounded-full text-xs font-medium ${
+            className={`hidden md:block px-2.5 py-1 rounded-full text-xs font-medium ${
               isSessionValid()
                 ? "bg-green-500/20 text-green-400 border border-green-500/50"
                 : "bg-red-500/20 text-red-400 border border-red-500/50"
@@ -79,7 +83,7 @@ export function PlayerHUD() {
           </div>
           <button
             onClick={handleWithdraw}
-            className="px-2 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+            className="px-2.5 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
             title="Withdraw remaining XNT from session key"
           >
             {sweepStatus || "Withdraw"}
