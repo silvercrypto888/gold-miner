@@ -34,6 +34,58 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const posSmoothRef = useRef({ start: position, end: position, startTime: 0, duration: 0 });
   const size = VIEWPORT_SIZE * CELL_SIZE;
 
+  // ── Foresight Mode ──
+  const [foresightMode, setForesightMode] = useState(false);
+  const foresightPosRef = useRef<{ x: number; y: number }>({ x: 1, y: 1 });
+
+  // Sync foresightPos with real position when NOT in foresight mode, or on toggle ON
+  const prevForesightRef = useRef(foresightMode);
+  useEffect(() => {
+    if (foresightMode && !prevForesightRef.current) {
+      // Just toggled ON — snap shade to player's current position
+      foresightPosRef.current = { ...position };
+    } else if (!foresightMode && prevForesightRef.current) {
+      // Just toggled OFF — shade disappears, viewport snaps back
+    }
+    prevForesightRef.current = foresightMode;
+  }, [foresightMode, position]);
+
+  // Capture-phase keydown: when foresight ON, intercept WASD/arrows before useGame's handler
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!foresightMode) return;
+      // Only intercept movement keys
+      const moveKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "W", "s", "S", "a", "A", "d", "D"];
+      if (!moveKeys.includes(e.key)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const dirMap: Record<string, { dx: number; dy: number }> = {
+        ArrowUp: { dx: 0, dy: 1 }, ArrowDown: { dx: 0, dy: -1 },
+        ArrowLeft: { dx: -1, dy: 0 }, ArrowRight: { dx: 1, dy: 0 },
+        w: { dx: 0, dy: 1 }, W: { dx: 0, dy: 1 },
+        s: { dx: 0, dy: -1 }, S: { dx: 0, dy: -1 },
+        a: { dx: -1, dy: 0 }, A: { dx: -1, dy: 0 },
+        d: { dx: 1, dy: 0 }, D: { dx: 1, dy: 0 },
+      };
+      const { dx, dy } = dirMap[e.key];
+      const fp = foresightPosRef.current;
+      const nx = fp.x + dx;
+      const ny = fp.y + dy;
+
+      // Bounds check
+      if (nx < 1 || nx > GRID_SIZE || ny < 1 || ny > GRID_SIZE) return;
+
+      // Manhattan distance cap from player's real position
+      const dist = Math.abs(nx - position.x) + Math.abs(ny - position.y);
+      if (dist > 40) return;
+
+      foresightPosRef.current = { x: nx, y: ny };
+    };
+    document.addEventListener("keydown", handler, { capture: true });
+    return () => document.removeEventListener("keydown", handler, { capture: true });
+  }, [foresightMode, position]);
+
   // Play sound effects on status changes
   const prevStatusRef = useRef(status);
   useEffect(() => {
@@ -60,6 +112,11 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   }, [position]);
 
   // ── Persistent render loop ──
+  const foresightRef = useRef(foresightMode);
+  foresightRef.current = foresightMode;
+  const playerPosRef = useRef(position);
+  playerPosRef.current = position;
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -73,22 +130,32 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
     function render(now: number) {
       if (stopped) return;
 
-      // Compute interpolated display position
-      const sm = posSmoothRef.current;
-      const elapsed = now - sm.startTime;
-      const t = Math.min(elapsed / sm.duration, 1);
-      const ease = 1 - Math.pow(1 - t, 3);
-      const dx = sm.start.x + (sm.end.x - sm.start.x) * ease;
-      const dy = sm.start.y + (sm.end.y - sm.start.y) * ease;
-      displayPosRef.current = { x: dx, y: dy };
+      const isForesight = foresightRef.current;
+      const realPos = playerPosRef.current;
+
+      // Compute the viewport center: normal player position, or foresight shade position
+      let viewX: number, viewY: number;
+      if (isForesight) {
+        viewX = foresightPosRef.current.x;
+        viewY = foresightPosRef.current.y;
+      } else {
+        // Compute interpolated display position for smooth player movement
+        const sm = posSmoothRef.current;
+        const elapsed = now - sm.startTime;
+        const t = Math.min(elapsed / sm.duration, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        viewX = sm.start.x + (sm.end.x - sm.start.x) * ease;
+        viewY = sm.start.y + (sm.end.y - sm.start.y) * ease;
+      }
+      displayPosRef.current = { x: viewX, y: viewY };
 
       const goldSpots = goldRef.current;
       const otherPlayers = playersRef.current;
       const showP = showPlayersRef.current;
 
-      const { minX, maxX, minY, maxY } = getViewportRange(Math.round(dx), Math.round(dy));
-      const offX = (dx - Math.floor(dx)) * CELL_SIZE;
-      const offY = (dy - Math.floor(dy)) * CELL_SIZE;
+      const { minX, maxX, minY, maxY } = getViewportRange(Math.round(viewX), Math.round(viewY));
+      const offX = (viewX - Math.floor(viewX)) * CELL_SIZE;
+      const offY = (viewY - Math.floor(viewY)) * CELL_SIZE;
 
       // Background
       ctx.fillStyle = "#111827";
@@ -138,12 +205,48 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
         }
       }
 
-      // Player (upright octahedron with specular highlight, same rot speed as gold)
-      const px = (dx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
-      const py = (maxY - dy) * CELL_SIZE + CELL_SIZE / 2 + offY;
+      // Foresight shade — translucent octahedron at view center
+      if (isForesight) {
+        const shadeX = (viewX - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+        const shadeY = (maxY - viewY) * CELL_SIZE + CELL_SIZE / 2 + offY;
+        const octaCanvas = renderOctahedron(now, CELL_SIZE - 4, 1.5);
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.drawImage(octaCanvas, shadeX - (CELL_SIZE - 4) / 2, shadeY - (CELL_SIZE - 4) / 2);
+        ctx.restore();
 
-      const octaCanvas = renderOctahedron(now, CELL_SIZE - 4, 1.5);
-      ctx.drawImage(octaCanvas, px - (CELL_SIZE - 4) / 2, py - (CELL_SIZE - 4) / 2);
+        // Outline around shade for visibility
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(
+          shadeX - CELL_SIZE / 2, shadeY - CELL_SIZE / 2,
+          CELL_SIZE, CELL_SIZE
+        );
+
+        // Also render the real player at their actual location (if visible in viewport)
+        const rpx = (realPos.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+        const rpy = (maxY - realPos.y) * CELL_SIZE + CELL_SIZE / 2 + offY;
+        const isRealVisible = realPos.x >= minX && realPos.x <= maxX && realPos.y >= minY && realPos.y <= maxY;
+        if (isRealVisible) {
+          const realOcta = renderOctahedron(now, CELL_SIZE - 4, 1.5);
+          ctx.drawImage(realOcta, rpx - (CELL_SIZE - 4) / 2, rpy - (CELL_SIZE - 4) / 2);
+
+          // Glow ring under real player
+          const glow = ctx.createRadialGradient(rpx, rpy, 2, rpx, rpy, 16);
+          glow.addColorStop(0, "rgba(250, 204, 21, 0.4)");
+          glow.addColorStop(1, "transparent");
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(rpx, rpy, 16, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        // Normal mode: render player (upright octahedron with specular highlight)
+        const px = (viewX - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+        const py = (maxY - viewY) * CELL_SIZE + CELL_SIZE / 2 + offY;
+        const octaCanvas = renderOctahedron(now, CELL_SIZE - 4, 1.5);
+        ctx.drawImage(octaCanvas, px - (CELL_SIZE - 4) / 2, py - (CELL_SIZE - 4) / 2);
+      }
 
       // Other players
       if (showP) {
@@ -184,6 +287,8 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
 
   // Handle clicks on canvas
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (foresightMode) return; // no movement in foresight mode
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -310,6 +415,20 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
               ({Math.round(position.x)}, {Math.round(position.y)})
             </div>
           </div>
+          {/* Foresight Mode toggle — below position panel */}
+          <button
+            onClick={() => setForesightMode(f => !f)}
+            className={`backdrop-blur px-4 py-2 rounded-lg border transition-all ${
+              foresightMode
+                ? "bg-indigo-700/80 border-indigo-500 text-indigo-200 shadow-lg shadow-indigo-500/20"
+                : "bg-gray-800/80 border-gray-600 text-gray-400 hover:border-gray-500"
+            }`}
+          >
+            <div className="text-sm text-gray-400">Foresight</div>
+            <div className="text-lg font-bold">
+              {foresightMode ? "👁 ON" : "👁 OFF"}
+            </div>
+          </button>
         </div>
       )}
 
