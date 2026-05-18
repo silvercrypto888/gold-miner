@@ -15,6 +15,30 @@ import {
 import { Direction, OtherPlayer, PlayerState } from "@/types";
 import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
 
+// Pre-built tile textures with cluster-dithered marble (lazy, cached at module level)
+let _darkTile: HTMLCanvasElement | null = null;
+let _lightTile: HTMLCanvasElement | null = null;
+
+function buildTile(baseHex: string, accentHex: string, seed: number): HTMLCanvasElement {
+  const tc = document.createElement('canvas');
+  tc.width = CELL_SIZE; tc.height = CELL_SIZE;
+  const tctx = tc.getContext('2d')!;
+  tctx.fillStyle = baseHex;
+  tctx.fillRect(0, 0, CELL_SIZE, CELL_SIZE);
+  tctx.fillStyle = accentHex;
+  const cs = 4;
+  for (let cy = 0; cy < CELL_SIZE / cs; cy++) {
+    for (let cx = 0; cx < CELL_SIZE / cs; cx++) {
+      let h = ((seed + cx * 11 + cy * 37) * 16807) | 0;
+      h = ((h ^ (h >> 8)) * 48271) | 0;
+      if (((h ^ (h >> 16)) & 0x7fffffff) % 100 < 30) {
+        tctx.fillRect(cx * cs, cy * cs, cs, cs);
+      }
+    }
+  }
+  return tc;
+}
+
 export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk") => void }) {
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
@@ -168,13 +192,17 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
       // Cells + collect gold positions for icosahedron
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
+      // Lazily init tile textures once
+      if (!_darkTile) { _darkTile = buildTile("#1f2937", "#374151", 314159); }
+      if (!_lightTile) { _lightTile = buildTile("#374151", "#4b5563", 271828); }
+
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
           const sx = (x - minX) * CELL_SIZE - offX;
           const sy = (maxY - y) * CELL_SIZE + offY;
+          const isDark = (x + y) % 2 === 0;
+          ctx.drawImage(isDark ? _darkTile : _lightTile, sx, sy);
 
-          ctx.fillStyle = (x + y) % 2 === 0 ? "#1f2937" : "#374151";
-          ctx.fillRect(sx, sy, CELL_SIZE, CELL_SIZE);
 
           // Edge labels
           if (x === minX || y === maxY) {
