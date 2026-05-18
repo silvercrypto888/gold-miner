@@ -10,6 +10,7 @@ import {
   CELL_SIZE,
   hasGoldAt,
   getViewportRange,
+  isCellMined,
 } from "@/lib/constants";
 import { Direction, OtherPlayer, PlayerState } from "@/types";
 import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
@@ -18,7 +19,7 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
     useSessionKey();
-  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined } = useGame({
+  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined, getBitmap } = useGame({
     sessionKeypair,
     sessionPubkey,
     playerState,
@@ -153,6 +154,9 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
       const otherPlayers = playersRef.current;
       const showP = showPlayersRef.current;
 
+      // Bitmap for live mined-status in foresight mode
+      const cachedBitmap = getBitmap ? getBitmap() : null;
+
       const { minX, maxX, minY, maxY } = getViewportRange(Math.round(viewX), Math.round(viewY));
       const offX = (viewX - Math.floor(viewX)) * CELL_SIZE;
       const offY = (viewY - Math.floor(viewY)) * CELL_SIZE;
@@ -181,9 +185,31 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
             if (y === maxY && x % 10 === 0) ctx.fillText(String(x), sx + CELL_SIZE / 2, sy + 30);
           }
 
-          const hasGold = isForesight
-            ? hasGoldAt(x, y)  // in foresight: compute from formula (allows scouting ahead)
-            : !!goldSpots.find(g => g.x === x && g.y === y && g.hasGold);
+          const goldFormula = hasGoldAt(x, y);
+
+          let hasGold = false;
+          if (goldFormula) {
+            if (isForesight && cachedBitmap) {
+              // In foresight: use cached bitmap for actual mined status
+              hasGold = !isCellMined(cachedBitmap, x, y);
+            } else {
+              // Normal mode: use useGame's gold spots which are already filtered
+              hasGold = !!goldSpots.find(g => g.x === x && g.y === y && g.hasGold);
+            }
+          } else if (isForesight && goldFormula && cachedBitmap && isCellMined(cachedBitmap, x, y)) {
+            // In foresight: mark mined-out gold cells with a subtle indicator
+            ctx.fillStyle = "rgba(100, 100, 50, 0.15)";
+            ctx.fillRect(sx + 2, sy + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+            ctx.strokeStyle = "rgba(100, 100, 50, 0.4)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(sx + 4, sy + 4);
+            ctx.lineTo(sx + CELL_SIZE - 4, sy + CELL_SIZE - 4);
+            ctx.moveTo(sx + CELL_SIZE - 4, sy + 4);
+            ctx.lineTo(sx + 4, sy + CELL_SIZE - 4);
+            ctx.stroke();
+          }
+
           if (hasGold) {
             goldScreenPositions.push({ x, y, screenX: sx + CELL_SIZE / 2, screenY: sy + CELL_SIZE / 2 });
           }

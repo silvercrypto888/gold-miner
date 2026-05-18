@@ -59,6 +59,7 @@ interface UseGameReturn {
   canMove: boolean;
   goldMined: number;
   status: string;
+  getBitmap: () => Uint8Array | null;
 }
 
 export function useGame(props?: UseGameProps): UseGameReturn {
@@ -403,5 +404,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, []);
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
-  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status };
+  const getBitmap = useCallback(() => bitmapRef.current, []);
+
+  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status, getBitmap };
 }
