@@ -239,8 +239,8 @@ export function renderOctahedron(
   const colors = PLAYER_PALETTE;
   const angle = (timeMs / 1000) * rotSpeed;
 
-  // Local light from top-right (negative Y world = top of screen after Y-inversion)
-  const light = normalize([0.7, -0.7, 0.3]);
+  // Match icosahedron light direction for consistent specular placement
+  const light = normalize([0.8, 0.8, 0.5]);
   const halfVec = normalize([light[0], light[1], light[2] - 1]);
 
   const rotated = OCTA_VERTICES.map(v => rotateY(v, angle));
