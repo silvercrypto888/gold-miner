@@ -239,9 +239,8 @@ export function renderOctahedron(
   const colors = PLAYER_PALETTE;
   const angle = (timeMs / 1000) * rotSpeed;
 
-  // Light from upper-right (negative Y = top of screen after Y-inversion)
-  const light = normalize([1.0, -0.5, 0.3]);
-  const halfVec = normalize([light[0], light[1], light[2] - 1]);
+  // Light for diffuse shading only (consistent with icosahedron)
+  const light = normalize([0.8, 0.8, 0.5]);
 
   const rotated = OCTA_VERTICES.map(v => rotateY(v, angle));
   const scale = size * 0.40;
@@ -283,18 +282,23 @@ export function renderOctahedron(
   ctx.arc(glowCX, glowCY, glowR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Draw each face with Blinn-Phong shading + specular highlight
+  // Compute bounding box center in screen space for placing the specular
+  let cxSum = 0, cySum = 0;
+  for (const p of projected) { cxSum += p[0]; cySum += p[1]; }
+  const centroidX = cxSum / projected.length;
+  const centroidY = cySum / projected.length;
+
+  // Draw each face with diffuse-only shading (specular handled in screen-space)
   for (const face of visibleFaces) {
     const p0 = projected[face.i0];
     const p1 = projected[face.i1];
     const p2 = projected[face.i2];
 
     const diffuse = 0.5 + 0.5 * Math.max(0, dot(face.normal, light));
-    const specular = Math.pow(Math.max(0, dot(face.normal, halfVec)), 48);
 
-    const r = (colors.fill[0] * diffuse + colors.spec[0] * specular * 0.6) * 255;
-    const g = (colors.fill[1] * diffuse + colors.spec[1] * specular * 0.6) * 255;
-    const b = (colors.fill[2] * diffuse + colors.spec[2] * specular * 0.6) * 255;
+    const r = (colors.fill[0] * diffuse) * 255;
+    const g = (colors.fill[1] * diffuse) * 255;
+    const b = (colors.fill[2] * diffuse) * 255;
 
     ctx.beginPath();
     ctx.moveTo(p0[0], p0[1]);
@@ -308,6 +312,20 @@ export function renderOctahedron(
     ctx.lineWidth = 0.5;
     ctx.stroke();
   }
+
+  // Screen-space specular highlight at top-right of the octahedron
+  // Always visible regardless of rotation angle
+  const specSize = size * 0.15;
+  const specX = centroidX + size * 0.12;
+  const specY = centroidY - size * 0.12;
+  const spec = ctx.createRadialGradient(specX, specY, 0, specX, specY, specSize);
+  spec.addColorStop(0, `rgba(${clamp(colors.spec[0]*255)},${clamp(colors.spec[1]*255)},${clamp(colors.spec[2]*255)},0.9)`);
+  spec.addColorStop(0.3, `rgba(${clamp(colors.spec[0]*255)},${clamp(colors.spec[1]*255)},${clamp(colors.spec[2]*255)},0.5)`);
+  spec.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(specX, specY, specSize, 0, Math.PI * 2);
+  ctx.fillStyle = spec;
+  ctx.fill();
 
   return cs;
 }
