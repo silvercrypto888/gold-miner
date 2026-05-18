@@ -20,7 +20,6 @@ export function useAudio() {
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const trackListRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
-  const musicInitRef = useRef(false);
   // Sound cache — lazy, only creates Audio on first play
   const soundCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
@@ -83,13 +82,19 @@ export function useAudio() {
   const toggleMusic = useCallback(() => {
     setMusicEnabled(prev => {
       const next = !prev;
-      if (next && !musicInitRef.current) {
-        musicInitRef.current = true;
-        discoverTracks().then(tracks => {
-          if (tracks.length > 0) playNextTrack(0);
-        });
-      } else if (!next && musicRef.current) {
+      if (next) {
+        // Resume or restart — discoverTracks is near-instant via sessionStorage cache
+        if (musicRef.current) {
+          musicRef.current.play().catch(() => {});
+        } else {
+          discoverTracks().then(tracks => {
+            if (tracks.length > 0) playNextTrack(currentIndexRef.current);
+          });
+        }
+      } else if (musicRef.current) {
         musicRef.current.pause();
+        // Keep the element alive so we can resume later
+        // (but we still pause & null out because the track may have ended)
         musicRef.current = null;
       }
       return next;
