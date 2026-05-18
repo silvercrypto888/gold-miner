@@ -181,7 +181,10 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
             if (y === maxY && x % 10 === 0) ctx.fillText(String(x), sx + CELL_SIZE / 2, sy + 30);
           }
 
-          if (goldSpots.find(g => g.x === x && g.y === y && g.hasGold)) {
+          const hasGold = isForesight
+            ? hasGoldAt(x, y)  // in foresight: compute from formula (allows scouting ahead)
+            : !!goldSpots.find(g => g.x === x && g.y === y && g.hasGold);
+          if (hasGold) {
             goldScreenPositions.push({ x, y, screenX: sx + CELL_SIZE / 2, screenY: sy + CELL_SIZE / 2 });
           }
         }
