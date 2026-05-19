@@ -422,13 +422,14 @@ const prevForesightRef = useRef(foresightMode);
           const realOcta = renderOctahedron(now, CELL_SIZE - 4, 1.5);
           ctx.drawImage(realOcta, rpx - (CELL_SIZE - 4) / 2, rpy - (CELL_SIZE - 4) / 2);
 
-          // Glow ring under real player
-          const glow = ctx.createRadialGradient(rpx, rpy, 2, rpx, rpy, 16);
-          glow.addColorStop(0, "rgba(250, 204, 21, 0.4)");
-          glow.addColorStop(1, "transparent");
-          ctx.fillStyle = glow;
+          // Simple gold dot under real player (no gradient allocation)
+          ctx.fillStyle = "rgba(250, 204, 21, 0.3)";
           ctx.beginPath();
           ctx.arc(rpx, rpy, 16, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(250, 204, 21, 0.5)";
+          ctx.beginPath();
+          ctx.arc(rpx, rpy, 8, 0, Math.PI * 2);
           ctx.fill();
         }
       } else {
@@ -446,10 +447,7 @@ const prevForesightRef = useRef(foresightMode);
           const opx = (op.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
           const opy = (maxY - op.y) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
-          const og = ctx.createRadialGradient(opx, opy, 4, opx, opy, 14);
-          og.addColorStop(0, "rgba(34, 197, 94, 0.5)");
-          og.addColorStop(1, "transparent");
-          ctx.fillStyle = og;
+          ctx.fillStyle = "rgba(34, 197, 94, 0.35)";
           ctx.beginPath();
           ctx.arc(opx, opy, 14, 0, Math.PI * 2);
           ctx.fill();
@@ -471,9 +469,7 @@ const prevForesightRef = useRef(foresightMode);
 
       // Mining burst particles — grid-relative, viewport-aware
       if (particlesRef.current.length > 0) {
-        const t2 = (Math.sin(now * 0.0015) + 1) / 2;
-        const goldColor = `rgb(${Math.round(255 + (255 - 255) * t2)},${Math.round(215 + (140 - 215) * t2)},0)`;
-
+        const goldColor = "rgb(255,200,50)"; // fixed warm gold for particles
         const particles = particlesRef.current;
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];

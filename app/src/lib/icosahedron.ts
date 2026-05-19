@@ -93,6 +93,18 @@ const PALETTES: Record<PaletteName, Palette> = {
 let _offscreenCanvas: HTMLCanvasElement | null = null;
 let _lastSize = 0;
 
+/* ── Pre-built glow gradient cache per size ── */
+const _glowCache = new Map<number, { cx: number; cy: number; r: number }>();
+
+function getGlowGeometry(size: number): { cx: number; cy: number; r: number } {
+  let g = _glowCache.get(size);
+  if (!g) {
+    g = { cx: size / 2, cy: size / 2, r: size * 0.48 };
+    _glowCache.set(size, g);
+  }
+  return g;
+}
+
 export function renderIcosahedron(
   timeMs: number,
   size = 48,
@@ -132,26 +144,16 @@ export function renderIcosahedron(
 
   const visibleFaces = faceData.filter(f => f.normal[2] < 0).sort((a, b) => a.centerZ - b.centerZ);
 
-  // Warm glow behind the whole icosahedron
-  let minPX = size, maxPX = 0, minPY = size, maxPY = 0;
-  for (const p of projected) {
-    if (p[0] < minPX) minPX = p[0];
-    if (p[0] > maxPX) maxPX = p[0];
-    if (p[1] < minPY) minPY = p[1];
-    if (p[1] > maxPY) maxPY = p[1];
-  }
-  const glowCX = (minPX + maxPX) / 2;
-  const glowCY = (minPY + maxPY) / 2;
-  const glowR = Math.max(maxPX - minPX, maxPY - minPY);
-
-  const glow = ctx.createRadialGradient(glowCX, glowCY, 0, glowCX, glowCY, glowR);
+  // Warm glow behind the whole icosahedron — use pre-cached geometry (fixed per size)
+  const geo = getGlowGeometry(size);
+  const glow = ctx.createRadialGradient(geo.cx, geo.cy, 0, geo.cx, geo.cy, geo.r);
   const gc = colors.glowColor;
   glow.addColorStop(0, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.85)`);
   glow.addColorStop(0.4, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.45)`);
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(glowCX, glowCY, glowR, 0, Math.PI * 2);
+  ctx.arc(geo.cx, geo.cy, geo.r, 0, Math.PI * 2);
   ctx.fill();
 
   // Draw each face — warm, gently lit, with specular highlight
@@ -275,26 +277,16 @@ export function renderOctahedron(
 
   const visibleFaces = faceData.filter(f => f.normal[2] < 0).sort((a, b) => a.centerZ - b.centerZ);
 
-  // Glow behind octahedron
-  let minPX = size, maxPX = 0, minPY = size, maxPY = 0;
-  for (const p of projected) {
-    if (p[0] < minPX) minPX = p[0];
-    if (p[0] > maxPX) maxPX = p[0];
-    if (p[1] < minPY) minPY = p[1];
-    if (p[1] > maxPY) maxPY = p[1];
-  }
-  const glowCX = (minPX + maxPX) / 2;
-  const glowCY = (minPY + maxPY) / 2;
-  const glowR = Math.max(maxPX - minPX, maxPY - minPY);
-
-  const glow = ctx.createRadialGradient(glowCX, glowCY, 0, glowCX, glowCY, glowR);
+  // Glow behind octahedron — use cached geometry
+  const geo = getGlowGeometry(size);
+  const glow = ctx.createRadialGradient(geo.cx, geo.cy, 0, geo.cx, geo.cy, geo.r);
   const gc = colors.glowColor;
   glow.addColorStop(0, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.80)`);
   glow.addColorStop(0.4, `rgba(${clamp(gc[0]*255)},${clamp(gc[1]*255)},${clamp(gc[2]*255)},0.35)`);
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(glowCX, glowCY, glowR, 0, Math.PI * 2);
+  ctx.arc(geo.cx, geo.cy, geo.r, 0, Math.PI * 2);
   ctx.fill();
 
   // Draw each face with Blinn-Phong — same technique as the icosahedron
