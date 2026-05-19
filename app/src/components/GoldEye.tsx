@@ -7,9 +7,9 @@ interface GoldEyeProps {
 }
 
 /* ── Palette ── */
-const DEEP_BLUE: [number, number, number] = [13, 27, 82];    // #0d1b52
-const GOLD:      [number, number, number] = [255, 215, 0];    // #ffd700
-const ORANGE:    [number, number, number] = [255, 140, 0];    // #ff8c00
+const DEEP_BLUE: [number, number, number] = [13, 27, 82];
+const GOLD:      [number, number, number] = [255, 215, 0];
+const ORANGE:    [number, number, number] = [255, 140, 0];
 
 /* ── Larger eye ── */
 const EYE_W = 40;
@@ -17,7 +17,7 @@ const EYE_H = 28;
 const PIXEL_SIZE = 2;
 const CANVAS_W = EYE_W * PIXEL_SIZE; // 80
 const CANVAS_H = EYE_H * PIXEL_SIZE; // 56
-const PUPIL_R = 6;                    // pupil radius in logical pixels
+const PUPIL_R = 6;
 
 function inEllipse(px: number, py: number, rx: number, ry: number): boolean {
   const cx = (EYE_W - 1) / 2;
@@ -56,17 +56,19 @@ export function GoldEye({ goldCount }: GoldEyeProps) {
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
       const hasGold = goldCount >= 5;
+      const eyeRx = EYE_W / 2 - 1.5;
+      const eyeRy = EYE_H / 2 - 1.5;
+      const eyeCx = (EYE_W - 1) / 2;
+      const eyeCy = (EYE_H - 1) / 2;
 
       // ── Draw base eye ──
       for (let py = 0; py < EYE_H; py++) {
         for (let px = 0; px < EYE_W; px++) {
-          if (!inEllipse(px, py, EYE_W / 2 - 0.5, EYE_H / 2 - 0.5)) continue;
+          if (!inEllipse(px, py, eyeRx, eyeRy)) continue;
 
-          // Circular pupil
           if (inEllipse(px, py, PUPIL_R, PUPIL_R)) {
             ctx.fillStyle = "#000000";
           } else {
-            // Dither: even rows alternate blue/gold, odd rows all blue
             const isGoldRow = py % 2 === 0;
             const isGoldPx  = isGoldRow && px % 2 === 0;
             if (hasGold && isGoldPx) {
@@ -81,53 +83,54 @@ export function GoldEye({ goldCount }: GoldEyeProps) {
       }
 
       // ── Sparks overlay ──
-      const sparkSize = goldCount >= 50 ? 4 : 2;
-      const spawnInterval = Math.max(5, 40 - Math.floor(goldCount * 0.6));
-      const maxSparks = Math.min(35, 4 + Math.floor(goldCount / 3));
-      const speedBase = 1 + Math.floor(goldCount / 30);
-      const eyeCx = (EYE_W - 1) / 2;
-      const eyeCy = (EYE_H - 1) / 2;
+      if (hasGold) {
+        const sparkSize = goldCount >= 50 ? 4 : 2;
+        const spawnInterval = Math.max(5, 40 - Math.floor(goldCount * 0.6));
+        const maxSparks = Math.min(35, 4 + Math.floor(goldCount / 3));
+        const speedBase = 1 + Math.floor(goldCount / 30);
 
-      lastSpawn++;
-      if (hasGold && lastSpawn >= spawnInterval) {
-        lastSpawn = 0;
-        if (sparksRef.current.length < maxSparks) {
-          // Spawn along right edge within eye
-          const sy = PUPIL_R + 2 + Math.random() * (EYE_H - 2 * PUPIL_R - 4);
-          if (inEllipse(EYE_W - 1, sy, EYE_W / 2 - 0.5, EYE_H / 2 - 0.5)) {
-            sparksRef.current.push({
-              x: EYE_W - 1,
-              y: sy,
-              w: sparkSize,
-              h: sparkSize,
-              speed: speedBase + Math.random() * 1.5,
-            });
+        lastSpawn++;
+        if (lastSpawn >= spawnInterval) {
+          lastSpawn = 0;
+          if (sparksRef.current.length < maxSparks) {
+            // Spawn on the interior right side of the eye — well inside so it always passes ellipse check
+            const sx = eyeCx + eyeRx * 0.7 + (Math.random() - 0.5) * 4;
+            const sy = eyeCy + (Math.random() - 0.5) * eyeRy * 1.2;
+            if (inEllipse(sx, sy, eyeRx, eyeRy)) {
+              sparksRef.current.push({
+                x: sx,
+                y: sy,
+                w: sparkSize,
+                h: sparkSize,
+                speed: speedBase + Math.random() * 1.5,
+              });
+            }
           }
         }
+
+        // Update & draw sparks
+        sparksRef.current = sparksRef.current.filter(s => {
+          s.x -= s.speed * 0.4;
+          if (s.x + s.w < 0) return false;
+
+          const scx = s.x + s.w / 2;
+          const scy = s.y + s.h / 2;
+
+          if (inEllipse(scx, scy, eyeRx, eyeRy) &&
+              !inEllipse(scx, scy, PUPIL_R, PUPIL_R)) {
+            ctx.fillStyle = goldColor;
+            ctx.fillRect(
+              Math.round(s.x) * PIXEL_SIZE,
+              Math.round(s.y) * PIXEL_SIZE,
+              s.w * PIXEL_SIZE,
+              s.h * PIXEL_SIZE
+            );
+          }
+          return true;
+        });
+      } else {
+        sparksRef.current = [];
       }
-
-      // Update & draw sparks
-      sparksRef.current = sparksRef.current.filter(s => {
-        s.x -= s.speed * 0.4;
-        // Discard once fully left of the eye
-        if (s.x + s.w < 0) return false;
-
-        const scx = s.x + s.w / 2;
-        const scy = s.y + s.h / 2;
-
-        // Only draw if center of spark is inside eye AND outside pupil
-        if (inEllipse(scx, scy, EYE_W / 2 - 0.5, EYE_H / 2 - 0.5) &&
-            !inEllipse(scx, scy, PUPIL_R, PUPIL_R)) {
-          ctx.fillStyle = goldColor;
-          ctx.fillRect(
-            Math.round(s.x) * PIXEL_SIZE,
-            Math.round(s.y) * PIXEL_SIZE,
-            s.w * PIXEL_SIZE,
-            s.h * PIXEL_SIZE
-          );
-        }
-        return true;
-      });
 
       animRef.current = requestAnimationFrame(draw);
     };
