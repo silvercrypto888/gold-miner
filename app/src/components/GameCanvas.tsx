@@ -44,7 +44,7 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
   return tc;
 }
 
-export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind" | "bell" | "angelical_pad") => void }) {
+export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind" | "bell" | "angelical_pad" | "cinematic_boom") => void }) {
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
     useSessionKey();
@@ -97,16 +97,18 @@ const prevForesightRef = useRef(foresightMode);
     posPower: 0,
     goldMedium: 0,
     goldRich: 0,
+    heartbeat: 0,
   });
 
   // Trigger dramatic event helper (handles cooldown + message + sound)
   const triggerDramatic = useCallback(
-    (cooldownKey: string, message: string, sound: string) => {
+    (cooldownKey: string, message: string | null, sound: string) => {
       if (!onPlaySound) return;
       const now = Date.now();
       if (now < dramaticTimers.current[cooldownKey]) return;
-      dramaticTimers.current[cooldownKey] = now + 180_000;
-      setDramaticMsg(message);
+      const cooldownMs = cooldownKey === "heartbeat" ? 0 : 180_000; // heartbeat uses dynamic cooldown set below
+      dramaticTimers.current[cooldownKey] = now + cooldownMs;
+      if (message) setDramaticMsg(message);
       onPlaySound(sound as any);
     },
     [onPlaySound]
@@ -133,14 +135,30 @@ const prevForesightRef = useRef(foresightMode);
     }
   }, [position, onPlaySound, triggerDramatic]);
 
-  // Gold density events — checks visible gold count periodically
+  // Prev gold count bracket for heartbeat reset detection
+  const prevHeartbeatBracketRef = useRef(-1);
+
+  // Gold density events + heartbeat — checks visible gold count periodically
   useEffect(() => {
     const id = setInterval(() => {
       const count = goldRef.current.filter(g => g.hasGold).length;
+      // Status events (with messages)
       if (count >= 25 && count <= 49) {
         triggerDramatic("goldMedium", "Plenty of gold here!", "bell");
       } else if (count >= 50) {
         triggerDramatic("goldRich", "It's the motherlode!", "angelical_pad");
+      }
+      // Heartbeat — dynamic cooldown based on gold density (sound only, no message)
+      const heartbeatCd = count >= 50 ? 30_000 : count >= 25 ? 60_000 : 90_000;
+      const bracket = count >= 50 ? 2 : count >= 25 ? 1 : 0;
+      if (bracket !== prevHeartbeatBracketRef.current) {
+        // Bracket changed — reset timer so it doesn't fire immediately after speed-up
+        dramaticTimers.current.heartbeat = Date.now() + heartbeatCd;
+        prevHeartbeatBracketRef.current = bracket;
+      }
+      if (onPlaySound && Date.now() >= dramaticTimers.current.heartbeat) {
+        dramaticTimers.current.heartbeat = Date.now() + heartbeatCd;
+        onPlaySound("cinematic_boom");
       }
     }, 1000);
     return () => clearInterval(id);
