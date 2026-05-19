@@ -226,15 +226,24 @@ const PLAYER_PALETTE: Palette = {
   stroke:    [0.50, 0.75, 1.0],
 };
 
+/* ── Cached octahedron canvas (module-level, avoid GC pressure) ── */
+let _octaCanvas: HTMLCanvasElement | null = null;
+let _octaSize = 0;
+
 export function renderOctahedron(
   timeMs: number,
   size = 48,
   rotSpeed = 1.5
 ): HTMLCanvasElement {
-  const cs = document.createElement('canvas');
-  cs.width = size;
-  cs.height = size;
-  const ctx = cs.getContext('2d')!;
+  if (!_octaCanvas || _octaSize !== size) {
+    _octaCanvas = document.createElement('canvas');
+    _octaCanvas.width = size;
+    _octaCanvas.height = size;
+    _octaSize = size;
+  }
+  const canvas = _octaCanvas;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, size, size);
 
   const colors = PLAYER_PALETTE;
   const angle = (timeMs / 1000) * rotSpeed;
@@ -314,7 +323,7 @@ export function renderOctahedron(
     ctx.stroke();
   }
 
-  return cs;
+  return canvas;
 }
 
 export function drawGoldIcosahedrons(

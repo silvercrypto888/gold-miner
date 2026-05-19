@@ -319,7 +319,9 @@ const prevForesightRef = useRef(foresightMode);
       ctx.fillStyle = "#111827";
       ctx.fillRect(0, 0, size, size);
 
-      // Cells + collect gold positions for icosahedron
+      // Build gold Set for O(1) lookup + screen positions for icosahedrons
+      const goldKeySet = new Set<string>();
+      for (const g of goldSpots) goldKeySet.add(`${g.x},${g.y}`);
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
@@ -352,7 +354,7 @@ const prevForesightRef = useRef(foresightMode);
               hasGold = !isCellMined(cachedBitmap, x, y);
             } else {
               // Normal mode: use useGame's gold spots which are already filtered
-              hasGold = !!goldSpots.find(g => g.x === x && g.y === y && g.hasGold);
+              hasGold = goldKeySet.has(`${x},${y}`);
             }
           } else if (isForesight && goldFormula && cachedBitmap && isCellMined(cachedBitmap, x, y)) {
             // In foresight: mark mined-out gold cells with a subtle indicator
@@ -379,18 +381,20 @@ const prevForesightRef = useRef(foresightMode);
         drawGoldIcosahedrons(ctx, goldScreenPositions, now, CELL_SIZE - 4);
       }
 
-      // Grid lines
+      // Grid lines — single path, single stroke
       ctx.strokeStyle = "#4b5563";
       ctx.lineWidth = 1;
+      ctx.beginPath();
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
-          ctx.strokeRect(
+          ctx.rect(
             (x - minX) * CELL_SIZE - offX,
             (maxY - y) * CELL_SIZE + offY,
             CELL_SIZE, CELL_SIZE
           );
         }
       }
+      ctx.stroke();
 
       // Foresight shade — translucent octahedron at view center
       if (isForesight) {
