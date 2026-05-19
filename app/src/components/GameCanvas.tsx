@@ -232,13 +232,13 @@ const prevForesightRef = useRef(foresightMode);
       lastMinedPosRef.current = { ...position };
       const now = performance.now();
       const particles: BurstParticle[] = [];
-      // 10 big (4px) + 10 small (2px)
-      for (let i = 0; i < 20; i++) {
-        const angle = (Math.PI * 2 / 20) * i + (Math.random() - 0.5) * 0.4;
+      // 20 big (4px) + 20 small (2px)
+      for (let i = 0; i < 40; i++) {
+        const angle = (Math.PI * 2 / 40) * i + (Math.random() - 0.5) * 0.3;
         particles.push({
           angle,
-          distance: 8 + Math.random() * 20,
-          size: i < 10 ? 4 : 2,
+          distance: 8 + Math.random() * 24,
+          size: i < 20 ? 4 : 2,
           originX: position.x,
           originY: position.y,
           startTime: now,

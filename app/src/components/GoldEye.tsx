@@ -85,9 +85,9 @@ export function GoldEye({ goldCount }: GoldEyeProps) {
       // ── Sparks overlay ──
       if (hasGold) {
         const sparkSize = goldCount >= 50 ? 4 : 2;
-        const spawnInterval = Math.max(5, 40 - Math.floor(goldCount * 0.6));
-        const maxSparks = Math.min(35, 4 + Math.floor(goldCount / 3));
-        const speedBase = 1 + Math.floor(goldCount / 30);
+        const spawnInterval = Math.max(3, 30 - Math.floor(goldCount * 0.5));
+        const maxSparks = Math.min(60, 8 + Math.floor(goldCount / 2));
+        const speedBase = 1 + Math.floor(goldCount / 20);
 
         lastSpawn++;
         if (lastSpawn >= spawnInterval) {
