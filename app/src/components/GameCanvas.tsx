@@ -211,6 +211,49 @@ const prevForesightRef = useRef(foresightMode);
     }
   }, [status, onPlaySound]);
 
+  // Mining burst particles
+  interface BurstParticle {
+    angle: number;
+    distance: number;
+    size: number;
+    originX: number;
+    originY: number;
+    startTime: number;
+  }
+  const particlesRef = useRef<BurstParticle[]>([]);
+  const lastMinedPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Spawn burst when a mine happens
+  const prevMinedRef = useRef(false);
+  useEffect(() => {
+    const isMined = status.startsWith("Mined");
+    if (isMined && !prevMinedRef.current) {
+      // Capture the cell position for burst
+      lastMinedPosRef.current = { ...position };
+      const now = performance.now();
+      const particles: BurstParticle[] = [];
+      // 10 big (4px) + 10 small (2px)
+      for (let i = 0; i < 20; i++) {
+        const angle = (Math.PI * 2 / 20) * i + (Math.random() - 0.5) * 0.4;
+        particles.push({
+          angle,
+          distance: 8 + Math.random() * 20,
+          size: i < 10 ? 4 : 2,
+          originX: position.x,
+          originY: position.y,
+          startTime: now,
+        });
+      }
+      particlesRef.current.push(...particles);
+      // Clean old particles after 3s
+      setTimeout(() => {
+        const cutoff = performance.now() - 3000;
+        particlesRef.current = particlesRef.current.filter(p => p.startTime >= cutoff);
+      }, 3100);
+    }
+    prevMinedRef.current = isMined;
+  }, [status, position]);
+
   // Keep refs in sync with state
   useEffect(() => { goldRef.current = visibleGold; }, [visibleGold]);
   useEffect(() => { playersRef.current = visiblePlayers; }, [visiblePlayers]);
@@ -423,6 +466,33 @@ const prevForesightRef = useRef(foresightMode);
           ctx.fillStyle = "rgba(187, 247, 208, 0.9)";
           ctx.fill();
         }
+      }
+
+      // Mining burst particles
+      if (particlesRef.current.length > 0) {
+        const t2 = (Math.sin(now * 0.0015) + 1) / 2;
+        const pr = Math.round(255 + (255 - 255) * t2);
+        const pg = Math.round(215 + (140 - 215) * t2);
+        const goldColor = `rgb(${pr},${pg},0)`;
+
+        for (const p of particlesRef.current) {
+          const elapsed = (now - p.startTime);
+          if (elapsed > 3000) continue;
+          const progress = elapsed / 3000;
+          const ease = 1 - (1 - progress) * (1 - progress);
+          const dist = p.distance * ease;
+          const gx = p.originX + Math.cos(p.angle) * dist / CELL_SIZE;
+          const gy = p.originY + Math.sin(p.angle) * dist / CELL_SIZE;
+
+          // Convert to screen coords
+          const psx = (gx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+          const psy = (maxY - gy) * CELL_SIZE + CELL_SIZE / 2 + offY;
+
+          ctx.fillStyle = goldColor;
+          ctx.fillRect(psx - p.size / 2, psy - p.size / 2, p.size, p.size);
+        }
+
+        particlesRef.current = particlesRef.current.filter(p => (now - p.startTime) < 3000);
       }
 
       rAFRef.current = requestAnimationFrame(render);
