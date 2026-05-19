@@ -321,7 +321,7 @@ const prevForesightRef = useRef(foresightMode);
 
       // Build gold Set for O(1) lookup + screen positions for icosahedrons
       const goldKeySet = new Set<string>();
-      for (const g of goldSpots) goldKeySet.add(`${g.x},${g.y}`);
+      for (const g of goldSpots) if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
