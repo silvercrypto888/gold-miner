@@ -25,14 +25,17 @@ function buildTile(baseHex: string, accentHex: string, seed: number): HTMLCanvas
   const tctx = tc.getContext('2d')!;
   tctx.fillStyle = baseHex;
   tctx.fillRect(0, 0, CELL_SIZE, CELL_SIZE);
+  // Cross (+) in 3×3 block — 5 of 9 pixels filled. Scattered ~28% of positions
   tctx.fillStyle = accentHex;
-  const cs = 4;
-  for (let cy = 0; cy < CELL_SIZE / cs; cy++) {
-    for (let cx = 0; cx < CELL_SIZE / cs; cx++) {
-      let h = ((seed + cx * 11 + cy * 37) * 16807) | 0;
+  const crossPixels = [[1,0],[0,1],[1,1],[2,1],[1,2]];
+  for (let by = 0; by < Math.floor(CELL_SIZE / 3); by++) {
+    for (let bx = 0; bx < Math.floor(CELL_SIZE / 3); bx++) {
+      let h = ((seed + bx * 11 + by * 37) * 16807) | 0;
       h = ((h ^ (h >> 8)) * 48271) | 0;
-      if (((h ^ (h >> 16)) & 0x7fffffff) % 100 < 30) {
-        tctx.fillRect(cx * cs, cy * cs, cs, cs);
+      if (((h ^ (h >> 16)) & 0x7fffffff) % 100 < 28) {
+        for (const [dx, dy] of crossPixels) {
+          tctx.fillRect(bx * 3 + dx, by * 3 + dy, 1, 1);
+        }
       }
     }
   }
@@ -193,8 +196,8 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
-      if (!_darkTile) { _darkTile = buildTile("#1f2937", "#374151", 314159); }
-      if (!_lightTile) { _lightTile = buildTile("#374151", "#4b5563", 271828); }
+      if (!_darkTile) { _darkTile = buildTile("#1f2937", "#2b3544", 314159); }
+      if (!_lightTile) { _lightTile = buildTile("#374151", "#414b5a", 271828); }
 
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
