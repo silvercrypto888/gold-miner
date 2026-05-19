@@ -19,23 +19,19 @@ import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
 let _darkTile: HTMLCanvasElement | null = null;
 let _lightTile: HTMLCanvasElement | null = null;
 
-function buildTile(baseHex: string, accentHex: string, seed: number): HTMLCanvasElement {
+function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
   const tc = document.createElement('canvas');
   tc.width = CELL_SIZE; tc.height = CELL_SIZE;
   const tctx = tc.getContext('2d')!;
   tctx.fillStyle = baseHex;
   tctx.fillRect(0, 0, CELL_SIZE, CELL_SIZE);
-  // Cross (+) in 3×3 block — 5 of 9 pixels filled. Scattered ~28% of positions
+  // Regular grid of cross (+) in 3×3 blocks — every other block on a 6px grid
   tctx.fillStyle = accentHex;
   const crossPixels = [[1,0],[0,1],[1,1],[2,1],[1,2]];
-  for (let by = 0; by < Math.floor(CELL_SIZE / 3); by++) {
-    for (let bx = 0; bx < Math.floor(CELL_SIZE / 3); bx++) {
-      let h = ((seed + bx * 11 + by * 37) * 16807) | 0;
-      h = ((h ^ (h >> 8)) * 48271) | 0;
-      if (((h ^ (h >> 16)) & 0x7fffffff) % 100 < 28) {
-        for (const [dx, dy] of crossPixels) {
-          tctx.fillRect(bx * 3 + dx, by * 3 + dy, 1, 1);
-        }
+  for (let by = 0; by < Math.floor(CELL_SIZE / 6); by++) {
+    for (let bx = 0; bx < Math.floor(CELL_SIZE / 6); bx++) {
+      for (const [dx, dy] of crossPixels) {
+        tctx.fillRect(bx * 6 + dx, by * 6 + dy, 1, 1);
       }
     }
   }
@@ -196,8 +192,8 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
-      if (!_darkTile) { _darkTile = buildTile("#1f2937", "#2b3544", 314159); }
-      if (!_lightTile) { _lightTile = buildTile("#374151", "#414b5a", 271828); }
+      if (!_darkTile) { _darkTile = buildTile("#1f2937", "#2b3544"); }
+      if (!_lightTile) { _lightTile = buildTile("#374151", "#414b5a"); }
 
       for (let x = minX; x <= maxX; x++) {
         for (let y = minY; y <= maxY; y++) {
