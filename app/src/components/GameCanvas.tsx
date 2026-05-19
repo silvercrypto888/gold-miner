@@ -14,6 +14,7 @@ import {
 } from "@/lib/constants";
 import { Direction, OtherPlayer, PlayerState } from "@/types";
 import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
+import { GoldEye } from "@/components/GoldEye";
 
 // Pre-built tile textures with cluster-dithered marble (lazy, cached at module level)
 let _darkTile: HTMLCanvasElement | null = null;
@@ -580,6 +581,7 @@ const prevForesightRef = useRef(foresightMode);
               {foresightMode ? "👁 ON" : "👁 OFF"}
             </div>
           </button>
+          <GoldEye goldCount={visibleGold.filter(g => g.hasGold).length} />
         </div>
       )}
 
