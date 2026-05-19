@@ -25,13 +25,19 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
   const tctx = tc.getContext('2d')!;
   tctx.fillStyle = baseHex;
   tctx.fillRect(0, 0, CELL_SIZE, CELL_SIZE);
-  // Regular grid of cross (+) in 3×3 blocks — every other block on a 6px grid
+  // Dense cross pattern: 3×3 cross (+) every 5px, alternating rows staggered by 2px
+  // This yields a close symmetric weave
   tctx.fillStyle = accentHex;
   const crossPixels = [[1,0],[0,1],[1,1],[2,1],[1,2]];
-  for (let by = 0; by < Math.floor(CELL_SIZE / 6); by++) {
-    for (let bx = 0; bx < Math.floor(CELL_SIZE / 6); bx++) {
+  const stride = 5;
+  const rows = Math.floor(CELL_SIZE / stride);
+  for (let row = 0; row < rows; row++) {
+    const yOff = row * stride + 1; // center of 3px cross in 5px block
+    const xStart = (row % 2 === 0) ? 0 : 2; // stagger odd rows
+    for (let bx = 0; bx < Math.floor((CELL_SIZE - xStart) / stride); bx++) {
+      const xOff = xStart + bx * stride + 1;
       for (const [dx, dy] of crossPixels) {
-        tctx.fillRect(bx * 6 + dx, by * 6 + dy, 1, 1);
+        tctx.fillRect(xOff + dx - 1, yOff + dy - 1, 1, 1);
       }
     }
   }
