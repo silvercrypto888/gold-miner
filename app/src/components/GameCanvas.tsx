@@ -44,7 +44,7 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
   return tc;
 }
 
-export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight") => void }) {
+export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind") => void }) {
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
     useSessionKey();
@@ -90,6 +90,37 @@ const prevForesightRef = useRef(foresightMode);
     }
     prevForesightSoundRef.current = foresightMode;
   }, [foresightMode, onPlaySound]);
+
+  // ── Dramatic events ──
+  const [dramaticMsg, setDramaticMsg] = useState<string | null>(null);
+  const dramaticCooldownRef = useRef(0);
+  const prevPosRef = useRef(position);
+  useEffect(() => {
+    if (!onPlaySound) return;
+    const { x, y } = position;
+    // Only check on actual movement
+    if (x === prevPosRef.current.x && y === prevPosRef.current.y) return;
+    prevPosRef.current = position;
+
+    const sum = Math.round(x) + Math.round(y);
+    // Check if sum is a power of 2 in [64, 512]
+    const isPowerOf2 = sum >= 64 && sum <= 512 && (sum & (sum - 1)) === 0;
+    if (!isPowerOf2) return;
+
+    const now = Date.now();
+    if (now < dramaticCooldownRef.current) return;
+    dramaticCooldownRef.current = now + 180_000;
+
+    setDramaticMsg('"Is something out there?..."');
+    onPlaySound("winter_wind");
+  }, [position, onPlaySound]);
+
+  // Auto-dismiss dramatic message after 6s
+  useEffect(() => {
+    if (!dramaticMsg) return;
+    const t = setTimeout(() => setDramaticMsg(null), 6000);
+    return () => clearTimeout(t);
+  }, [dramaticMsg]);
 
   // Capture-phase keydown: when foresight ON, intercept WASD/arrows before useGame's handler
   useEffect(() => {
@@ -474,6 +505,11 @@ const prevForesightRef = useRef(foresightMode);
                   : "bg-blue-900/80 border-blue-600 text-blue-300"
             }`}>
               <div className="text-sm">{status === "Moving..." || status === "Mining..." ? "⏳" : status.startsWith("Mined") ? "⛏️" : "👟"} {status}</div>
+            </div>
+          )}
+          {dramaticMsg && (
+            <div className="backdrop-blur px-4 py-3 rounded-lg border border-purple-500/40 bg-purple-900/70 text-purple-200 animate-pulse">
+              <div className="text-sm">{dramaticMsg}</div>
             </div>
           )}
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
