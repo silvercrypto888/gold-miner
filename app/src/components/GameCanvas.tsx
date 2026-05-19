@@ -211,41 +211,38 @@ const prevForesightRef = useRef(foresightMode);
     }
   }, [status, onPlaySound]);
 
-  // Mining burst particles
+  // Mining burst particles — pre-computed velocities in grid-units, viewport-relative render
   interface BurstParticle {
-    angle: number;
-    distance: number;
+    ox: number;    // grid x at origin
+    oy: number;    // grid y at origin
+    vx: number;    // velocity (grid-units/ms)
+    vy: number;    // velocity (grid-units/ms)
     size: number;
-    originX: number;
-    originY: number;
     startTime: number;
   }
   const particlesRef = useRef<BurstParticle[]>([]);
-  const lastMinedPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Spawn burst when a mine happens
   const prevMinedRef = useRef(false);
   useEffect(() => {
     const isMined = status.startsWith("Mined");
     if (isMined && !prevMinedRef.current) {
-      // Capture the cell position for burst
-      lastMinedPosRef.current = { ...position };
       const now = performance.now();
       const particles: BurstParticle[] = [];
       // 20 big (4px) + 20 small (2px)
       for (let i = 0; i < 40; i++) {
         const angle = (Math.PI * 2 / 40) * i + (Math.random() - 0.5) * 0.3;
+        const speed = 0.3 + Math.random() * 1.2;  // cells/second
         particles.push({
-          angle,
-          distance: 8 + Math.random() * 24,
+          ox: position.x,
+          oy: position.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
           size: i < 20 ? 4 : 2,
-          originX: position.x,
-          originY: position.y,
           startTime: now,
         });
       }
       particlesRef.current.push(...particles);
-      // Clean old particles after 3s
       setTimeout(() => {
         const cutoff = performance.now() - 3000;
         particlesRef.current = particlesRef.current.filter(p => p.startTime >= cutoff);
@@ -468,31 +465,28 @@ const prevForesightRef = useRef(foresightMode);
         }
       }
 
-      // Mining burst particles
+      // Mining burst particles — grid-relative, viewport-aware
       if (particlesRef.current.length > 0) {
         const t2 = (Math.sin(now * 0.0015) + 1) / 2;
-        const pr = Math.round(255 + (255 - 255) * t2);
-        const pg = Math.round(215 + (140 - 215) * t2);
-        const goldColor = `rgb(${pr},${pg},0)`;
+        const goldColor = `rgb(${Math.round(255 + (255 - 255) * t2)},${Math.round(215 + (140 - 215) * t2)},0)`;
 
-        for (const p of particlesRef.current) {
-          const elapsed = (now - p.startTime);
-          if (elapsed > 3000) continue;
-          const progress = elapsed / 3000;
-          const ease = 1 - (1 - progress) * (1 - progress);
-          const dist = p.distance * ease;
-          const gx = p.originX + Math.cos(p.angle) * dist / CELL_SIZE;
-          const gy = p.originY + Math.sin(p.angle) * dist / CELL_SIZE;
+        const particles = particlesRef.current;
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          const elapsed = now - p.startTime;
+          if (elapsed > 3000) { particles.splice(i, 1); continue; }
+          // Ease-out velocity: fast at start, slow at end
+          const ease = 1 - elapsed / 3000;
+          const gx = p.ox + p.vx * elapsed * ease / 1000;
+          const gy = p.oy + p.vy * elapsed * ease / 1000;
 
-          // Convert to screen coords
+          // Convert to screen coords using current viewport
           const psx = (gx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
           const psy = (maxY - gy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
           ctx.fillStyle = goldColor;
           ctx.fillRect(psx - p.size / 2, psy - p.size / 2, p.size, p.size);
         }
-
-        particlesRef.current = particlesRef.current.filter(p => (now - p.startTime) < 3000);
       }
 
       rAFRef.current = requestAnimationFrame(render);
