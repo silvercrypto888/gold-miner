@@ -44,7 +44,7 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
   return tc;
 }
 
-export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk") => void }) {
+export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight") => void }) {
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
     useSessionKey();
@@ -69,16 +69,27 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const foresightPosRef = useRef<{ x: number; y: number }>({ x: 1, y: 1 });
 
   // Sync foresightPos with real position when NOT in foresight mode, or on toggle ON
-  const prevForesightRef = useRef(foresightMode);
+const prevForesightRef = useRef(foresightMode);
   useEffect(() => {
     if (foresightMode && !prevForesightRef.current) {
       // Just toggled ON — snap shade to player's current position
       foresightPosRef.current = { ...position };
-    } else if (!foresightMode && prevForesightRef.current) {
-      // Just toggled OFF — shade disappears, viewport snaps back
     }
     prevForesightRef.current = foresightMode;
   }, [foresightMode, position]);
+
+  // Play foresight sounds only on toggle (separate effect avoids position-dependency noise)
+  const prevForesightSoundRef = useRef(foresightMode);
+  useEffect(() => {
+    if (!onPlaySound) { prevForesightSoundRef.current = foresightMode; return; }
+    const wasOn = prevForesightSoundRef.current;
+    if (foresightMode && !wasOn) {
+      onPlaySound("enter_foresight");
+    } else if (!foresightMode && wasOn) {
+      onPlaySound("exit_foresight");
+    }
+    prevForesightSoundRef.current = foresightMode;
+  }, [foresightMode, onPlaySound]);
 
   // Capture-phase keydown: when foresight ON, intercept WASD/arrows before useGame's handler
   useEffect(() => {

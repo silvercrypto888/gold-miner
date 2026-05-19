@@ -12,6 +12,8 @@ const TRACK_CANDIDATES = [
 const SOUND_CANDIDATES: Record<string, string> = {
   mine: "/assets/sounds/gold_mine.opus",
   walk: "/assets/sounds/walk.opus",
+  enter_foresight: "/assets/sounds/enter_foresight.opus",
+  exit_foresight: "/assets/sounds/exit_foresight.opus",
 };
 
 export function useAudio() {
@@ -102,7 +104,7 @@ export function useAudio() {
   }, [discoverTracks, playNextTrack]);
 
   const playSound = useCallback(
-    (name: "mine" | "walk") => {
+    (name: "mine" | "walk" | "enter_foresight" | "exit_foresight") => {
       if (!soundEnabled) return;
       const url = SOUND_CANDIDATES[name];
       if (!url) return;
