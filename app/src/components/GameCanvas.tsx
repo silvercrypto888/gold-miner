@@ -44,7 +44,7 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
   return tc;
 }
 
-export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind") => void }) {
+export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind" | "bell" | "angelical_pad") => void }) {
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
     useSessionKey();
@@ -93,27 +93,24 @@ const prevForesightRef = useRef(foresightMode);
 
   // ── Dramatic events ──
   const [dramaticMsg, setDramaticMsg] = useState<string | null>(null);
-  const dramaticCooldownRef = useRef(0);
-  const prevPosRef = useRef(position);
-  useEffect(() => {
-    if (!onPlaySound) return;
-    const { x, y } = position;
-    // Only check on actual movement
-    if (x === prevPosRef.current.x && y === prevPosRef.current.y) return;
-    prevPosRef.current = position;
+  const dramaticTimers = useRef<Record<string, number>>({
+    posPower: 0,
+    goldMedium: 0,
+    goldRich: 0,
+  });
 
-    const sum = Math.round(x) + Math.round(y);
-    // Check if sum is a power of 2 in [64, 512]
-    const isPowerOf2 = sum >= 64 && sum <= 512 && (sum & (sum - 1)) === 0;
-    if (!isPowerOf2) return;
-
-    const now = Date.now();
-    if (now < dramaticCooldownRef.current) return;
-    dramaticCooldownRef.current = now + 180_000;
-
-    setDramaticMsg('"Is something out there?..."');
-    onPlaySound("winter_wind");
-  }, [position, onPlaySound]);
+  // Trigger dramatic event helper (handles cooldown + message + sound)
+  const triggerDramatic = useCallback(
+    (cooldownKey: string, message: string, sound: string) => {
+      if (!onPlaySound) return;
+      const now = Date.now();
+      if (now < dramaticTimers.current[cooldownKey]) return;
+      dramaticTimers.current[cooldownKey] = now + 180_000;
+      setDramaticMsg(message);
+      onPlaySound(sound as any);
+    },
+    [onPlaySound]
+  );
 
   // Auto-dismiss dramatic message after 6s
   useEffect(() => {
@@ -121,6 +118,33 @@ const prevForesightRef = useRef(foresightMode);
     const t = setTimeout(() => setDramaticMsg(null), 6000);
     return () => clearTimeout(t);
   }, [dramaticMsg]);
+
+  // Power-of-2 position sum — mystery event
+  const prevPosRef = useRef(position);
+  useEffect(() => {
+    if (!onPlaySound) return;
+    const { x, y } = position;
+    if (x === prevPosRef.current.x && y === prevPosRef.current.y) return;
+    prevPosRef.current = position;
+    const sum = Math.round(x) + Math.round(y);
+    const isPowerOf2 = sum >= 64 && sum <= 512 && (sum & (sum - 1)) === 0;
+    if (isPowerOf2) {
+      triggerDramatic("posPower", '"Is something out there?..."', "winter_wind");
+    }
+  }, [position, onPlaySound, triggerDramatic]);
+
+  // Gold density events — checks visible gold count periodically
+  useEffect(() => {
+    const id = setInterval(() => {
+      const count = goldRef.current.filter(g => g.hasGold).length;
+      if (count >= 25 && count <= 49) {
+        triggerDramatic("goldMedium", "Plenty of gold here!", "bell");
+      } else if (count >= 50) {
+        triggerDramatic("goldRich", "It's the motherlode!", "angelical_pad");
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [onPlaySound, triggerDramatic]);
 
   // Capture-phase keydown: when foresight ON, intercept WASD/arrows before useGame's handler
   useEffect(() => {
