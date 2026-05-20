@@ -84,6 +84,16 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const cachedBlockhash = useRef<{ blockhash: string; lastValidBlockHeight: number } | null>(null);
   const blockhashTime = useRef(0);
 
+  // Stale status timer cleanup
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function clearStatusTimer() {
+    if (statusTimerRef.current) { clearTimeout(statusTimerRef.current); statusTimerRef.current = null; }
+  }
+
+  // Session balance cache — only re-fetch every 30s at most, or on insufficient-funds failure
+  const sessionBalanceRef = useRef<{ lamports: number; time: number } | null>(null);
+  const lastFundTimeRef = useRef(0);
+
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
     // Fetch GOLD mint from game_config
@@ -266,6 +276,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) return;
     if (newX === curPos.x && newY === curPos.y) return;
 
+    // Clear any stale status timer from previous move
+    clearStatusTimer();
+
     setIsMoving(true);
     setLastMoveTime(now);
     setPosition({ x: newX, y: newY }); // optimistic
@@ -278,12 +291,24 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     try {
       const signerKp = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-      // Check session key balance
-      const bal = await connRef.current.getBalance(sessionPubkey);
+      // Check session key balance (cached to avoid RPC spam)
+      const balCache = sessionBalanceRef.current;
+      let bal = balCache && (now - balCache.time < 30000) ? balCache.lamports : null;
+      if (bal === null) {
+        bal = await connRef.current.getBalance(sessionPubkey);
+        sessionBalanceRef.current = { lamports: bal, time: now };
+      }
       if (bal < 500_000) {
+        // Throttle fund attempts — only retry every 5 seconds
+        if (now - lastFundTimeRef.current < 5000) {
+          setIsMoving(false); setPosition(positionRef.current); setStatus(""); return;
+        }
+        lastFundTimeRef.current = now;
         const { blockhash: fbh, lastValidBlockHeight: flvb } = await getBlockhash();
         try { await fundSessionKey(sessionPubkey, fbh, flvb); await new Promise(r => setTimeout(r, 500)); }
         catch { setIsMoving(false); setPosition(positionRef.current); setStatus(""); return; }
+        // Bump cached balance so next move won't re-check
+        sessionBalanceRef.current = { lamports: 1_000_000, time: now };
       }
 
       if (!walletPk) return;
@@ -319,20 +344,35 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       tx.sign(signerKp);
       const sig = await connRef.current.sendRawTransaction(tx.serialize());
-      await confirmWithTimeout(connRef.current, sig as any, "confirmed");
 
-      // Check if gold was actually mined: cell has gold formula AND was NOT already mined in bitmap
+      // Try confirm with a short 5s timeout. If it expires, refresh blockhash and retry once.
+      try {
+        await confirmWithTimeout(connRef.current, sig as any, "confirmed", 5000);
+      } catch {
+        // First attempt timed out — likely stale blockhash. Refresh and retry once.
+        invalidateBlockhash();
+        const { blockhash: newBh, lastValidBlockHeight: newLvb } = await getBlockhash();
+        const retryTx = await buildMoveTx(
+          direction, playerPda, gameConfigPda, goldBitmapPda,
+          goldMintPk, goldAta, tokenProgram, ataProgram, SystemProgram.programId
+        );
+        retryTx.sign(signerKp);
+        const retrySig = await connRef.current.sendRawTransaction(retryTx.serialize());
+        // 5s timeout again — if this also fails, let it throw
+        await confirmWithTimeout(connRef.current, retrySig as any, "confirmed", 5000);
+      }
+
+      // Check if gold was actually mined
       const bitsBefore = bitmapRef.current;
       const goldFormula = hasGoldAt(newX, newY);
       const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
       const newMine = goldFormula && !alreadyMined;
 
-      // Refresh bitmap after mining — force fresh fetch AND update visibleGold immediately
+      // Refresh bitmap after mining
       const freshBits = await fetchBitmap(true);
       if (freshBits) {
         const cellMined = isCellMined(freshBits, newX, newY);
         if (cellMined) {
-          // Immediately remove that gold spot from visibleGold
           setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
         }
       }
@@ -345,9 +385,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         }
       } catch {}
 
-      // Show success status for 3 seconds
+      // Show success status for 3 seconds (owned timer — cleared on next move start)
       setStatus(newMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
-      setTimeout(() => setStatus(""), 3000);
+      statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();
     } catch (err: any) {
       const errMsg = err.message || String(err);
