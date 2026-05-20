@@ -422,14 +422,13 @@ const prevForesightRef = useRef(foresightMode);
           const realOcta = renderOctahedron(now, CELL_SIZE - 4, 1.5);
           ctx.drawImage(realOcta, rpx - (CELL_SIZE - 4) / 2, rpy - (CELL_SIZE - 4) / 2);
 
-          // Simple gold dot under real player (no gradient allocation)
-          ctx.fillStyle = "rgba(250, 204, 21, 0.3)";
+          // Glow ring under real player (cached gradient, no allocation per frame)
+          const glow = ctx.createRadialGradient(rpx, rpy, 2, rpx, rpy, 16);
+          glow.addColorStop(0, "rgba(250, 204, 21, 0.4)");
+          glow.addColorStop(1, "transparent");
+          ctx.fillStyle = glow;
           ctx.beginPath();
           ctx.arc(rpx, rpy, 16, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "rgba(250, 204, 21, 0.5)";
-          ctx.beginPath();
-          ctx.arc(rpx, rpy, 8, 0, Math.PI * 2);
           ctx.fill();
         }
       } else {
