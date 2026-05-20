@@ -258,8 +258,6 @@ const prevForesightRef = useRef(foresightMode);
   useEffect(() => { goldRef.current = visibleGold; }, [visibleGold]);
   useEffect(() => { playersRef.current = visiblePlayers; }, [visiblePlayers]);
   useEffect(() => { showPlayersRef.current = showPlayers; }, [showPlayers]);
-  const goldSenseRef = useRef(goldSenseEnabled);
-  useEffect(() => { goldSenseRef.current = goldSenseEnabled; }, [goldSenseEnabled]);
 
   // Smooth position interpolation — triggered when position changes
   useEffect(() => {
@@ -325,11 +323,8 @@ const prevForesightRef = useRef(foresightMode);
       ctx.fillRect(0, 0, size, size);
 
       // Build gold Set for O(1) lookup + screen positions for icosahedrons
-      const goldSenseOn = goldSenseRef.current;
       const goldKeySet = new Set<string>();
-      if (goldSenseOn) {
-        for (const g of goldSpots) if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
-      }
+      for (const g of goldSpots) if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
@@ -353,7 +348,7 @@ const prevForesightRef = useRef(foresightMode);
             if (y === maxY && x % 10 === 0) ctx.fillText(String(x), sx + CELL_SIZE / 2, sy + 30);
           }
 
-          const goldFormula = goldSenseOn ? hasGoldAt(x, y) : false;
+          const goldFormula = hasGoldAt(x, y);
 
           let hasGold = false;
           if (goldFormula) {
