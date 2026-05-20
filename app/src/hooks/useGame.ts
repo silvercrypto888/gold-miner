@@ -32,7 +32,7 @@ const DIRECTION_VARIANT: Record<Direction, number> = {
   Up: 0, Down: 1, Left: 2, Right: 3,
 };
 
-async function confirmWithTimeout(conn: Connection, args: any, commitment: "confirmed", timeoutMs = CONFIRM_TIMEOUT_MS) {
+async function confirmWithTimeout(conn: Connection, args: any, commitment: web3.Commitment, timeoutMs = CONFIRM_TIMEOUT_MS) {
   return Promise.race([
     conn.confirmTransaction(args, commitment),
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timed out")), timeoutMs)),
@@ -93,6 +93,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   // Session balance cache — only re-fetch every 30s at most, or on insufficient-funds failure
   const sessionBalanceRef = useRef<{ lamports: number; time: number } | null>(null);
   const lastFundTimeRef = useRef(0);
+
+  // Pending confirmed move — prevents stale background confirmation from reverting a newer move
+  const moveSeqRef = useRef(0);
 
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
@@ -279,10 +282,19 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     // Clear any stale status timer from previous move
     clearStatusTimer();
 
+    // Bump sequence counter so older background confirmations are ignored
+    const seq = ++moveSeqRef.current;
+
     setIsMoving(true);
     setLastMoveTime(now);
     setPosition({ x: newX, y: newY }); // optimistic
     setStatus("Moving...");
+
+    // Pre-compute gold check from cached bitmap (fast, no RPC)
+    const bitsBefore = bitmapRef.current;
+    const goldFormula = hasGoldAt(newX, newY);
+    const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
+    const expectedNewMine = goldFormula && !alreadyMined;
 
     const programId = getProgramId();
     const walletPk = playerState.wallet;
@@ -299,7 +311,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         sessionBalanceRef.current = { lamports: bal, time: now };
       }
       if (bal < 500_000) {
-        // Throttle fund attempts — only retry every 5 seconds
         if (now - lastFundTimeRef.current < 5000) {
           setIsMoving(false); setPosition(positionRef.current); setStatus(""); return;
         }
@@ -307,7 +318,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         const { blockhash: fbh, lastValidBlockHeight: flvb } = await getBlockhash();
         try { await fundSessionKey(sessionPubkey, fbh, flvb); await new Promise(r => setTimeout(r, 500)); }
         catch { setIsMoving(false); setPosition(positionRef.current); setStatus(""); return; }
-        // Bump cached balance so next move won't re-check
         sessionBalanceRef.current = { lamports: 1_000_000, time: now };
       }
 
@@ -319,7 +329,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const tokenProgram = getToken2022ProgramId();
       const ataProgram = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
-      // Get GOLD mint and ATA
       let goldMintPk = gold_mint_pk.current;
       if (!goldMintPk) {
         try {
@@ -342,14 +351,75 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         goldMintPk, goldAta, tokenProgram, ataProgram, SystemProgram.programId
       );
 
-      tx.sign(signerKp);
-      const sig = await connRef.current.sendRawTransaction(tx.serialize());
+      // Pre-identify the move-and-mine instruction — the only instruction in the tx
+      const moveIxIdx = 0;
 
-      // Try confirm with a short 5s timeout. If it expires, refresh blockhash and retry once.
+      tx.sign(signerKp);
+      const serialized = tx.serialize();
+      const sig = await connRef.current.sendRawTransaction(serialized);
+
+      // ── STEP 1: Quick processed-level confirm (~100ms) to unblock immediately ──
+      let processedOk = false;
+      try {
+        await confirmWithTimeout(connRef.current, { signature: sig, lastValidBlockHeight: 0 } as any, "processed", 3000);
+        processedOk = true;
+      } catch {
+        // processed failed — try confirmed directly
+      }
+
+      if (processedOk) {
+        // Unblock immediately — player can move again while we wait for confirmed
+        setIsMoving(false);
+        setStatus(expectedNewMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
+        statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
+        invalidateBlockhash();
+
+        // ── STEP 2: Background confirmed poll + data refresh ──
+        (async () => {
+          try {
+            // Wait for confirmed commitment
+            const [confirmedSig, confirmResult] = await Promise.all([
+              connRef.current!.confirmTransaction(sig, "confirmed"),
+              new Promise<void>(r => setTimeout(r, 3000)), // 3s timeout
+            ]);
+
+            // If a newer move has already been initiated, this background work is stale — bail
+            if (moveSeqRef.current !== seq) return;
+
+            // Refresh bitmap in background
+            const freshBits = await connRef.current!.getAccountInfo(goldBitmapPda, "confirmed");
+            if (freshBits && freshBits.data.length >= BITMAP_BYTES) {
+              const realBits = new Uint8Array(freshBits.data.slice(0, BITMAP_BYTES));
+              bitmapRef.current = realBits;
+              bitmapLastFetch.current = Date.now();
+              const cellMined = isCellMined(realBits, newX, newY);
+              if (cellMined) {
+                setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
+              }
+            }
+
+            // Sync position from chain
+            if (moveSeqRef.current !== seq) return;
+            const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
+            if (posInfo && moveSeqRef.current === seq) {
+              setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
+            }
+          } catch {
+            // Background confirm failed — if we're still on this move, revert
+            if (moveSeqRef.current === seq) {
+              const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
+              if (posInfo) setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
+              else setPosition(positionRef.current);
+            }
+          }
+        })();
+        return;
+      }
+
+      // ── Fallback: processed failed, try confirmed (with 5s timeout + 1 retry) ──
       try {
         await confirmWithTimeout(connRef.current, sig as any, "confirmed", 5000);
       } catch {
-        // First attempt timed out — likely stale blockhash. Refresh and retry once.
         invalidateBlockhash();
         const { blockhash: newBh, lastValidBlockHeight: newLvb } = await getBlockhash();
         const retryTx = await buildMoveTx(
@@ -358,17 +428,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         );
         retryTx.sign(signerKp);
         const retrySig = await connRef.current.sendRawTransaction(retryTx.serialize());
-        // 5s timeout again — if this also fails, let it throw
         await confirmWithTimeout(connRef.current, retrySig as any, "confirmed", 5000);
       }
 
-      // Check if gold was actually mined
-      const bitsBefore = bitmapRef.current;
-      const goldFormula = hasGoldAt(newX, newY);
-      const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
-      const newMine = goldFormula && !alreadyMined;
-
-      // Refresh bitmap after mining
+      // Post-confirm RPCs (only reachable if processed failed)
       const freshBits = await fetchBitmap(true);
       if (freshBits) {
         const cellMined = isCellMined(freshBits, newX, newY);
@@ -377,22 +440,17 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         }
       }
 
-      // Read final position from chain
       try {
         const info = await connRef.current.getAccountInfo(playerPda, "confirmed");
-        if (info) {
-          setPosition({ x: info.data.readUInt32LE(72), y: info.data.readUInt32LE(76) });
-        }
+        if (info) setPosition({ x: info.data.readUInt32LE(72), y: info.data.readUInt32LE(76) });
       } catch {}
 
-      // Show success status for 3 seconds (owned timer — cleared on next move start)
-      setStatus(newMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
+      setStatus(expectedNewMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();
     } catch (err: any) {
       const errMsg = err.message || String(err);
 
-      // Auto-renew session on SessionExpired
       if (errMsg.includes("SessionExpired") || errMsg.includes("0x1771")) {
         setStatus("Renewing session...");
         try {
@@ -411,7 +469,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       if (err?.name === "TransactionExpiredBlockheightExceededError") invalidateBlockhash();
 
-      // Revert position
       try {
         const [pda] = getPlayerPda(walletPk, programId);
         const info = await connRef.current.getAccountInfo(pda, "confirmed");
