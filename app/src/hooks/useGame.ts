@@ -21,9 +21,7 @@ import {
   GOLD_PER_MINE,
 } from "@/lib/constants";
 import { GoldMinerIDL } from "@/lib/idl";
-import { Program, web3 } from "@coral-xyz/anchor";
 
-const CONFIRM_TIMEOUT_MS = 30_000;
 const MOVE_COOLDOWN_MS = 300;
 
 // move_and_mine instruction discriminator
@@ -31,13 +29,6 @@ const MOVE_AND_MINE_DISC = Buffer.from([26, 202, 228, 63, 206, 4, 137, 63]);
 const DIRECTION_VARIANT: Record<Direction, number> = {
   Up: 0, Down: 1, Left: 2, Right: 3,
 };
-
-async function confirmWithTimeout(conn: Connection, args: any, commitment: web3.Commitment, timeoutMs = CONFIRM_TIMEOUT_MS) {
-  return Promise.race([
-    conn.confirmTransaction(args, commitment),
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timed out")), timeoutMs)),
-  ]);
-}
 
 interface UseGameProps {
   sessionKeypair: nacl.SignKeyPair | null;
@@ -96,6 +87,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
   // Pending confirmed move — prevents stale background confirmation from reverting a newer move
   const moveSeqRef = useRef(0);
+
+  // Single timeout-based background confirmation per player (replaces polling loop)
+  const pendingConfirmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
@@ -361,13 +355,24 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();
 
-      // ── Background: wait for confirmed commitment, then sync data ──
-      (async () => {
+      // ── Background: single-shot timeout (~1 blocktime), no polling loop ──
+      if (pendingConfirmRef.current) clearTimeout(pendingConfirmRef.current);
+      pendingConfirmRef.current = setTimeout(async () => {
         try {
-          await confirmWithTimeout(connRef.current!, sig as any, "confirmed", 3000);
-          // If a newer move started, this is stale — bail
+          const { value } = await connRef.current!.getSignatureStatus(sig, { searchTransactionHistory: false });
+          if (!value || !value.confirmations) {
+            // TX may have been orphaned. Revert if still the current move.
+            if (moveSeqRef.current !== seq) return;
+            invalidateBlockhash();
+            const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
+            if (posInfo) setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
+            else setPosition(positionRef.current);
+            return;
+          }
+
           if (moveSeqRef.current !== seq) return;
 
+          // Sync bitmap
           const freshBits = await connRef.current!.getAccountInfo(goldBitmapPda, "confirmed");
           if (freshBits && freshBits.data.length >= BITMAP_BYTES) {
             const realBits = new Uint8Array(freshBits.data.slice(0, BITMAP_BYTES));
@@ -380,12 +385,13 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           }
 
           if (moveSeqRef.current !== seq) return;
+
+          // Sync position
           const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
           if (posInfo && moveSeqRef.current === seq) {
             setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
           }
         } catch {
-          // Background confirm failed — leader may have been orphaned. Revert if still current.
           if (moveSeqRef.current === seq) {
             invalidateBlockhash();
             const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
@@ -393,7 +399,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             else setPosition(positionRef.current);
           }
         }
-      })();
+      }, 600);
       return;
     } catch (err: any) {
       const errMsg = err.message || String(err);
