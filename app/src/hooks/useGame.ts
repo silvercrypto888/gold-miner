@@ -352,10 +352,16 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // sendRawTransaction succeeded ≡ leader accepted TX (X1's processed). Unblock immediately.
       setIsMoving(false);
       setStatus(expectedNewMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
+      // Optimistic gold removal — hides the mined cell instantly, background confirm syncs later
+      if (expectedNewMine) {
+        setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
+      }
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();
 
       // ── Background: single-shot timeout (~1 blocktime), no polling loop ──
+      // Keep track of whether we optimistically removed gold, for revert
+      const wasMineMove = expectedNewMine;
       if (pendingConfirmRef.current) clearTimeout(pendingConfirmRef.current);
       pendingConfirmRef.current = setTimeout(async () => {
         try {
@@ -363,6 +369,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           if (!value || !value.confirmations) {
             // TX may have been orphaned. Revert if still the current move.
             if (moveSeqRef.current !== seq) return;
+            // Restore optimistically removed gold
+            if (wasMineMove) forceRefreshGold();
             invalidateBlockhash();
             const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
             if (posInfo) setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
@@ -393,6 +401,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           }
         } catch {
           if (moveSeqRef.current === seq) {
+            if (wasMineMove) forceRefreshGold();
             invalidateBlockhash();
             const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
             if (posInfo) setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
