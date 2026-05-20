@@ -17,6 +17,8 @@ import {
   BITMAP_BYTES,
   hasGoldAt,
   isCellMined,
+  markCellMined,
+  clearCellMined,
   getViewportRange,
   GOLD_PER_MINE,
 } from "@/lib/constants";
@@ -355,6 +357,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // Optimistic gold removal — hides the mined cell instantly, background confirm syncs later
       if (expectedNewMine) {
         setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
+        // Flip the bitmap bit so updateVisibleGold re-computes correctly
+        if (bitmapRef.current) markCellMined(bitmapRef.current, newX, newY);
       }
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
       invalidateBlockhash();

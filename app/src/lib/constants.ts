@@ -111,6 +111,22 @@ export function isCellMined(bits: Uint8Array, x: number, y: number): boolean {
   return (bits[byteIdx] & (1 << bitPos)) !== 0;
 }
 
+/// Bitmap helper: mark a cell as mined in-place (no allocation)
+export function markCellMined(bits: Uint8Array, x: number, y: number): void {
+  const bitIdx = posToBitIndex(x, y);
+  const byteIdx = Math.floor(bitIdx / 8);
+  const bitPos = bitIdx % 8;
+  bits[byteIdx] |= (1 << bitPos);
+}
+
+/// Bitmap helper: clear a cell's mined flag in-place (for revert)
+export function clearCellMined(bits: Uint8Array, x: number, y: number): void {
+  const bitIdx = posToBitIndex(x, y);
+  const byteIdx = Math.floor(bitIdx / 8);
+  const bitPos = bitIdx % 8;
+  bits[byteIdx] &= ~(1 << bitPos);
+}
+
 /// Get viewport range centered on player
 export function getViewportRange(playerX: number, playerY: number): {
   minX: number; maxX: number; minY: number; maxY: number;
