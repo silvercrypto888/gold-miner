@@ -69,6 +69,9 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const [foresightMode, setForesightMode] = useState(false);
   const foresightPosRef = useRef<{ x: number; y: number }>({ x: 1, y: 1 });
 
+  // ── Gold Sense toggle ──
+  const [goldSenseEnabled, setGoldSenseEnabled] = useState(true);
+
   // Sync foresightPos with real position when NOT in foresight mode, or on toggle ON
 const prevForesightRef = useRef(foresightMode);
   useEffect(() => {
@@ -255,6 +258,8 @@ const prevForesightRef = useRef(foresightMode);
   useEffect(() => { goldRef.current = visibleGold; }, [visibleGold]);
   useEffect(() => { playersRef.current = visiblePlayers; }, [visiblePlayers]);
   useEffect(() => { showPlayersRef.current = showPlayers; }, [showPlayers]);
+  const goldSenseRef = useRef(goldSenseEnabled);
+  useEffect(() => { goldSenseRef.current = goldSenseEnabled; }, [goldSenseEnabled]);
 
   // Smooth position interpolation — triggered when position changes
   useEffect(() => {
@@ -320,8 +325,11 @@ const prevForesightRef = useRef(foresightMode);
       ctx.fillRect(0, 0, size, size);
 
       // Build gold Set for O(1) lookup + screen positions for icosahedrons
+      const goldSenseOn = goldSenseRef.current;
       const goldKeySet = new Set<string>();
-      for (const g of goldSpots) if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
+      if (goldSenseOn) {
+        for (const g of goldSpots) if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
+      }
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
@@ -345,7 +353,7 @@ const prevForesightRef = useRef(foresightMode);
             if (y === maxY && x % 10 === 0) ctx.fillText(String(x), sx + CELL_SIZE / 2, sy + 30);
           }
 
-          const goldFormula = hasGoldAt(x, y);
+          const goldFormula = goldSenseOn ? hasGoldAt(x, y) : false;
 
           let hasGold = false;
           if (goldFormula) {
@@ -647,7 +655,23 @@ const prevForesightRef = useRef(foresightMode);
               {foresightMode ? "👁 ON" : "👁 OFF"}
             </div>
           </button>
-          <GoldEye goldCount={visibleGold.filter(g => g.hasGold).length} />
+          <button
+            onClick={() => setGoldSenseEnabled(v => !v)}
+            className={`backdrop-blur px-4 py-2 rounded-lg border transition-all min-w-[120px] flex items-center justify-center ${
+              goldSenseEnabled
+                ? "bg-gray-900/90 border-gray-700"
+                : "bg-gray-800/90 border-gray-600 text-gray-300"
+            }`}
+          >
+            {goldSenseEnabled ? (
+              <GoldEye goldCount={visibleGold.filter(g => g.hasGold).length} />
+            ) : (
+              <div className="text-center">
+                <div className="text-sm text-gray-400">Gold Sense</div>
+                <div className="text-lg font-bold">OFF</div>
+              </div>
+            )}
+          </button>
         </div>
       )}
 
