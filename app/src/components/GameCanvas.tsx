@@ -446,7 +446,10 @@ const prevForesightRef = useRef(foresightMode);
           const opx = (op.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
           const opy = (maxY - op.y) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
-          ctx.fillStyle = "rgba(34, 197, 94, 0.35)";
+          const og = ctx.createRadialGradient(opx, opy, 4, opx, opy, 14);
+          og.addColorStop(0, "rgba(34, 197, 94, 0.5)");
+          og.addColorStop(1, "transparent");
+          ctx.fillStyle = og;
           ctx.beginPath();
           ctx.arc(opx, opy, 14, 0, Math.PI * 2);
           ctx.fill();
