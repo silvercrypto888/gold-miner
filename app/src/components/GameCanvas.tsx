@@ -232,16 +232,16 @@ const prevForesightRef = useRef(foresightMode);
     if (isMined && !prevMinedRef.current) {
       const now = performance.now();
       const particles: BurstParticle[] = [];
-      // 20 big (4px) + 20 small (2px)
+      // 40 fixed 4x4 pixel squares, no size variance
       for (let i = 0; i < 40; i++) {
         const angle = (Math.PI * 2 / 40) * i + (Math.random() - 0.5) * 0.3;
-        const speed = 0.3 + Math.random() * 1.2;  // cells/second
+        const speed = 0.4 + Math.random() * 1.0;  // cells/second
         particles.push({
           ox: position.x,
           oy: position.y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          size: i < 20 ? 4 : 2,
+          size: 4,
           startTime: now,
         });
       }
@@ -474,23 +474,27 @@ const prevForesightRef = useRef(foresightMode);
 
       // Mining burst particles — grid-relative, viewport-aware
       if (particlesRef.current.length > 0) {
-        const goldColor = "rgb(255,200,50)"; // fixed warm gold for particles
+        // Match Gold Sense color oscillation (phase = 1.5 rad/s to match GoldEye's 0.025/frame at ~60fps)
+        const gsPhase = (now / 1000) * 1.5;
+        const gsT = (Math.sin(gsPhase) + 1) / 2;
+        const gsG = Math.round(215 + (140 - 215) * gsT);
+        const particleColor = `rgb(255,${gsG},0)`;
         const particles = particlesRef.current;
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];
           const elapsed = now - p.startTime;
           if (elapsed > 3000) { particles.splice(i, 1); continue; }
-          // Ease-out velocity: fast at start, slow at end
-          const ease = 1 - elapsed / 3000;
-          const gx = p.ox + p.vx * elapsed * ease / 1000;
-          const gy = p.oy + p.vy * elapsed * ease / 1000;
+          // Constant velocity — no easing, pixelated feel
+          const gx = p.ox + p.vx * elapsed / 1000;
+          const gy = p.oy + p.vy * elapsed / 1000;
 
           // Convert to screen coords using current viewport
           const psx = (gx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
           const psy = (maxY - gy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
-          ctx.fillStyle = goldColor;
-          ctx.fillRect(psx - p.size / 2, psy - p.size / 2, p.size, p.size);
+          ctx.fillStyle = particleColor;
+          // Fixed 4x4 pixel square, integer-snapped — no blur, no size variance
+          ctx.fillRect(Math.round(psx) - 2, Math.round(psy) - 2, 4, 4);
         }
       }
 
