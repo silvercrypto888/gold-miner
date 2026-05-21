@@ -53,14 +53,20 @@ export function useSessionKey() {
     }
   }, [publicKey, signTransaction]);
 
-  // Load existing session
+  // Load existing session — re-check on wallet reconnect too
+  const prevPubkeyRef = useRef<PublicKey | null>(null);
   useEffect(() => {
     const loaded = loadSessionKey();
     if (loaded) {
       setSessionKeypair(loaded.keypair);
       setSessionExpiry(loaded.expiresAt);
+    } else if (publicKey && prevPubkeyRef.current === null) {
+      // Wallet reconnected but no stored session — ensure UI shows as clean
+      setSessionKeypair(null);
+      setSessionExpiry(null);
     }
-  }, []);
+    prevPubkeyRef.current = publicKey;
+  }, [publicKey]);
 
   // Refresh on wallet connect
   useEffect(() => {
