@@ -73,10 +73,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const bitmapRef = useRef<Uint8Array | null>(null);
   const bitmapLastFetch = useRef(0);
 
-  // Cached blockhash
-  const cachedBlockhash = useRef<{ blockhash: string; lastValidBlockHeight: number } | null>(null);
-  const blockhashTime = useRef(0);
-
   // Stale status timer cleanup
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   function clearStatusTimer() {
@@ -89,9 +85,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
   // Pending confirmed move — prevents stale background confirmation from reverting a newer move
   const moveSeqRef = useRef(0);
-
-  // Single timeout-based background confirmation per player (replaces polling loop)
-  const pendingConfirmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
@@ -182,29 +175,73 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [position, fetchBitmap]);
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
-  // Extra periodic refresh so gold spots stay synced
+  // ── Blockhash pre-fetcher ──
+  // Background interval fetches a fresh blockhash every 2s
+  // so the hot path never awaits getLatestBlockhash.
+  const nextBlockhashRef = useRef<{ blockhash: string; lastValidBlockHeight: number }>(null!);
+  const preFetchBlockhash = useCallback(async () => {
+    try {
+      const fresh = await connRef.current!.getLatestBlockhash();
+      nextBlockhashRef.current = fresh;
+    } catch {}
+  }, []);
+  // Kick off first fetch immediately, then every 2s
   useEffect(() => {
-    const interval = setInterval(() => fetchBitmap(), 5000);
-    return () => clearInterval(interval);
-  }, [fetchBitmap]);
+    if (connRef.current) preFetchBlockhash();
+    const iv = setInterval(preFetchBlockhash, 2000);
+    return () => clearInterval(iv);
+  }, [preFetchBlockhash]);
 
-  const getBlockhash = useCallback(async () => {
-    const cached = cachedBlockhash.current;
-    const age = Date.now() - blockhashTime.current;
-    if (cached && age < 15000) return cached;
-    const fresh = await connRef.current!.getLatestBlockhash();
-    cachedBlockhash.current = fresh;
-    blockhashTime.current = Date.now();
-    return fresh;
-  }, []);
+  // ── Pending move batch confirm ──
+  interface PendingMove {
+    sig: string;
+    seq: number;
+    cellX: number;
+    cellY: number;
+    wasMineMove: boolean;
+  }
+  const pendingMovesRef = useRef<PendingMove[]>([]);
 
-  const invalidateBlockhash = useCallback(() => {
-    cachedBlockhash.current = null;
-    blockhashTime.current = 0;
-  }, []);
+  // Batch check all pending sigs every 1s
+  useEffect(() => {
+    if (!connRef.current) return;
+    const iv = setInterval(async () => {
+      const q = pendingMovesRef.current;
+      if (q.length === 0) return;
+      const sigs = q.map(m => m.sig);
+      try {
+        const results = await connRef.current!.getSignatureStatuses(sigs);
+        const stillValid: PendingMove[] = [];
+        if (results?.value) {
+          for (let i = 0; i < q.length; i++) {
+            const pm = q[i];
+            const status = results.value[i];
+            if (!status) { stillValid.push(pm); continue; }
+            if (status.confirmations !== null && status.confirmations > 0) {
+              // Confirmed — leave gold gone, nothing to revert
+              continue;
+            }
+            if (status.confirmationStatus === "finalized" || status.confirmationStatus === "confirmed") {
+              // Also confirmed
+              continue;
+            }
+            // Errored, dropped, or orphaned
+            if (pm.wasMineMove) {
+              // Always revert gold for dropped mine moves — on-chain bit never set
+              forceRefreshGold();
+            }
+            // Non-mine moves that were superseded are silently dropped
+            // Orphaned — don't keep tracking
+          }
+        }
+        pendingMovesRef.current = stillValid;
+      } catch {}
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [forceRefreshGold]);
 
   // Build move_and_mine TX manually (no IDL dependency for the hot path)
-  const buildMoveTx = useCallback(async (
+  const buildMoveTx = useCallback((
     direction: Direction,
     playerPda: PublicKey,
     gameConfigPda: PublicKey,
@@ -214,9 +251,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     tokenProgram: PublicKey,
     ataProgram: PublicKey,
     systemProgram: PublicKey,
-  ): Promise<Transaction> => {
-    const { blockhash, lastValidBlockHeight } = await getBlockhash();
-    const tx = new Transaction({ feePayer: sessionPubkey!, blockhash, lastValidBlockHeight });
+  ): Transaction => {
+    const cached = nextBlockhashRef.current;
+    if (!cached) throw new Error("No pre-fetched blockhash");
+    const tx = new Transaction({ feePayer: sessionPubkey!, blockhash: cached.blockhash, lastValidBlockHeight: cached.lastValidBlockHeight });
+    // Consume it — next call will use a fresh pre-fetched value
+    nextBlockhashRef.current = null!;
 
     // Accounts:
     // 0 sessionSigner (signer)
@@ -256,7 +296,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     }));
 
     return tx;
-  }, [sessionPubkey, getBlockhash]);
+  }, [sessionPubkey]);
 
   const move = useCallback(async (direction: Direction) => {
     if (!sessionKeypair || !sessionPubkey || !playerState || !connRef.current) return;
@@ -311,7 +351,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           setIsMoving(false); setPosition(positionRef.current); setStatus(""); return;
         }
         lastFundTimeRef.current = now;
-        const { blockhash: fbh, lastValidBlockHeight: flvb } = await getBlockhash();
+        const { blockhash: fbh, lastValidBlockHeight: flvb } = await connRef.current.getLatestBlockhash();
         try { await fundSessionKey(sessionPubkey, fbh, flvb); await new Promise(r => setTimeout(r, 500)); }
         catch { setIsMoving(false); setPosition(positionRef.current); setStatus(""); return; }
         sessionBalanceRef.current = { lamports: 1_000_000, time: now };
@@ -341,8 +381,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       const goldAta = getGoldAta(walletPk, goldMintPk);
 
-      // Build and send move TX
-      const tx = await buildMoveTx(
+      // Build and send move TX (no await — blockhash is pre-fetched)
+      const tx = buildMoveTx(
         direction, playerPda, gameConfigPda, goldBitmapPda,
         goldMintPk, goldAta, tokenProgram, ataProgram, SystemProgram.programId
       );
@@ -361,58 +401,16 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         if (bitmapRef.current) markCellMined(bitmapRef.current, newX, newY);
       }
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
-      invalidateBlockhash();
 
-      // ── Background: single-shot timeout (~1 blocktime), no polling loop ──
-      // Keep track of whether we optimistically removed gold, for revert
-      const wasMineMove = expectedNewMine;
-      if (pendingConfirmRef.current) clearTimeout(pendingConfirmRef.current);
-      pendingConfirmRef.current = setTimeout(async () => {
-        try {
-          const { value } = await connRef.current!.getSignatureStatus(sig, { searchTransactionHistory: false });
-          if (!value || !value.confirmations) {
-            // TX may have been orphaned. Revert if still the current move.
-            if (moveSeqRef.current !== seq) return;
-            // Restore optimistically removed gold
-            if (wasMineMove) forceRefreshGold();
-            invalidateBlockhash();
-            const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
-            if (posInfo) setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
-            else setPosition(positionRef.current);
-            return;
-          }
+      // ── Track this sig in the pending queue ──
+      pendingMovesRef.current.push({
+        sig,
+        seq,
+        cellX: newX,
+        cellY: newY,
+        wasMineMove: expectedNewMine,
+      });
 
-          if (moveSeqRef.current !== seq) return;
-
-          // Sync bitmap
-          const freshBits = await connRef.current!.getAccountInfo(goldBitmapPda, "confirmed");
-          if (freshBits && freshBits.data.length >= BITMAP_BYTES) {
-            const realBits = new Uint8Array(freshBits.data.slice(0, BITMAP_BYTES));
-            bitmapRef.current = realBits;
-            bitmapLastFetch.current = Date.now();
-            const cellMined = isCellMined(realBits, newX, newY);
-            if (cellMined) {
-              setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
-            }
-          }
-
-          if (moveSeqRef.current !== seq) return;
-
-          // Sync position
-          const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
-          if (posInfo && moveSeqRef.current === seq) {
-            setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
-          }
-        } catch {
-          if (moveSeqRef.current === seq) {
-            if (wasMineMove) forceRefreshGold();
-            invalidateBlockhash();
-            const posInfo = await connRef.current!.getAccountInfo(playerPda, "confirmed");
-            if (posInfo) setPosition({ x: posInfo.data.readUInt32LE(72), y: posInfo.data.readUInt32LE(76) });
-            else setPosition(positionRef.current);
-          }
-        }
-      }, 600);
       return;
     } catch (err: any) {
       const errMsg = err.message || String(err);
@@ -433,7 +431,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         }
       }
 
-      if (err?.name === "TransactionExpiredBlockheightExceededError") invalidateBlockhash();
+      if (err?.name === "TransactionExpiredBlockheightExceededError") {
+        nextBlockhashRef.current = null!;
+      }
 
       try {
         const [pda] = getPlayerPda(walletPk, programId);
@@ -445,7 +445,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     } finally {
       setIsMoving(false);
     }
-  }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, getBlockhash, invalidateBlockhash, fetchBitmap, buildMoveTx]);
+  }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx]);
 
   // Keyboard controls
   const moveRef = useRef(move);
