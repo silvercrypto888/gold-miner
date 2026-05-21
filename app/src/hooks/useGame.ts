@@ -176,8 +176,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
   // ── Blockhash pre-fetcher ──
-  // Background interval fetches a fresh blockhash every 2s
-  // so the hot path never awaits getLatestBlockhash.
+  // Background interval fetches a fresh blockhash every 400ms
+  // so the hot path rarely awaits getLatestBlockhash.
   const nextBlockhashRef = useRef<{ blockhash: string; lastValidBlockHeight: number }>(null!);
   const preFetchBlockhash = useCallback(async () => {
     try {
@@ -185,10 +185,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       nextBlockhashRef.current = fresh;
     } catch {}
   }, []);
-  // Kick off first fetch immediately, then every 2s
+  // Kick off first fetch immediately, then every 400ms
   useEffect(() => {
     if (connRef.current) preFetchBlockhash();
-    const iv = setInterval(preFetchBlockhash, 2000);
+    const iv = setInterval(preFetchBlockhash, 400);
     return () => clearInterval(iv);
   }, [preFetchBlockhash]);
 
@@ -241,7 +241,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [forceRefreshGold]);
 
   // Build move_and_mine TX manually (no IDL dependency for the hot path)
-  const buildMoveTx = useCallback((
+  const buildMoveTx = useCallback(async (
     direction: Direction,
     playerPda: PublicKey,
     gameConfigPda: PublicKey,
@@ -251,12 +251,20 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     tokenProgram: PublicKey,
     ataProgram: PublicKey,
     systemProgram: PublicKey,
-  ): Transaction => {
-    const cached = nextBlockhashRef.current;
-    if (!cached) throw new Error("No pre-fetched blockhash");
-    const tx = new Transaction({ feePayer: sessionPubkey!, blockhash: cached.blockhash, lastValidBlockHeight: cached.lastValidBlockHeight });
-    // Consume it — next call will use a fresh pre-fetched value
-    nextBlockhashRef.current = null!;
+  ): Promise<Transaction> => {
+    // Use pre-fetched blockhash if available (common case, zero RPC wait)
+    let blockhash: string, lastValidBlockHeight: number;
+    if (nextBlockhashRef.current) {
+      blockhash = nextBlockhashRef.current.blockhash;
+      lastValidBlockHeight = nextBlockhashRef.current.lastValidBlockHeight;
+      nextBlockhashRef.current = null!;
+    } else {
+      // Pre-fetcher was consumed — fetch on demand (rare, bursts only)
+      const fresh = await connRef.current!.getLatestBlockhash();
+      blockhash = fresh.blockhash;
+      lastValidBlockHeight = fresh.lastValidBlockHeight;
+    }
+    const tx = new Transaction({ feePayer: sessionPubkey!, blockhash, lastValidBlockHeight });
 
     // Accounts:
     // 0 sessionSigner (signer)
@@ -381,8 +389,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       const goldAta = getGoldAta(walletPk, goldMintPk);
 
-      // Build and send move TX (no await — blockhash is pre-fetched)
-      const tx = buildMoveTx(
+      // Build and send move TX
+      const tx = await buildMoveTx(
         direction, playerPda, gameConfigPda, goldBitmapPda,
         goldMintPk, goldAta, tokenProgram, ataProgram, SystemProgram.programId
       );
