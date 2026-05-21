@@ -199,6 +199,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     cellX: number;
     cellY: number;
     wasMineMove: boolean;
+    txTime: number;
   }
   const pendingMovesRef = useRef<PendingMove[]>([]);
 
@@ -215,23 +216,30 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         if (results?.value) {
           for (let i = 0; i < q.length; i++) {
             const pm = q[i];
+
+            // TTL — drop TXs that haven't had any status update for 10s
+            if (Date.now() - pm.txTime > 10000) {
+              if (pm.wasMineMove) forceRefreshGold();
+              continue;
+            }
+
             const status = results.value[i];
             if (!status) { stillValid.push(pm); continue; }
-            if (status.confirmations !== null && status.confirmations > 0) {
-              // Confirmed — leave gold gone, nothing to revert
-              continue;
-            }
-            if (status.confirmationStatus === "finalized" || status.confirmationStatus === "confirmed") {
-              // Also confirmed
-              continue;
-            }
-            // Errored, dropped, or orphaned
-            if (pm.wasMineMove) {
-              // Always revert gold for dropped mine moves — on-chain bit never set
-              forceRefreshGold();
-            }
-            // Non-mine moves that were superseded are silently dropped
-            // Orphaned — don't keep tracking
+
+            // Still in processed state — keep tracking, don't revert
+            if (status.confirmationStatus === "processed") { stillValid.push(pm); continue; }
+
+            // Confirmed or finalized — gold is safe on chain, drop from queue
+            if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") { continue; }
+
+            // Some RPC impls return confirmations=null for finalized without setting status string
+            if (status.confirmations === null && !status.err) { continue; }
+
+            // TX with confirmations > 0 — in progress but fine
+            if (status.confirmations !== null && status.confirmations > 0) { continue; }
+
+            // If we get here: TX errored, dropped, or orphaned
+            if (pm.wasMineMove) forceRefreshGold();
           }
         }
         pendingMovesRef.current = stillValid;
@@ -417,6 +425,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         cellX: newX,
         cellY: newY,
         wasMineMove: expectedNewMine,
+        txTime: Date.now(),
       });
 
       return;
