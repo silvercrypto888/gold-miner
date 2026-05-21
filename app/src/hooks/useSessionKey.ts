@@ -122,12 +122,15 @@ export function useSessionKey() {
 
   // Top up session key to SESSION_FUND_LAMPORTS — user-facing, gets its own blockhash
   const [topUpStatus, setTopUpStatus] = useState<string | null>(null);
+  const toppingUpRef = useRef(false);
   const topUpSession = useCallback(async (): Promise<boolean> => {
+    if (toppingUpRef.current) return false;
     if (!publicKey || !connectionRef.current) { setTopUpStatus("Wallet not connected"); return false; }
     const loaded = loadSessionKey();
     if (!loaded) { setTopUpStatus("No session key"); return false; }
     const spk = new PublicKey(loaded.keypair.publicKey);
     try {
+      toppingUpRef.current = true;
       setTopUpStatus("Topping up...");
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
       await fundSessionKey(spk, blockhash, lastValidBlockHeight);
@@ -138,6 +141,8 @@ export function useSessionKey() {
       setTopUpStatus(err?.message?.includes("User rejected") ? "Cancelled" : "Top up failed");
       setTimeout(() => setTopUpStatus(null), 3000);
       return false;
+    } finally {
+      toppingUpRef.current = false;
     }
   }, [publicKey, fundSessionKey]);
 

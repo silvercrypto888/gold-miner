@@ -22,6 +22,8 @@ export function PlayerHUD() {
   } = useSessionKey();
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
   const [sweepStatus, setSweepStatus] = useState<string | null>(null);
+  const isToppingUp = topUpStatus === "Topping up...";
+  const isSweeping = sweepStatus === "Sweeping...";
 
   // Poll GOLD balance every 5s
   useEffect(() => {
@@ -73,14 +75,24 @@ export function PlayerHUD() {
           </div>
           <button
             onClick={handleWithdraw}
-            className="px-2.5 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+            disabled={isSweeping}
+            className={`px-2.5 py-1 text-xs rounded transition-colors ${
+              isSweeping
+                ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+            }`}
             title="Withdraw remaining XNT from session key"
           >
             {sweepStatus || "Withdraw"}
           </button>
           <button
             onClick={topUpSession}
-            className="px-2.5 py-1 text-xs rounded bg-yellow-700 hover:bg-yellow-600 text-yellow-300 transition-colors"
+            disabled={isToppingUp}
+            className={`px-2.5 py-1 text-xs rounded transition-colors ${
+              isToppingUp
+                ? "bg-yellow-900/50 text-yellow-700 cursor-not-allowed"
+                : "bg-yellow-700 hover:bg-yellow-600 text-yellow-300"
+            }`}
             title="Send 0.2 XNT to session key"
           >
             {topUpStatus || "Top Up"}
