@@ -24,6 +24,7 @@ import {
 import { PlayerState } from "@/types";
 
 const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
+const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
 export function useSessionKey() {
@@ -108,12 +109,16 @@ export function useSessionKey() {
   ) => {
     if (!publicKey || !signTransaction) return;
     const balance = await connectionRef.current!.getBalance(sessionPubkey);
-    if (balance >= SESSION_FUND_LAMPORTS) return;
+    // Hard cap: never allow balance to exceed SESSION_MAX_LAMPORTS
+    if (balance >= SESSION_FUND_LAMPORTS || balance >= SESSION_MAX_LAMPORTS) return;
+    const target = Math.min(SESSION_FUND_LAMPORTS, SESSION_MAX_LAMPORTS);
+    const amount = target - balance;
+    if (amount <= 0) return;
     const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
     tx.add(SystemProgram.transfer({
       fromPubkey: publicKey,
       toPubkey: sessionPubkey,
-      lamports: SESSION_FUND_LAMPORTS - balance,
+      lamports: amount,
     }));
     const signed = await signTransaction(tx);
     const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());

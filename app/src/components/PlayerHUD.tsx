@@ -93,7 +93,7 @@ export function PlayerHUD() {
                 ? "bg-yellow-900/50 text-yellow-700 cursor-not-allowed"
                 : "bg-yellow-700 hover:bg-yellow-600 text-yellow-300"
             }`}
-            title="Send 0.2 XNT to session key"
+            title="Send 0.2 XNT to session key (max 0.5 XNT total)"
           >
             {topUpStatus || "Top Up"}
           </button>
