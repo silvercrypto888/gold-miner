@@ -17,6 +17,8 @@ export function PlayerHUD() {
     isSessionValid,
     clearSession,
     sweepSessionKey,
+    topUpSession,
+    topUpStatus,
   } = useSessionKey();
   const { goldiumBalance, fetchGoldiumBalance } = useGoldMiner();
   const [sweepStatus, setSweepStatus] = useState<string | null>(null);
@@ -75,6 +77,13 @@ export function PlayerHUD() {
             title="Withdraw remaining XNT from session key"
           >
             {sweepStatus || "Withdraw"}
+          </button>
+          <button
+            onClick={topUpSession}
+            className="px-2.5 py-1 text-xs rounded bg-yellow-700 hover:bg-yellow-600 text-yellow-300 transition-colors"
+            title="Send 0.2 XNT to session key"
+          >
+            {topUpStatus || "Top Up"}
           </button>
         </div>
       )}

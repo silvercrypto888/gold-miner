@@ -62,14 +62,6 @@ export function useSessionKey() {
     }
   }, []);
 
-  // Sweep pending session on mount
-  useEffect(() => {
-    const pending = localStorage.getItem('_goldminer_sweep_pending');
-    if (pending) {
-      localStorage.removeItem('_goldminer_sweep_pending');
-    }
-  }, []);
-
   // Refresh on wallet connect
   useEffect(() => {
     if (!publicKey) { setPlayerState(null); return; }
@@ -77,7 +69,7 @@ export function useSessionKey() {
     return () => clearTimeout(timer);
   }, [publicKey]);
 
-  // --- Shared helpers ---
+  // ── Shared helpers ──
 
   const refreshPlayerState = useCallback(async () => {
     if (!publicKey || !connectionRef.current) return;
@@ -104,6 +96,7 @@ export function useSessionKey() {
     } catch { /* player may not exist yet */ }
   }, [publicKey]);
 
+  // Fund the session key to SESSION_FUND_LAMPORTS (internal — requires blockhash)
   const fundSessionKey = useCallback(async (
     sessionPubkey: PublicKey, blockhash: string, lastValidBlockHeight: number
   ) => {
@@ -121,6 +114,28 @@ export function useSessionKey() {
     await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
   }, [publicKey, signTransaction]);
 
+  // Top up session key to SESSION_FUND_LAMPORTS — user-facing, gets its own blockhash
+  const [topUpStatus, setTopUpStatus] = useState<string | null>(null);
+  const topUpSession = useCallback(async (): Promise<boolean> => {
+    if (!publicKey || !connectionRef.current) { setTopUpStatus("Wallet not connected"); return false; }
+    const loaded = loadSessionKey();
+    if (!loaded) { setTopUpStatus("No session key"); return false; }
+    const spk = new PublicKey(loaded.keypair.publicKey);
+    try {
+      setTopUpStatus("Topping up...");
+      const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
+      await fundSessionKey(spk, blockhash, lastValidBlockHeight);
+      setTopUpStatus("Topped up ✓");
+      setTimeout(() => setTopUpStatus(null), 3000);
+      return true;
+    } catch (err: any) {
+      setTopUpStatus(err?.message?.includes("User rejected") ? "Cancelled" : "Top up failed");
+      setTimeout(() => setTopUpStatus(null), 3000);
+      return false;
+    }
+  }, [publicKey, fundSessionKey]);
+
+  // Sweep remaining XNT from session key back to user wallet
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
     if (!publicKey || !connectionRef.current) return false;
     const loaded = loadSessionKey();
@@ -144,6 +159,7 @@ export function useSessionKey() {
     } catch { return false; }
   }, [publicKey]);
 
+  // Start a new session (used for renewal too)
   const startSession = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
     await sweepSessionKey();
@@ -172,6 +188,7 @@ export function useSessionKey() {
     } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); }
   }, [publicKey, signTransaction, sweepSessionKey]);
 
+  // Join game — creates player + starts session in one TX
   const joinGame = useCallback(async () => {
     if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
     await sweepSessionKey();
@@ -229,6 +246,7 @@ export function useSessionKey() {
   return {
     sessionKeypair, sessionExpiry, sessionPubkey: getSessionPubkey(),
     isSessionValid, playerState, isLoading, error,
-    startSession, joinGame, checkSession, refreshPlayerState, clearSession, fundSessionKey, sweepSessionKey,
+    startSession, joinGame, checkSession, refreshPlayerState, clearSession,
+    fundSessionKey, sweepSessionKey, topUpSession, topUpStatus,
   };
 }
