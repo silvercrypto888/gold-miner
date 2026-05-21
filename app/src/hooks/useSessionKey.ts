@@ -177,7 +177,9 @@ export function useSessionKey() {
 
   // Start a new session (used for renewal too)
   const startSession = useCallback(async () => {
+    if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
+    joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
     try {
@@ -201,12 +203,17 @@ export function useSessionKey() {
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expires, escrowBalance: 0,
       });
       refreshPlayerState();
-    } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); }
+    } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); joiningRef.current = false; }
   }, [publicKey, signTransaction, sweepSessionKey]);
+
+  // Guard against double-join/double-start while a session creation TX is in flight
+  const joiningRef = useRef(false);
 
   // Join game — creates player + starts session in one TX
   const joinGame = useCallback(async () => {
+    if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
+    joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
     try {
@@ -242,7 +249,7 @@ export function useSessionKey() {
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expires, escrowBalance: 0,
       });
       refreshPlayerState();
-    } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); }
+    } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); joiningRef.current = false; }
   }, [publicKey, signTransaction, sweepSessionKey]);
 
   const checkSession = useCallback(async () => {
