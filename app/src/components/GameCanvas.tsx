@@ -214,15 +214,16 @@ const prevForesightRef = useRef(foresightMode);
     }
   }, [status, onPlaySound]);
 
-  // Mining burst particles — pre-computed velocities in grid-units, viewport-relative render
+  // Mining burst particles — spiral-out motion, viewport-relative render
   interface BurstParticle {
-    ox: number;    // grid x at origin
-    oy: number;    // grid y at origin
-    vx: number;    // velocity (grid-units/ms)
-    vy: number;    // velocity (grid-units/ms)
+    ox: number;      // grid x at origin
+    oy: number;      // grid y at origin
+    angle: number;   // initial direction (radians)
+    speed: number;   // radial speed (cells/second)
     size: number;
     startTime: number;
   }
+  const TWIST_RATE = 2.0; // rad/s — moderate spiral, ~1 full turn over particle lifetime
   const particlesRef = useRef<BurstParticle[]>([]);
 
   // Spawn burst when a mine happens
@@ -239,8 +240,8 @@ const prevForesightRef = useRef(foresightMode);
         particles.push({
           ox: position.x,
           oy: position.y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
+          angle,
+          speed,
           size: 4,
           startTime: now,
         });
@@ -484,9 +485,11 @@ const prevForesightRef = useRef(foresightMode);
           const p = particles[i];
           const elapsed = now - p.startTime;
           if (elapsed > 3000) { particles.splice(i, 1); continue; }
-          // Constant velocity — no easing, pixelated feel
-          const gx = p.ox + p.vx * elapsed / 1000;
-          const gy = p.oy + p.vy * elapsed / 1000;
+          // Spiral-out — angle rotates over time for a gentle twisting effect
+          const t = elapsed / 1000;
+          const twistAngle = p.angle + t * TWIST_RATE;
+          const gx = p.ox + Math.cos(twistAngle) * p.speed * t;
+          const gy = p.oy + Math.sin(twistAngle) * p.speed * t;
 
           // Convert to screen coords using current viewport
           const psx = (gx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
