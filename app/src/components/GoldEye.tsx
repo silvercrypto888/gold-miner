@@ -161,7 +161,7 @@ export function GoldEye({ goldCount }: GoldEyeProps) {
   }, []);
 
   return (
-    <div className="bg-gray-900/90 backdrop-blur rounded-lg border border-gray-700 flex items-center justify-center p-2"
+    <div className="bg-gray-900/90 backdrop-blur rounded-lg flex items-center justify-center p-2"
          style={{ minWidth: CANVAS_W + 16, minHeight: CANVAS_H + 16 }}>
       <canvas
         ref={canvasRef}
