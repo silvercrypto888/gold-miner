@@ -133,6 +133,10 @@ export function useSessionKey() {
     const target = Math.min(SESSION_FUND_LAMPORTS, SESSION_MAX_LAMPORTS);
     const amount = target - balance;
     if (amount <= 0) return;
+    // Notify immediately before prompting — full requested amount, not variable remainder
+    window.dispatchEvent(new CustomEvent("gas-deposit", {
+      detail: { amountLamports: SESSION_FUND_LAMPORTS },
+    }));
     const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
     tx.add(SystemProgram.transfer({
       fromPubkey: publicKey,
@@ -142,10 +146,6 @@ export function useSessionKey() {
     const signed = await signTransaction(tx);
     const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
     await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-    // Notify UI of gas deposit
-    window.dispatchEvent(new CustomEvent("gas-deposit", {
-      detail: { amountLamports: amount },
-    }));
   }, [publicKey, signTransaction]);
 
   // Top up session key to SESSION_FUND_LAMPORTS — user-facing, gets its own blockhash
@@ -215,12 +215,13 @@ export function useSessionKey() {
         await programRef.current.methods.startSession(spk).accounts({ wallet: publicKey, player: ppda }).instruction(),
         SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: spk, lamports: SESSION_FUND_LAMPORTS }),
       );
-      const signed = await signTransaction(tx);
-      const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
-      await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      // Notify immediately before prompting wallet
       window.dispatchEvent(new CustomEvent("gas-deposit", {
         detail: { amountLamports: SESSION_FUND_LAMPORTS },
       }));
+      const signed = await signTransaction(tx);
+      const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
+      await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
       storeSessionKey(nkp, expires);
       setSessionKeypair(nkp);
@@ -264,12 +265,13 @@ export function useSessionKey() {
         await programRef.current.methods.startSession(spk).accounts({ wallet: publicKey, player: ppda }).instruction(),
         SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: spk, lamports: SESSION_FUND_LAMPORTS }),
       );
-      const signed = await signTransaction(tx);
-      const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
-      await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      // Notify immediately before prompting wallet
       window.dispatchEvent(new CustomEvent("gas-deposit", {
         detail: { amountLamports: SESSION_FUND_LAMPORTS },
       }));
+      const signed = await signTransaction(tx);
+      const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
+      await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
       storeSessionKey(nkp, expires);
       setSessionKeypair(nkp);
