@@ -218,6 +218,9 @@ export function useSessionKey() {
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      window.dispatchEvent(new CustomEvent("gas-deposit", {
+        detail: { amountLamports: SESSION_FUND_LAMPORTS },
+      }));
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
       storeSessionKey(nkp, expires);
       setSessionKeypair(nkp);
@@ -264,6 +267,9 @@ export function useSessionKey() {
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      window.dispatchEvent(new CustomEvent("gas-deposit", {
+        detail: { amountLamports: SESSION_FUND_LAMPORTS },
+      }));
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
       storeSessionKey(nkp, expires);
       setSessionKeypair(nkp);
