@@ -13,7 +13,7 @@ import {
   isCellMined,
 } from "@/lib/constants";
 import { Direction, OtherPlayer, PlayerState } from "@/types";
-import { drawGoldIcosahedrons, renderOctahedron } from "@/lib/icosahedron";
+import { drawGoldIcosahedrons, renderOctahedron, PLAYER_PALETTE_LIME } from "@/lib/icosahedron";
 import { GoldEye } from "@/components/GoldEye";
 
 // Pre-built tile textures with cluster-dithered marble (lazy, cached at module level)
@@ -443,33 +443,25 @@ const prevForesightRef = useRef(foresightMode);
         ctx.drawImage(octaCanvas, px - (CELL_SIZE - 4) / 2, py - (CELL_SIZE - 4) / 2);
       }
 
-      // Other players
+      // Other players — each rendered as a lime green spinning octahedron
       if (showP) {
         for (const op of otherPlayers) {
           if (op.x < minX || op.x > maxX || op.y < minY || op.y > maxY) continue;
           const opx = (op.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
           const opy = (maxY - op.y) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
-          const og = ctx.createRadialGradient(opx, opy, 4, opx, opy, 14);
-          og.addColorStop(0, "rgba(34, 197, 94, 0.5)");
+          // Glow ring under other player
+          const og = ctx.createRadialGradient(opx, opy, 2, opx, opy, 16);
+          og.addColorStop(0, "rgba(34, 197, 94, 0.4)");
           og.addColorStop(1, "transparent");
           ctx.fillStyle = og;
           ctx.beginPath();
-          ctx.arc(opx, opy, 14, 0, Math.PI * 2);
+          ctx.arc(opx, opy, 16, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.beginPath();
-          ctx.arc(opx, opy, 10, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(34, 197, 94, 0.6)";
-          ctx.fill();
-          ctx.strokeStyle = "rgba(74, 222, 128, 0.8)";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          ctx.beginPath();
-          ctx.arc(opx, opy, 4, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(187, 247, 208, 0.9)";
-          ctx.fill();
+          // Lime green octahedron for other players
+          const otherOcta = renderOctahedron(now, CELL_SIZE - 4, 1.5, PLAYER_PALETTE_LIME);
+          ctx.drawImage(otherOcta, opx - (CELL_SIZE - 4) / 2, opy - (CELL_SIZE - 4) / 2);
         }
       }
 

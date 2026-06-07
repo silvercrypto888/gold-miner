@@ -54,7 +54,7 @@ function computeFaceNormal(a: number[], b: number[], c: number[]): number[] {
 
 // ── Palette ──
 
-interface Palette {
+export interface Palette {
   glowColor: [number, number, number];
   fill:      [number, number, number];
   shaded:    [number, number, number];
@@ -228,6 +228,15 @@ const PLAYER_PALETTE: Palette = {
   stroke:    [0.50, 0.75, 1.0],
 };
 
+/** Lime green palette for other players on the grid */
+export const PLAYER_PALETTE_LIME: Palette = {
+  glowColor: [0.30, 0.85, 0.15],
+  fill:      [0.50, 0.95, 0.30],
+  shaded:    [0.25, 0.60, 0.12],
+  spec:      [0.85, 1.0,  0.70],
+  stroke:    [0.55, 1.0,  0.35],
+};
+
 /* ── Cached octahedron canvas (module-level, avoid GC pressure) ── */
 let _octaCanvas: HTMLCanvasElement | null = null;
 let _octaSize = 0;
@@ -235,7 +244,8 @@ let _octaSize = 0;
 export function renderOctahedron(
   timeMs: number,
   size = 48,
-  rotSpeed = 1.5
+  rotSpeed = 1.5,
+  palette?: Palette
 ): HTMLCanvasElement {
   if (!_octaCanvas || _octaSize !== size) {
     _octaCanvas = document.createElement('canvas');
@@ -247,7 +257,7 @@ export function renderOctahedron(
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, size, size);
 
-  const colors = PLAYER_PALETTE;
+  const colors = palette ?? PLAYER_PALETTE;
   const angle = (timeMs / 1000) * rotSpeed;
 
   // Blinn-Phong tuned for octahedron's [0,2,3] face (top-right from POV on screen).
