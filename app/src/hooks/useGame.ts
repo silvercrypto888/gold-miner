@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PublicKey, Connection, Keypair, Transaction, TransactionInstruction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as nacl from "tweetnacl";
+import bs58 from "bs58";
 import { Position, Direction, GoldSpot, PlayerState, OtherPlayer } from "@/types";
 import {
   getProgramId,
@@ -175,6 +176,43 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [position, fetchBitmap]);
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
+
+  // ── Other players fetch ──
+  // Query all Player accounts via getProgramAccounts and filter to viewport.
+  const PLAYER_DISC = Buffer.from([205, 222, 112, 7, 165, 155, 206, 218]);
+  const fetchOtherPlayers = useCallback(async () => {
+    if (!connRef.current) return;
+    const myWallet = playerState?.wallet?.toString();
+    const { minX, maxX, minY, maxY } = getViewportRange(positionRef.current.x, positionRef.current.y);
+    try {
+      const accounts = await connRef.current.getProgramAccounts(getProgramId(), {
+        filters: [{ memcmp: { offset: 0, bytes: bs58.encode(PLAYER_DISC) } }],
+      });
+      const others: OtherPlayer[] = [];
+      for (const { account } of accounts) {
+        const d = account.data;
+        const wallet = new PublicKey(d.slice(8, 40)).toString();
+        if (wallet === myWallet) continue;
+        const x = d.readUInt32LE(72);
+        const y = d.readUInt32LE(76);
+        // Only show if within viewport
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+          others.push({ wallet, x, y });
+        }
+      }
+      setVisiblePlayers(others);
+    } catch (e) {
+      // getProgramAccounts may fail on some RPCs — silently degrade
+    }
+  }, [playerState]);
+
+  // Fetch other players every 2s
+  useEffect(() => {
+    fetchOtherPlayers();
+    const iv = setInterval(fetchOtherPlayers, 2000);
+    return () => clearInterval(iv);
+  }, [fetchOtherPlayers]);
+
   // ── Blockhash pre-fetcher ──
   // Background interval fetches a fresh blockhash every 400ms
   // so the hot path rarely awaits getLatestBlockhash.
