@@ -444,9 +444,14 @@ const prevForesightRef = useRef(foresightMode);
       }
 
       // Other players — each rendered as a lime green spinning octahedron
+      // Skip any player on the same tile as you — your blue octahedron takes priority
       if (showP) {
+        const myGridX = Math.round(isForesight ? realPos.x : viewX);
+        const myGridY = Math.round(isForesight ? realPos.y : viewY);
         for (const op of otherPlayers) {
           if (op.x < minX || op.x > maxX || op.y < minY || op.y > maxY) continue;
+          // Skip — your blue octahedron already occupies this tile
+          if (op.x === myGridX && op.y === myGridY) continue;
           const opx = (op.x - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
           const opy = (maxY - op.y) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
