@@ -22,7 +22,7 @@ export default function GameUI() {
                 <h1 className="text-xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent">
                   Gold Miner
                 </h1>
-                <p className="text-xs text-gray-400">On-Chain Grid Game on X1</p>
+                <p className="text-xs text-gray-400">On-Chain Fair Mine Game on X1</p>
               </div>
             </div>
             <PlayerHUD />
