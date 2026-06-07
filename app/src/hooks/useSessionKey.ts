@@ -103,6 +103,25 @@ export function useSessionKey() {
     } catch { /* player may not exist yet */ }
   }, [publicKey]);
 
+  // Listen for sessionkey-changed events from localStorage changes.
+  // This keeps multiple useSessionKey instances in sync
+  // (e.g. PlayerHUD picks up a session created by GameCanvas).
+  useEffect(() => {
+    const handler = () => {
+      const loaded = loadSessionKey();
+      if (loaded) {
+        setSessionKeypair(loaded.keypair);
+        setSessionExpiry(loaded.expiresAt);
+        refreshPlayerState();
+      } else {
+        setSessionKeypair(null);
+        setSessionExpiry(null);
+      }
+    };
+    window.addEventListener("sessionkey-changed", handler);
+    return () => window.removeEventListener("sessionkey-changed", handler);
+  }, [refreshPlayerState]);
+
   // Fund the session key to SESSION_FUND_LAMPORTS (internal — requires blockhash)
   const fundSessionKey = useCallback(async (
     sessionPubkey: PublicKey, blockhash: string, lastValidBlockHeight: number

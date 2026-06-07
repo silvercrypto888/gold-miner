@@ -20,6 +20,7 @@ export function storeSessionKey(keypair: nacl.SignKeyPair, expiresAt: number): v
   };
   
   localStorage.setItem(SESSION_KEY_STORAGE, JSON.stringify(data));
+  window.dispatchEvent(new CustomEvent("sessionkey-changed"));
 }
 
 // Load session key from localStorage
@@ -54,6 +55,7 @@ export function loadSessionKey(): { keypair: nacl.SignKeyPair; expiresAt: number
 export function clearSessionKey(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SESSION_KEY_STORAGE);
+  window.dispatchEvent(new CustomEvent("sessionkey-changed"));
 }
 
 // Sign a message with session key
