@@ -1,13 +1,27 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { WalletProvider } from "@/components/WalletProvider";
 import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
 import { Leaderboard } from "@/components/Leaderboard";
 import { useAudio } from "@/hooks/useAudio";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 export default function GameUI() {
   const { soundEnabled, musicEnabled, toggleSound, toggleMusic, playSound } = useAudio();
+  const [gasToast, setGasToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      const lamports = e.detail?.amountLamports ?? 0;
+      const xnt = (lamports / LAMPORTS_PER_SOL).toFixed(1);
+      setGasToast(`Requested to deposit ${xnt} XNT for gas, withdrawable.`);
+      setTimeout(() => setGasToast(null), 5000);
+    };
+    window.addEventListener("gas-deposit", handler as EventListener);
+    return () => window.removeEventListener("gas-deposit", handler as EventListener);
+  }, []);
   return (
     <WalletProvider>
       <main className="min-h-screen bg-gray-900 text-white">
@@ -24,6 +38,12 @@ export default function GameUI() {
                 </h1>
                 <p className="text-xs text-gray-400">On-Chain Fair Mine Game on X1</p>
               </div>
+              {/* Gas deposit toast notification */}
+              {gasToast && (
+                <div className="ml-3 animate-pulse bg-yellow-600/30 border border-yellow-500/60 rounded-lg px-3 py-1.5">
+                  <p className="text-xs text-yellow-300 font-medium whitespace-nowrap">{gasToast}</p>
+                </div>
+              )}
             </div>
             <PlayerHUD />
           </div>

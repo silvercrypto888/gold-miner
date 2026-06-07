@@ -142,6 +142,10 @@ export function useSessionKey() {
     const signed = await signTransaction(tx);
     const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
     await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+    // Notify UI of gas deposit
+    window.dispatchEvent(new CustomEvent("gas-deposit", {
+      detail: { amountLamports: amount },
+    }));
   }, [publicKey, signTransaction]);
 
   // Top up session key to SESSION_FUND_LAMPORTS — user-facing, gets its own blockhash
