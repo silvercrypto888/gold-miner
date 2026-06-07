@@ -79,9 +79,6 @@ export default function GameUI() {
                     <span>Background Music</span>
                     <span>{musicEnabled ? "🎵" : "🔇"}</span>
                   </button>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Both start disabled. No bandwidth until you tap on.
-                  </p>
                 </div>
               </div>
               <Leaderboard />
