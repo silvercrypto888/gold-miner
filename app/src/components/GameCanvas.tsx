@@ -493,8 +493,21 @@ const prevForesightRef = useRef(foresightMode);
           const psy = (maxY - gy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
           ctx.fillStyle = particleColor;
-          // Fixed 4x4 pixel square, integer-snapped — no blur, no size variance
-          ctx.fillRect(Math.round(psx) - 2, Math.round(psy) - 2, 4, 4);
+          // 8-pixel spark pattern: corners + 2x2 center (no edge pixels)
+          // G . . G
+          // . G G .
+          // . G G .
+          // G . . G
+          const bx = Math.round(psx) - 2;
+          const by = Math.round(psy) - 2;
+          ctx.fillRect(bx,     by,     1, 1); // top-left corner
+          ctx.fillRect(bx + 3, by,     1, 1); // top-right corner
+          ctx.fillRect(bx + 1, by + 1, 1, 1); // center row 1, col 1
+          ctx.fillRect(bx + 2, by + 1, 1, 1); // center row 1, col 2
+          ctx.fillRect(bx + 1, by + 2, 1, 1); // center row 2, col 1
+          ctx.fillRect(bx + 2, by + 2, 1, 1); // center row 2, col 2
+          ctx.fillRect(bx,     by + 3, 1, 1); // bottom-left corner
+          ctx.fillRect(bx + 3, by + 3, 1, 1); // bottom-right corner
         }
       }
 
