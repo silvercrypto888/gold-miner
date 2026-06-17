@@ -236,7 +236,7 @@ const prevForesightRef = useRef(foresightMode);
       // 40 fixed 4x4 pixel squares, no size variance
       for (let i = 0; i < 40; i++) {
         const angle = (Math.PI * 2 / 40) * i + (Math.random() - 0.5) * 0.3;
-        const speed = 0.4 + Math.random() * 1.0;  // cells/second
+        const speed = 0.15 + Math.random() * 0.35;  // cells/second — tighter spread, same duration
         particles.push({
           ox: position.x,
           oy: position.y,
