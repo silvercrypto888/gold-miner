@@ -80,7 +80,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     if (statusTimerRef.current) { clearTimeout(statusTimerRef.current); statusTimerRef.current = null; }
   }
 
-  // Session balance cache — only re-fetch every 30s at most, or on insufficient-funds failure
+  // Session balance cache — re-fetch every 5s so low-balance is caught quickly
   const sessionBalanceRef = useRef<{ lamports: number; time: number } | null>(null);
   const lastFundTimeRef = useRef(0);
 
@@ -393,21 +393,32 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     try {
       const signerKp = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-      // Check session key balance (cached to avoid RPC spam)
+      // Check session key balance (cached briefly to avoid RPC spam)
       const balCache = sessionBalanceRef.current;
-      let bal = balCache && (now - balCache.time < 30000) ? balCache.lamports : null;
+      let bal = balCache && (now - balCache.time < 5000) ? balCache.lamports : null;
       if (bal === null) {
         bal = await connRef.current.getBalance(sessionPubkey);
         sessionBalanceRef.current = { lamports: bal, time: now };
       }
       if (bal < 500_000) {
+        // Show clear status immediately so user knows what's happening
+        setStatus("Session low on XNT — topping up...");
         if (now - lastFundTimeRef.current < 5000) {
-          setIsMoving(false); setPosition(positionRef.current); setStatus(""); return;
+          // Still waiting for previous fund attempt — don't silently revert, keep status visible
+          setIsMoving(false);
+          return;
         }
         lastFundTimeRef.current = now;
         const { blockhash: fbh, lastValidBlockHeight: flvb } = await connRef.current.getLatestBlockhash();
-        try { await fundSessionKey(sessionPubkey, fbh, flvb); await new Promise(r => setTimeout(r, 500)); }
-        catch { setIsMoving(false); setPosition(positionRef.current); setStatus(""); return; }
+        try {
+          await fundSessionKey(sessionPubkey, fbh, flvb);
+          await new Promise(r => setTimeout(r, 500));
+        } catch {
+          setStatus("⚠️ Top up needed — approve wallet prompt to add XNT to session");
+          statusTimerRef.current = setTimeout(() => setStatus(""), 5000);
+          setIsMoving(false);
+          return;
+        }
         sessionBalanceRef.current = { lamports: 1_000_000, time: now };
       }
 
