@@ -7,6 +7,7 @@ const TRACK_CANDIDATES = [
   "/assets/music/Cognitive Dissonance.opus",
   "/assets/music/Op.72_No.2.opus",
   "/assets/music/Pinball Spring.opus",
+  "/assets/music/The_Planets_Op.32_Jupiter_The_Bringer_of_Jollity_Mix_USAF_and_NYCP.opus",
 ];
 
 const SOUND_CANDIDATES: Record<string, string> = {
