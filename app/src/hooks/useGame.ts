@@ -177,6 +177,27 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
   useEffect(() => { updateVisibleGold(); }, [updateVisibleGold]);
 
+  // Sync player position from on-chain state (throttled, used when TXs fail)
+  const lastPosSyncRef = useRef(0);
+  const syncPlayerPosition = useCallback(async () => {
+    if (!connRef.current || !playerState?.wallet) return;
+    const now = Date.now();
+    if (now - lastPosSyncRef.current < 2000) return; // max once per 2s
+    lastPosSyncRef.current = now;
+    try {
+      const [pda] = getPlayerPda(playerState.wallet, getProgramId());
+      const info = await connRef.current.getAccountInfo(pda, "processed");
+      if (info) {
+        const chainX = info.data.readUInt32LE(72);
+        const chainY = info.data.readUInt32LE(76);
+        const cur = positionRef.current;
+        if (chainX !== cur.x || chainY !== cur.y) {
+          setPosition({ x: chainX, y: chainY });
+        }
+      }
+    } catch {}
+  }, [playerState]);
+
   // ── Other players fetch ──
   // Query all Player accounts via getProgramAccounts and filter to viewport.
   const PLAYER_DISC = Buffer.from([205, 222, 112, 7, 165, 155, 206, 218]);
@@ -258,6 +279,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             // TTL — drop TXs that haven't had any status update for 10s
             if (Date.now() - pm.txTime > 10000) {
               if (pm.wasMineMove) forceRefreshGold();
+              syncPlayerPosition(); // sync position from chain to correct drift
               continue;
             }
 
@@ -278,13 +300,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
             // If we get here: TX errored, dropped, or orphaned
             if (pm.wasMineMove) forceRefreshGold();
+            syncPlayerPosition(); // sync position from chain to correct drift
           }
         }
         pendingMovesRef.current = stillValid;
       } catch {}
     }, 1000);
     return () => clearInterval(iv);
-  }, [forceRefreshGold]);
+  }, [forceRefreshGold, syncPlayerPosition]);
 
   // Build move_and_mine TX manually (no IDL dependency for the hot path)
   const buildMoveTx = useCallback(async (
