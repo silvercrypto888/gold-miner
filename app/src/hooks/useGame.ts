@@ -88,7 +88,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const moveSeqRef = useRef(0);
 
   // Pending mine TXs — cells we've sent mine TXs for but haven't confirmed yet
-  const pendingMinesRef = useRef<Set<string>>(new Set());
+  // Map of "x,y" → timestamp added (ms) so we can independently time out stale cells
+  const pendingMinesRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
@@ -271,32 +272,33 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
   // Periodically check the actual chain bitmap against our pending set.
   // This is the SOLE exit path for successful mines — only the bitmap can
-  // confirm a mine. Also handles stale cells (no active sig + bitmap unmined):
-  // in that case the TX was genuinely lost, so revert the cell.
+  // confirm a mine. For stale cells where the TX was lost but we have an
+  // active sig (e.g. X1 testnet dropped it silently), reverts them after
+  // 30s regardless of sig presence — preventing stuck gray spots.
   const reconcilePending = useCallback(async () => {
-    const pendingSet = pendingMinesRef.current;
-    if (pendingSet.size === 0) return;
+    const pendingMap = pendingMinesRef.current;
+    if (pendingMap.size === 0) return;
     const bits = await fetchBitmap(true);
     if (!bits) return;
     const moves = pendingMovesRef.current;
     const now = Date.now();
     let changed = false;
-    const keys = Array.from(pendingSet);
+    const keys = Array.from(pendingMap.keys());
     for (const key of keys) {
       const [x, y] = key.split(",").map(Number);
       if (isCellMined(bits, x, y)) {
         // Bitmap confirms the mine — resolved
-        pendingSet.delete(key);
+        pendingMap.delete(key);
         changed = true;
       } else {
-        // Bitmap still shows unmined. If no active sig is tracking this cell
-        // AND it's been pending for >120s, the TX was lost — revert.
+        // Bitmap still shows unmined. Three scenarios:
+        // 1. Active sig exists: wait up to 30s for bitmap propagation
+        // 2. No active sig (confirmer dropped it): revert immediately
+        // 3. Active sig but >30s elapsed: TX was lost, revert
         const anyActive = moves.some(m => m.cellX === x && m.cellY === y && m.wasMineMove);
-        if (!anyActive) {
-          // If there was never a sig (edge case), revert immediately.
-          // If there was a sig but it was dropped by TTL, it had 120s
-          // which should be enough for bitmap propagation.
-          pendingSet.delete(key);
+        const pendingSince = pendingMap.get(key) || 0;
+        if (!anyActive || (now - pendingSince > 30000)) {
+          pendingMap.delete(key);
           changed = true;
         }
       }
@@ -542,7 +544,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // Gray state: add to pending set instead of hiding gold immediately.
       // The cell stays visible as a ghost until the TX confirms.
       if (expectedNewMine) {
-        pendingMinesRef.current.add(`${newX},${newY}`);
+        pendingMinesRef.current.set(`${newX},${newY}`, Date.now());
         setVisibleGold(prev => prev.map(g =>
           g.x === newX && g.y === newY ? { ...g, hasGold: true, pending: true } : g
         ));
