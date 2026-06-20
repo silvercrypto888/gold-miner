@@ -353,10 +353,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             } else if (pm.wasMineMove) {
               // Successfully finalized mine: keep sig until bitmap confirms
               stillValid.push(pm);
-            } else {
-              // Non-mine: sync position
-              syncPlayerPosition();
             }
+            // Successfully finalized walk TX: don't sync position — we set
+            // it optimistically when the key was pressed. Syncing from chain
+            // would race against rapid movement (TX #1 commits at position
+            // before TX #2, snapping the player backward).
           }
         }
         pendingMovesRef.current = stillValid;
