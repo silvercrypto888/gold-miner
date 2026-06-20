@@ -40,23 +40,16 @@ export function useAudio() {
     return audio;
   }, []);
 
-  // Discover existing tracks — HEAD probes are cheap (just headers, not body)
-  // but we cache the result so it only runs once per session
+  // Discover existing tracks by HEAD probing — cheap (no body downloaded),
+  // always runs so new files are picked up without a sessionStorage wipe
   const discoverTracks = useCallback(async () => {
-    const cached = sessionStorage.getItem("goldminer_tracks");
-    if (cached) {
-      trackListRef.current = JSON.parse(cached);
-      return trackListRef.current;
-    }
     const found: string[] = [];
-    const promises = TRACK_CANDIDATES.map(url =>
+    await Promise.all(TRACK_CANDIDATES.map(url =>
       fetch(url, { method: "HEAD" })
         .then(r => { if (r.ok) found.push(url); })
         .catch(() => {})
-    );
-    await Promise.all(promises);
+    ));
     trackListRef.current = found;
-    try { sessionStorage.setItem("goldminer_tracks", JSON.stringify(found)); } catch {}
     return found;
   }, []);
 
