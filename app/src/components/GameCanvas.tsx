@@ -72,6 +72,10 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   // ── Gold Sense toggle ──
   const [goldSenseEnabled, setGoldSenseEnabled] = useState(true);
 
+  // Track pending count for HUD display
+  const pendingCountRef = useRef(0);
+  const [pendingCount, setPendingCount] = useState(0);
+
   // Sync foresightPos with real position when NOT in foresight mode, or on toggle ON
 const prevForesightRef = useRef(foresightMode);
   useEffect(() => {
@@ -260,6 +264,13 @@ const prevForesightRef = useRef(foresightMode);
   useEffect(() => { playersRef.current = visiblePlayers; }, [visiblePlayers]);
   useEffect(() => { showPlayersRef.current = showPlayers; }, [showPlayers]);
 
+  // Track pending gold count
+  useEffect(() => {
+    const pc = visibleGold.filter(g => g.pending).length;
+    pendingCountRef.current = pc;
+    setPendingCount(pc);
+  }, [visibleGold]);
+
   // Smooth position interpolation — triggered when position changes
   useEffect(() => {
     posSmoothRef.current = {
@@ -325,8 +336,13 @@ const prevForesightRef = useRef(foresightMode);
 
       // Build gold Set for O(1) lookup + screen positions for icosahedrons
       const goldKeySet = new Set<string>();
-      for (const g of goldSpots) if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
+      const pendingKeySet = new Set<string>();
+      for (const g of goldSpots) {
+        if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
+        if (g.pending) pendingKeySet.add(`${g.x},${g.y}`);
+      }
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
+      const pendingScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
       if (!_darkTile) { _darkTile = buildTile("#1f2937", "#2b3544"); }
@@ -375,14 +391,43 @@ const prevForesightRef = useRef(foresightMode);
           }
 
           if (hasGold) {
-            goldScreenPositions.push({ x, y, screenX: sx + CELL_SIZE / 2, screenY: sy + CELL_SIZE / 2 });
+            const isPending = pendingKeySet.has(`${x},${y}`);
+            const entry = { x, y, screenX: sx + CELL_SIZE / 2, screenY: sy + CELL_SIZE / 2 };
+            if (isPending) pendingScreenPositions.push(entry);
+            else goldScreenPositions.push(entry);
           }
         }
       }
 
-      // 3D icosahedrons (one offscreen render, drawImage N times)
+      // 3D icosahedrons (confirmed gold — fully opaque)
       if (goldScreenPositions.length > 0) {
         drawGoldIcosahedrons(ctx, goldScreenPositions, now, CELL_SIZE - 4);
+      }
+
+      // Pending mine gold — ghost/translucent with shimmer animation
+      if (pendingScreenPositions.length > 0) {
+        const shimmer = Math.abs(Math.sin(now / 400)) * 0.4 + 0.15; // 0.15–0.55 alpha
+        ctx.save();
+        ctx.globalAlpha = shimmer;
+        drawGoldIcosahedrons(ctx, pendingScreenPositions, now, CELL_SIZE - 4);
+        ctx.restore();
+
+        // Double-ring spinner around each pending cell
+        ctx.strokeStyle = `rgba(255, 215, 0, ${shimmer * 0.8})`;
+        ctx.lineWidth = 2;
+        const spinnerAngle = (now / 600) % (Math.PI * 2);
+        for (const p of pendingScreenPositions) {
+          const r = CELL_SIZE * 0.35;
+          ctx.beginPath();
+          ctx.arc(p.screenX, p.screenY, r, spinnerAngle, spinnerAngle + Math.PI * 1.2);
+          ctx.stroke();
+
+          // Second ring, counter-rotating, slightly offset
+          ctx.strokeStyle = `rgba(255, 180, 0, ${shimmer * 0.5})`;
+          ctx.beginPath();
+          ctx.arc(p.screenX, p.screenY, r + 3, -spinnerAngle, -spinnerAngle + Math.PI * 0.8);
+          ctx.stroke();
+        }
       }
 
       // Grid lines — single path, single stroke
@@ -644,7 +689,12 @@ const prevForesightRef = useRef(foresightMode);
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
             <div className="text-sm text-gray-400">Gold Spots</div>
             <div className="text-xl font-bold text-yellow-400">
-              {visibleGold.filter(g => g.hasGold).length} remaining
+              {visibleGold.filter(g => g.hasGold && !g.pending).length} remaining
+              {pendingCount > 0 && (
+                <span className="text-sm font-normal text-yellow-600 ml-2">
+                  (+{pendingCount} pending)
+                </span>
+              )}
             </div>
           </div>
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">

@@ -87,6 +87,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   // Pending confirmed move — prevents stale background confirmation from reverting a newer move
   const moveSeqRef = useRef(0);
 
+  // Pending mine TXs — cells we've sent mine TXs for but haven't confirmed yet
+  const pendingMinesRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
     // Fetch GOLD mint from game_config
@@ -147,12 +150,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const forceRefreshGold = useCallback(async () => {
     const bits = await fetchBitmap(true);
     const { minX, maxX, minY, maxY } = getViewportRange(positionRef.current.x, positionRef.current.y);
+    const pendingSet = pendingMinesRef.current;
     const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
           const mined = bits ? isCellMined(bits, x, y) : false;
-          spots.push({ x, y, hasGold: !mined });
+          const pending = pendingSet.has(`${x},${y}`);
+          spots.push({ x, y, hasGold: !mined || pending, pending });
         }
       }
     }
@@ -163,12 +168,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const updateVisibleGold = useCallback(async () => {
     const bits = await fetchBitmap();
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
+    const pendingSet = pendingMinesRef.current;
     const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
           const mined = bits ? isCellMined(bits, x, y) : false;
-          spots.push({ x, y, hasGold: !mined });
+          const pending = pendingSet.has(`${x},${y}`);
+          spots.push({ x, y, hasGold: !mined || pending, pending });
         }
       }
     }
@@ -276,10 +283,13 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           for (let i = 0; i < q.length; i++) {
             const pm = q[i];
 
-            // TTL — drop TXs that haven't had any status update for 10s
-            if (Date.now() - pm.txTime > 10000) {
-              if (pm.wasMineMove) forceRefreshGold();
-              syncPlayerPosition(); // sync position from chain to correct drift
+            // TTL — drop TXs that haven't had any status update for 60s
+            if (Date.now() - pm.txTime > 60000) {
+              if (pm.wasMineMove) {
+                pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
+                forceRefreshGold();
+              }
+              syncPlayerPosition();
               continue;
             }
 
@@ -290,7 +300,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             if (status.confirmationStatus === "processed") { stillValid.push(pm); continue; }
 
             // Confirmed or finalized — gold is safe on chain, drop from queue
-            if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") { continue; }
+            if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+              if (pm.wasMineMove) pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
+              continue;
+            }
 
             // Some RPC impls return confirmations=null for finalized without setting status string
             if (status.confirmations === null && !status.err) { continue; }
@@ -299,7 +312,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             if (status.confirmations !== null && status.confirmations > 0) { continue; }
 
             // If we get here: TX errored, dropped, or orphaned
-            if (pm.wasMineMove) forceRefreshGold();
+            if (pm.wasMineMove) {
+              pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
+              forceRefreshGold();
+            }
             syncPlayerPosition(); // sync position from chain to correct drift
           }
         }
@@ -482,11 +498,13 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // sendRawTransaction succeeded ≡ leader accepted TX (X1's processed). Unblock immediately.
       setIsMoving(false);
       setStatus(expectedNewMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
-      // Optimistic gold removal — hides the mined cell instantly, background confirm syncs later
+      // Gray state: add to pending set instead of hiding gold immediately.
+      // The cell stays visible as a ghost until the TX confirms.
       if (expectedNewMine) {
-        setVisibleGold(prev => prev.map(g => g.x === newX && g.y === newY ? { ...g, hasGold: false } : g));
-        // Flip the bitmap bit so updateVisibleGold re-computes correctly
-        if (bitmapRef.current) markCellMined(bitmapRef.current, newX, newY);
+        pendingMinesRef.current.add(`${newX},${newY}`);
+        setVisibleGold(prev => prev.map(g =>
+          g.x === newX && g.y === newY ? { ...g, hasGold: true, pending: true } : g
+        ));
       }
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
 
