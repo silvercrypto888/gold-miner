@@ -690,12 +690,12 @@ const prevForesightRef = useRef(foresightMode);
             <div className="text-sm text-gray-400">Gold Spots</div>
             <div className="text-xl font-bold text-yellow-400">
               {visibleGold.filter(g => g.hasGold && !g.pending).length} remaining
-              {pendingCount > 0 && (
-                <span className="text-sm font-normal text-yellow-600 ml-2">
-                  (+{pendingCount} pending)
-                </span>
-              )}
             </div>
+            {pendingCount > 0 && (
+              <div className="text-sm font-normal text-yellow-600">
+                (+{pendingCount} pending)
+              </div>
+            )}
           </div>
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700">
             <div className="text-sm text-gray-400">Position</div>
