@@ -269,20 +269,36 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }
   const pendingMovesRef = useRef<PendingMove[]>([]);
 
-  // Periodic reconciliation: every 10s, check actual chain bitmap against pending set
-  // Catches TXs that confirmed but were never detected by getSignatureStatuses
+  // Periodically check the actual chain bitmap against our pending set.
+  // This is the SOLE exit path for successful mines — only the bitmap can
+  // confirm a mine. Also handles stale cells (no active sig + bitmap unmined):
+  // in that case the TX was genuinely lost, so revert the cell.
   const reconcilePending = useCallback(async () => {
     const pendingSet = pendingMinesRef.current;
     if (pendingSet.size === 0) return;
     const bits = await fetchBitmap(true);
     if (!bits) return;
+    const moves = pendingMovesRef.current;
+    const now = Date.now();
     let changed = false;
     const keys = Array.from(pendingSet);
     for (const key of keys) {
       const [x, y] = key.split(",").map(Number);
       if (isCellMined(bits, x, y)) {
+        // Bitmap confirms the mine — resolved
         pendingSet.delete(key);
         changed = true;
+      } else {
+        // Bitmap still shows unmined. If no active sig is tracking this cell
+        // AND it's been pending for >120s, the TX was lost — revert.
+        const anyActive = moves.some(m => m.cellX === x && m.cellY === y && m.wasMineMove);
+        if (!anyActive) {
+          // If there was never a sig (edge case), revert immediately.
+          // If there was a sig but it was dropped by TTL, it had 120s
+          // which should be enough for bitmap propagation.
+          pendingSet.delete(key);
+          changed = true;
+        }
       }
     }
     if (changed) forceRefreshGold();
@@ -294,6 +310,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [reconcilePending]);
 
   // Batch check all pending sigs every 1s
+  // Policy:
+  //  - Not found yet -> keep tracking
+  //  - Processed -> keep tracking
+  //  - Finalized/confirmed for mine TXs -> keep tracking until bitmap confirms
+  //  - Errored -> remove from pending immediately, force refresh
+  //  - TTL 120s -> drop from queue, let reconciliation handle it
   useEffect(() => {
     if (!connRef.current) return;
     const iv = setInterval(async () => {
@@ -307,12 +329,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           for (let i = 0; i < q.length; i++) {
             const pm = q[i];
 
-            // TTL — drop TXs that haven't had any status update for 60s
-            if (Date.now() - pm.txTime > 60000) {
-              if (pm.wasMineMove) {
-                pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
-                forceRefreshGold();
-              }
+            // Keep mine TX sigs in queue longer (120s) so reconciliation has time
+            // to confirm via bitmap before we lose the tracking reference.
+            const ttl = pm.wasMineMove ? 120000 : 60000;
+            if (Date.now() - pm.txTime > ttl) {
               syncPlayerPosition();
               continue;
             }
@@ -320,20 +340,23 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             const status = results.value[i];
             if (!status) { stillValid.push(pm); continue; }
 
-            // Still in processed state — keep tracking, don't resolve yet
+            // Still in processed state — keep tracking
             if (status.confirmationStatus === "processed") { stillValid.push(pm); continue; }
 
-            // ── TX has a known outcome ──
-            const txErrored = status.err !== null;
-            if (pm.wasMineMove) {
-              pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
-              // For errored TXs: force-refresh immediately so gold returns
-              // For confirmed TXs: don't refresh — let 5s periodic or 10s reconciliation
-              // pick up the chain state naturally, avoiding a stale-bitmap race
-              if (txErrored) forceRefreshGold();
+            if (status.err) {
+              // Errored: revert immediately
+              if (pm.wasMineMove) {
+                pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
+                forceRefreshGold();
+              }
+              syncPlayerPosition();
+            } else if (pm.wasMineMove) {
+              // Successfully finalized mine: keep sig until bitmap confirms
+              stillValid.push(pm);
+            } else {
+              // Non-mine: sync position
+              syncPlayerPosition();
             }
-            syncPlayerPosition();
-            // Don't push to stillValid — resolved
           }
         }
         pendingMovesRef.current = stillValid;
