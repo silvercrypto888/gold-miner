@@ -269,6 +269,30 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }
   const pendingMovesRef = useRef<PendingMove[]>([]);
 
+  // Periodic reconciliation: every 10s, check actual chain bitmap against pending set
+  // Catches TXs that confirmed but were never detected by getSignatureStatuses
+  const reconcilePending = useCallback(async () => {
+    const pendingSet = pendingMinesRef.current;
+    if (pendingSet.size === 0) return;
+    const bits = await fetchBitmap(true);
+    if (!bits) return;
+    let changed = false;
+    const keys = Array.from(pendingSet);
+    for (const key of keys) {
+      const [x, y] = key.split(",").map(Number);
+      if (isCellMined(bits, x, y)) {
+        pendingSet.delete(key);
+        changed = true;
+      }
+    }
+    if (changed) forceRefreshGold();
+  }, [fetchBitmap, forceRefreshGold]);
+
+  useEffect(() => {
+    const iv = setInterval(reconcilePending, 10000);
+    return () => clearInterval(iv);
+  }, [reconcilePending]);
+
   // Batch check all pending sigs every 1s
   useEffect(() => {
     if (!connRef.current) return;
@@ -296,27 +320,20 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             const status = results.value[i];
             if (!status) { stillValid.push(pm); continue; }
 
-            // Still in processed state — keep tracking, don't revert
+            // Still in processed state — keep tracking, don't resolve yet
             if (status.confirmationStatus === "processed") { stillValid.push(pm); continue; }
 
-            // Confirmed or finalized — gold is safe on chain, drop from queue
-            if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
-              if (pm.wasMineMove) pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
-              continue;
-            }
-
-            // Some RPC impls return confirmations=null for finalized without setting status string
-            if (status.confirmations === null && !status.err) { continue; }
-
-            // TX with confirmations > 0 — in progress but fine
-            if (status.confirmations !== null && status.confirmations > 0) { continue; }
-
-            // If we get here: TX errored, dropped, or orphaned
+            // ── TX has a known outcome ──
+            const txErrored = status.err !== null;
             if (pm.wasMineMove) {
               pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
-              forceRefreshGold();
+              // For errored TXs: force-refresh immediately so gold returns
+              // For confirmed TXs: don't refresh — let 5s periodic or 10s reconciliation
+              // pick up the chain state naturally, avoiding a stale-bitmap race
+              if (txErrored) forceRefreshGold();
             }
-            syncPlayerPosition(); // sync position from chain to correct drift
+            syncPlayerPosition();
+            // Don't push to stillValid — resolved
           }
         }
         pendingMovesRef.current = stillValid;
