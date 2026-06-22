@@ -15,7 +15,7 @@ pub const SESSION_DURATION_SLOTS: u64 = 36000;
 pub const BITMAP_BODY: usize = 131_072;
 pub const BITMAP_ACCT: usize = BITMAP_BODY;
 pub const TOTAL_GOLD_SPOTS: u64 = 161_390;
-pub const RESET_THRESHOLD: u64 = 121_042; // 75% of TOTAL_GOLD_SPOTS
+pub const RESET_THRESHOLD: u64 = 162; // 0.1% of 161,390 total gold spots (for alpha testing)
 
 // Treasury / LP constants
 pub const MIN_GOLD_FOR_LP: u64 = 1000 * 10u64.pow(GOLD_DECIMALS as u32);
@@ -530,7 +530,6 @@ pub struct MoveAndMine<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
 #[derive(Accounts)]
 pub struct ResetBitmap<'info> {
     /// Anyone can call — no signer restriction

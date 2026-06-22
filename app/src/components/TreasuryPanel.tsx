@@ -277,7 +277,7 @@ export function TreasuryPanel() {
               <strong>🔄 Reset Gold Map</strong> — Anyone can call once 75% of gold spots are mined.
               Zeroes the bitmap so gold respawns across the grid.
               {minedCount !== null && (
-                <span> Currently <strong>{minedCount.toLocaleString()}</strong> / 121,042 mined.</span>
+                <span> Currently <strong>{minedCount.toLocaleString()}</strong> / 162 mined (alpha threshold).</span>
               )}
             </p>
           </div>
