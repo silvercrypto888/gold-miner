@@ -181,7 +181,7 @@ export function getTreasuryGoldAta(treasuryPda: PublicKey, goldMint?: PublicKey)
   return PublicKey.findProgramAddressSync(
     [
       treasuryPda.toBuffer(),
-      getToken2022ProgramId().toBuffer(),
+      AMM_GOLD_TOKEN_PROG.toBuffer(),
       (goldMint || getGoldMint()).toBuffer(),
     ],
     getAtaProgramId()
@@ -199,11 +199,11 @@ export const AMM_OBSERVER_STATE = new PublicKey("DXf6rW8E5wnMGYFMjhJPjL1aKNh8eAf
 export const AMM_GOLD_MINT = new PublicKey("HRby9JcNp67dWCrdxwKyNohDu7WqoWmM9cbrodQCTEAq");
 export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 export const AMM_LP_MINT = new PublicKey("cWf87wGwVpv1TfMac8PimFmEPi1W4WqguFi2vEWQqkL");
-export const AMM_XNT_TOKEN_PROG = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-export const AMM_GOLD_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+export const AMM_XNT_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+export const AMM_GOLD_TOKEN_PROG = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 export const INCINERATOR = new PublicKey("1nc1nerator11111111111111111111111111111111");
 
-// Treasury's XNT ATA (Token2022)
+// Treasury's XNT ATA (Tokenkeg — XNT is regular SPL Token on X1 testnet)
 export function getTreasuryXntAta(treasuryPda: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [
@@ -215,12 +215,12 @@ export function getTreasuryXntAta(treasuryPda: PublicKey): PublicKey {
   )[0];
 }
 
-// Treasury's LP ATA (regular SPL Token)
+// Treasury's LP ATA (Tokenkeg — LP is regular SPL Token)
 export function getTreasuryLpAta(treasuryPda: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [
       treasuryPda.toBuffer(),
-      AMM_GOLD_TOKEN_PROG.toBuffer(),
+      AMM_XNT_TOKEN_PROG.toBuffer(),
       AMM_LP_MINT.toBuffer(),
     ],
     getAtaProgramId()
