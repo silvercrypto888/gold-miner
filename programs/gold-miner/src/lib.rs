@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program;
+use anchor_spl::token::spl_token;
 use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::Token;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{Mint, TokenAccount, mint_to, MintTo};
 
@@ -10,13 +13,36 @@ pub const GOLD_PER_MINE: u64 = 100;
 pub const GOLD_DECIMALS: u8 = 9;
 pub const SESSION_DURATION_SLOTS: u64 = 36000;
 pub const BITMAP_BODY: usize = 131_072;
-pub const BITMAP_ACCT: usize = BITMAP_BODY; // no discriminator — raw bytes
+pub const BITMAP_ACCT: usize = BITMAP_BODY;
+
+// Treasury / LP constants
+pub const MIN_GOLD_FOR_LP: u64 = 1000 * 10u64.pow(GOLD_DECIMALS as u32);
+pub const MIN_LP_TO_BURN: u64 = 1000;
+pub const SLIPPAGE_BPS: u64 = 100;
+pub const INCINERATOR: &str = "1nc1nerator11111111111111111111111111111111";
+
+// AMM constants
+pub const AMM_PROGRAM_ID: &str = "7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf";
+pub const MARKET_AUTHORITY: &str = "2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C";
+pub const AMM_CONFIG: &str = "3FzzbxwpdJKxRW1yNT7UPYmna17SwC9PRmskMa8A2BuY";
+pub const POOL_STATE: &str = "CdD9sutJxR1nSRkUyHkYyDxo9D63JJcyiSuPVatDwFMt";
+pub const GOLD_VAULT: &str = "5mCfZdbYfUyYHwVLdDQwnAEv6YJgiGi2dihfrEuv3AYx";
+pub const XNT_VAULT: &str = "BBwRY3cCMyW524bgBoUheA8Tae6GtVKPKivz67xWGibH";
+pub const OBSERVER_STATE: &str = "DXf6rW8E5wnMGYFMjhJPjL1aKNh8eAfwmLBqAkGF7t7v";
+pub const GOLD_MINT_ADDR: &str = "HRby9JcNp67dWCrdxwKyNohDu7WqoWmM9cbrodQCTEAq";
+pub const XNT_MINT_ADDR: &str = "So11111111111111111111111111111111111111112";
+pub const LP_MINT_ADDR: &str = "cWf87wGwVpv1TfMac8PimFmEPi1W4WqguFi2vEWQqkL";
+pub const XNT_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+pub const GOLD_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+// AMM instruction discriminators
+pub const SWAP_BASE_INPUT_DISCRIMINATOR: [u8; 8] = [0x8f, 0xbe, 0x5a, 0xda, 0xc4, 0x1e, 0x33, 0xde];
+pub const DEPOSIT_DISCRIMINATOR: [u8; 8] = [0xf2, 0x23, 0xc6, 0x89, 0x52, 0xe1, 0xf2, 0xb6];
 
 #[program]
 pub mod gold_miner {
     use super::*;
 
-    /// Init — creates GameConfig + stores the bitmap address. Bitmap must be pre-created by client.
     pub fn initialize_game(ctx: Context<InitializeGame>) -> Result<()> {
         let cfg = &mut ctx.accounts.game_config;
         cfg.authority = ctx.accounts.authority.key();
@@ -29,10 +55,22 @@ pub mod gold_miner {
         Ok(())
     }
 
+    pub fn init_treasury(ctx: Context<InitTreasury>) -> Result<()> {
+        let treasury = &mut ctx.accounts.treasury;
+        treasury.game_config = ctx.accounts.game_config.key();
+        treasury.gold_accumulated = 0;
+        treasury.xnt_accumulated = 0;
+        treasury.lp_burned = 0;
+        treasury.bump = ctx.bumps.treasury;
+        msg!("Treasury initialized");
+        Ok(())
+    }
+
     pub fn join_game(ctx: Context<JoinGame>) -> Result<()> {
         let p = &mut ctx.accounts.player;
         p.wallet = ctx.accounts.wallet.key();
-        p.position_x = 1; p.position_y = 1;
+        p.position_x = 1;
+        p.position_y = 1;
         p.goldium_minted = 0;
         p.session_key = Pubkey::default();
         p.session_expires_at = 0;
@@ -61,7 +99,8 @@ pub mod gold_miner {
         };
         require!(nx >= 1 && nx <= GRID_SIZE, GoldMinerError::OutOfBounds);
         require!(ny >= 1 && ny <= GRID_SIZE, GoldMinerError::OutOfBounds);
-        player.position_x = nx; player.position_y = ny;
+        player.position_x = nx;
+        player.position_y = ny;
 
         let bit_idx = ((ny - 1) as usize) * (GRID_SIZE as usize) + ((nx - 1) as usize);
         let byte_idx = bit_idx / 8;
@@ -79,9 +118,11 @@ pub mod gold_miner {
                 ctx.accounts.game_config.total_gold_mined =
                     ctx.accounts.game_config.total_gold_mined.saturating_add(1);
 
-                let amount = GOLD_PER_MINE.checked_mul(10u64.pow(GOLD_DECIMALS as u32))
+                let amount = GOLD_PER_MINE
+                    .checked_mul(10u64.pow(GOLD_DECIMALS as u32))
                     .ok_or(GoldMinerError::ArithmeticError)?;
 
+                // Mint GOLD to player
                 mint_to(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
@@ -94,6 +135,25 @@ pub mod gold_miner {
                     ),
                     amount,
                 )?;
+
+                // Also mint GOLD to treasury
+                mint_to(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.to_account_info(),
+                        MintTo {
+                            mint: ctx.accounts.gold_mint.to_account_info(),
+                            to: ctx.accounts.treasury_token_account.to_account_info(),
+                            authority: ctx.accounts.game_config.to_account_info(),
+                        },
+                        &[&[b"game_config", &[ctx.accounts.game_config.bump]]],
+                    ),
+                    amount,
+                )?;
+
+                // Update treasury accumulator
+                let treasury = &mut ctx.accounts.treasury;
+                treasury.gold_accumulated = treasury.gold_accumulated.saturating_add(amount);
+
                 msg!("+{} GOLD at ({},{})", GOLD_PER_MINE, nx, ny);
             } else {
                 msg!("Moved ({},{}) mined", nx, ny);
@@ -103,7 +163,166 @@ pub mod gold_miner {
         }
         Ok(())
     }
+
+    /// Treasury auto-LP: swaps ~50% of treasury GOLD for XNT, then deposits both as LP, burns LP tokens.
+    pub fn treasury_auto_lp(ctx: Context<TreasuryAutoLp>) -> Result<()> {
+        let gold_balance = ctx.accounts.treasury_gold_ata.amount;
+        msg!("Treasury GOLD balance: {}", gold_balance);
+
+        require!(gold_balance >= MIN_GOLD_FOR_LP, GoldMinerError::InsufficientGoldForLp);
+
+        let swap_amount = gold_balance / 2;
+        let remaining_gold = gold_balance - swap_amount;
+        let min_xnt_out: u64 = 0;
+
+        msg!("Swapping {} GOLD for XNT", swap_amount);
+
+        let mut swap_data = Vec::with_capacity(24);
+        swap_data.extend_from_slice(&SWAP_BASE_INPUT_DISCRIMINATOR);
+        swap_data.extend_from_slice(&swap_amount.to_le_bytes());
+        swap_data.extend_from_slice(&min_xnt_out.to_le_bytes());
+
+        let treasury_key = ctx.accounts.treasury.key();
+        let treasury_bump = ctx.accounts.treasury.bump;
+        let game_config_key = ctx.accounts.game_config.key();
+        let seeds = &[b"treasury", game_config_key.as_ref(), &[treasury_bump]];
+        let signer_seeds = &[&seeds[..]];
+
+        // CPI: SwapBaseInput
+        solana_program::program::invoke_signed(
+            &solana_program::instruction::Instruction {
+                program_id: ctx.accounts.amm_program.key(),
+                accounts: vec![
+                    solana_program::instruction::AccountMeta::new(treasury_key, true),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.market_authority.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.amm_config.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.pool_state.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_xnt_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_gold_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.gold_vault.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.xnt_vault.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.observer_state.key(), false),
+                ],
+                data: swap_data,
+            },
+            &[
+                ctx.accounts.treasury.to_account_info(),
+                ctx.accounts.market_authority.to_account_info(),
+                ctx.accounts.amm_config.to_account_info(),
+                ctx.accounts.pool_state.to_account_info(),
+                ctx.accounts.treasury_xnt_ata.to_account_info(),
+                ctx.accounts.treasury_gold_ata.to_account_info(),
+                ctx.accounts.gold_vault.to_account_info(),
+                ctx.accounts.xnt_vault.to_account_info(),
+                ctx.accounts.xnt_token_prog.to_account_info(),
+                ctx.accounts.gold_token_prog.to_account_info(),
+                ctx.accounts.gold_mint.to_account_info(),
+                ctx.accounts.xnt_mint.to_account_info(),
+                ctx.accounts.observer_state.to_account_info(),
+            ],
+            signer_seeds,
+        )?;
+
+        let xnt_received = ctx.accounts.treasury_xnt_ata.amount;
+        msg!("XNT received from swap: {}", xnt_received);
+
+        // CPI Deposit: add remaining GOLD + XNT as LP
+        let mut deposit_data = Vec::with_capacity(32);
+        deposit_data.extend_from_slice(&DEPOSIT_DISCRIMINATOR);
+        deposit_data.extend_from_slice(&0u64.to_le_bytes());
+        deposit_data.extend_from_slice(&xnt_received.to_le_bytes());
+        deposit_data.extend_from_slice(&remaining_gold.to_le_bytes());
+
+        msg!("Depositing {} GOLD + {} XNT as LP", remaining_gold, xnt_received);
+
+        solana_program::program::invoke_signed(
+            &solana_program::instruction::Instruction {
+                program_id: ctx.accounts.amm_program.key(),
+                accounts: vec![
+                    solana_program::instruction::AccountMeta::new(treasury_key, true),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.market_authority.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.pool_state.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_lp_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_xnt_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_gold_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.xnt_vault.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.gold_vault.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.lp_mint.key(), false),
+                ],
+                data: deposit_data,
+            },
+            &[
+                ctx.accounts.treasury.to_account_info(),
+                ctx.accounts.market_authority.to_account_info(),
+                ctx.accounts.pool_state.to_account_info(),
+                ctx.accounts.treasury_lp_ata.to_account_info(),
+                ctx.accounts.treasury_xnt_ata.to_account_info(),
+                ctx.accounts.treasury_gold_ata.to_account_info(),
+                ctx.accounts.xnt_vault.to_account_info(),
+                ctx.accounts.gold_vault.to_account_info(),
+                ctx.accounts.xnt_token_prog.to_account_info(),
+                ctx.accounts.gold_token_prog.to_account_info(),
+                ctx.accounts.xnt_mint.to_account_info(),
+                ctx.accounts.gold_mint.to_account_info(),
+                ctx.accounts.lp_mint.to_account_info(),
+            ],
+            signer_seeds,
+        )?;
+
+        let lp_minted = ctx.accounts.treasury_lp_ata.amount;
+        msg!("LP tokens minted: {}", lp_minted);
+
+        require!(lp_minted >= MIN_LP_TO_BURN, GoldMinerError::InsufficientLpMinted);
+
+        // Transfer LP tokens → incinerator
+        let incinerator = INCINERATOR.parse::<Pubkey>().unwrap();
+
+        let transfer_ix = spl_token::instruction::transfer(
+            &spl_token::ID,
+            &ctx.accounts.treasury_lp_ata.key(),
+            &incinerator,
+            &treasury_key,
+            &[],
+            lp_minted,
+        )?;
+
+        solana_program::program::invoke_signed(
+            &transfer_ix,
+            &[
+                ctx.accounts.treasury_lp_ata.to_account_info(),
+                ctx.accounts.incinerator_ata.to_account_info(),
+                ctx.accounts.treasury.to_account_info(),
+                ctx.accounts.lp_token_prog.to_account_info(),
+            ],
+            signer_seeds,
+        )?;
+
+        // Update treasury accumulators
+        let treasury = &mut ctx.accounts.treasury;
+        treasury.xnt_accumulated = treasury.xnt_accumulated.saturating_add(xnt_received);
+        treasury.lp_burned = treasury.lp_burned.saturating_add(lp_minted);
+
+        msg!(
+            "Auto-LP complete: swapped {} GOLD, deposited {} GOLD + {} XNT, burned {} LP",
+            swap_amount,
+            remaining_gold,
+            xnt_received,
+            lp_minted
+        );
+
+        Ok(())
+    }
 }
+
+// ── Account structs ──────────────────────────────────────────────────────────
 
 #[account]
 #[derive(Default)]
@@ -130,6 +349,19 @@ pub struct Player {
 }
 impl Player { pub const SIZE: usize = 8 + 32 + 32 + 4 + 4 + 8 + 8 + 1; }
 
+#[account]
+#[derive(Default)]
+pub struct Treasury {
+    pub game_config: Pubkey,
+    pub gold_accumulated: u64,
+    pub xnt_accumulated: u64,
+    pub lp_burned: u64,
+    pub bump: u8,
+}
+impl Treasury { pub const SIZE: usize = 8 + 32 + 8 + 8 + 8 + 1; }
+
+// ── Instruction contexts ─────────────────────────────────────────────────────
+
 #[derive(Accounts)]
 pub struct InitializeGame<'info> {
     #[account(mut)]
@@ -142,6 +374,17 @@ pub struct InitializeGame<'info> {
     #[account(mut)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Program<'info, Token2022>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitTreasury<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
+    pub game_config: Account<'info, GameConfig>,
+    #[account(init, payer = authority, space = Treasury::SIZE, seeds = [b"treasury", game_config.key().as_ref()], bump)]
+    pub treasury: Account<'info, Treasury>,
     pub system_program: Program<'info, System>,
 }
 
@@ -184,19 +427,121 @@ pub struct MoveAndMine<'info> {
     #[account(mut, associated_token::mint = gold_mint, associated_token::authority = player.wallet,
               associated_token::token_program = token_program)]
     pub player_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// Treasury PDA — receives matching GOLD mint on each mine
+    #[account(mut, seeds = [b"treasury", game_config.key().as_ref()], bump = treasury.bump)]
+    pub treasury: Account<'info, Treasury>,
+    /// Treasury's GOLD ATA (Token2022, same as gold_mint)
+    #[account(mut, associated_token::mint = gold_mint, associated_token::authority = treasury,
+              associated_token::token_program = token_program)]
+    pub treasury_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct TreasuryAutoLp<'info> {
+    /// Authority signer (game admin or designated operator)
+    pub authority: Signer<'info>,
+
+    /// Game config — used for treasury PDA derivation
+    #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
+    pub game_config: Account<'info, GameConfig>,
+
+    /// Treasury PDA
+    #[account(mut, seeds = [b"treasury", game_config.key().as_ref()], bump = treasury.bump)]
+    pub treasury: Account<'info, Treasury>,
+
+    // ── AMM accounts ──────────────────────────────────────────────────────
+    /// CHECK: AMM program
+    #[account(address = AMM_PROGRAM_ID.parse::<Pubkey>().unwrap())]
+    pub amm_program: UncheckedAccount<'info>,
+    /// CHECK: Market authority PDA
+    #[account(address = MARKET_AUTHORITY.parse::<Pubkey>().unwrap())]
+    pub market_authority: UncheckedAccount<'info>,
+    /// CHECK: AMM config account
+    #[account(address = AMM_CONFIG.parse::<Pubkey>().unwrap())]
+    pub amm_config: UncheckedAccount<'info>,
+    /// CHECK: Pool state PDA
+    #[account(address = POOL_STATE.parse::<Pubkey>().unwrap())]
+    pub pool_state: UncheckedAccount<'info>,
+    /// CHECK: GOLD vault
+    #[account(address = GOLD_VAULT.parse::<Pubkey>().unwrap())]
+    pub gold_vault: UncheckedAccount<'info>,
+    /// CHECK: XNT vault
+    #[account(address = XNT_VAULT.parse::<Pubkey>().unwrap())]
+    pub xnt_vault: UncheckedAccount<'info>,
+    /// CHECK: Observer state
+    #[account(address = OBSERVER_STATE.parse::<Pubkey>().unwrap())]
+    pub observer_state: UncheckedAccount<'info>,
+
+    // ── Treasury token accounts ─────────────────────────────────────────────
+    /// Treasury's GOLD ATA (regular SPL Token — Tokenkeg)
+    #[account(mut, associated_token::mint = gold_mint, associated_token::authority = treasury,
+              associated_token::token_program = gold_token_prog)]
+    pub treasury_gold_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// Treasury's XNT ATA (Token2022 — TokenzQd)
+    #[account(mut, associated_token::mint = xnt_mint, associated_token::authority = treasury,
+              associated_token::token_program = xnt_token_prog)]
+    pub treasury_xnt_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+    /// Treasury's LP ATA (regular SPL Token — Tokenkeg)
+    #[account(mut, associated_token::mint = lp_mint, associated_token::authority = treasury,
+              associated_token::token_program = lp_token_prog)]
+    pub treasury_lp_ata: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    // ── Mint accounts ──────────────────────────────────────────────────────
+    /// GOLD mint (regular SPL Token)
+    #[account(address = GOLD_MINT_ADDR.parse::<Pubkey>().unwrap())]
+    pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
+    /// XNT mint (wrapped SOL, Token2022)
+    #[account(address = XNT_MINT_ADDR.parse::<Pubkey>().unwrap())]
+    pub xnt_mint: Box<InterfaceAccount<'info, Mint>>,
+    /// LP mint (regular SPL Token)
+    #[account(address = LP_MINT_ADDR.parse::<Pubkey>().unwrap())]
+    pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    // ── Token programs ─────────────────────────────────────────────────────
+    /// Token program for GOLD (regular SPL Token — Tokenkeg)
+    #[account(address = GOLD_TOKEN_PROG.parse::<Pubkey>().unwrap())]
+    pub gold_token_prog: Program<'info, Token>,
+    /// Token program for XNT (Token2022 — TokenzQd)
+    #[account(address = XNT_TOKEN_PROG.parse::<Pubkey>().unwrap())]
+    pub xnt_token_prog: Program<'info, Token2022>,
+    /// Token program for LP (regular SPL Token — Tokenkeg)
+    #[account(address = GOLD_TOKEN_PROG.parse::<Pubkey>().unwrap())]
+    pub lp_token_prog: Program<'info, Token>,
+
+    // ── Incinerator ─────────────────────────────────────────────────────────
+    /// CHECK: Incinerator address — receives burned LP tokens
+    #[account(mut, address = INCINERATOR.parse::<Pubkey>().unwrap())]
+    pub incinerator_ata: UncheckedAccount<'info>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub enum Direction { Up, Down, Left, Right }
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
 
 #[error_code]
 pub enum GoldMinerError {
-    #[msg("Invalid session key")] InvalidSessionKey,
-    #[msg("Session expired")] SessionExpired,
-    #[msg("Out of bounds")] OutOfBounds,
-    #[msg("No funds")] NoFundsToWithdraw,
-    #[msg("Arithmetic error")] ArithmeticError,
+    #[msg("Invalid session key")]
+    InvalidSessionKey,
+    #[msg("Session expired")]
+    SessionExpired,
+    #[msg("Out of bounds")]
+    OutOfBounds,
+    #[msg("No funds")]
+    NoFundsToWithdraw,
+    #[msg("Arithmetic error")]
+    ArithmeticError,
+    #[msg("Insufficient GOLD in treasury for LP")]
+    InsufficientGoldForLp,
+    #[msg("Insufficient LP tokens minted")]
+    InsufficientLpMinted,
 }

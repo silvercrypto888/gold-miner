@@ -13,6 +13,8 @@ import {
   getGoldBitmapPda,
   getGameConfigPda,
   getPlayerPda,
+  getTreasuryPda,
+  getTreasuryGoldAta,
   RPC_URL,
   GRID_SIZE,
   BITMAP_BYTES,
@@ -376,6 +378,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     goldBitmapPda: PublicKey,
     goldMintPk: PublicKey,
     goldAta: PublicKey,
+    treasuryPda: PublicKey,
+    treasuryGoldAta: PublicKey,
     tokenProgram: PublicKey,
     ataProgram: PublicKey,
     systemProgram: PublicKey,
@@ -401,9 +405,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     // 3 goldBitmap (writable)
     // 4 goldMint (writable)
     // 5 playerTokenAccount (writable)
-    // 6 tokenProgram
-    // 7 associatedTokenProgram
-    // 8 systemProgram
+    // 6 treasury (writable)
+    // 7 treasuryTokenAccount (writable)
+    // 8 tokenProgram
+    // 9 associatedTokenProgram
+    // 10 systemProgram
 
     // Serialize direction as enum variant
     const dirByte = DIRECTION_VARIANT[direction];
@@ -420,6 +426,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       { pubkey: goldBitmapPda, isSigner: false, isWritable: true },
       { pubkey: goldMintPk, isSigner: false, isWritable: true },
       { pubkey: goldAta, isSigner: false, isWritable: true },
+      { pubkey: treasuryPda, isSigner: false, isWritable: true },
+      { pubkey: treasuryGoldAta, isSigner: false, isWritable: true },
       { pubkey: tokenProgram, isSigner: false, isWritable: false },
       { pubkey: ataProgram, isSigner: false, isWritable: false },
       { pubkey: systemProgram, isSigner: false, isWritable: false },
@@ -529,9 +537,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const goldAta = getGoldAta(walletPk, goldMintPk);
 
       // Build and send move TX
+      // Derive treasury PDAs
+      const [treasuryPda] = getTreasuryPda(programId);
+      const treasuryGoldAta = getTreasuryGoldAta(treasuryPda, goldMintPk);
+
       const tx = await buildMoveTx(
         direction, playerPda, gameConfigPda, goldBitmapPda,
-        goldMintPk, goldAta, tokenProgram, ataProgram, SystemProgram.programId
+        goldMintPk, goldAta, treasuryPda, treasuryGoldAta,
+        tokenProgram, ataProgram, SystemProgram.programId
       );
 
       tx.sign(signerKp);

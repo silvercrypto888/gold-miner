@@ -5,6 +5,7 @@ import { WalletProvider } from "@/components/WalletProvider";
 import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
 import { Leaderboard } from "@/components/Leaderboard";
+import { TreasuryPanel } from "@/components/TreasuryPanel";
 import { useAudio } from "@/hooks/useAudio";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
@@ -101,6 +102,7 @@ export default function GameUI() {
                   </button>
                 </div>
               </div>
+              <TreasuryPanel />
               <Leaderboard />
             </div>
           </div>

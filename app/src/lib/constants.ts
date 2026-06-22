@@ -167,6 +167,66 @@ export function getPlayerPda(wallet: PublicKey, programId?: PublicKey): [PublicK
   );
 }
 
+// Treasury PDA — seeds = [b"treasury", game_config]
+export function getTreasuryPda(programId?: PublicKey): [PublicKey, number] {
+  const [gameConfigPda] = getGameConfigPda(programId);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury"), gameConfigPda.toBuffer()],
+    programId || getProgramId()
+  );
+}
+
+// Treasury's GOLD ATA (Token2022, same as gold_mint)
+export function getTreasuryGoldAta(treasuryPda: PublicKey, goldMint?: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [
+      treasuryPda.toBuffer(),
+      getToken2022ProgramId().toBuffer(),
+      (goldMint || getGoldMint()).toBuffer(),
+    ],
+    getAtaProgramId()
+  )[0];
+}
+
+// AMM addresses for treasury_auto_lp
+export const AMM_PROGRAM_ID = new PublicKey("7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf");
+export const AMM_MARKET_AUTHORITY = new PublicKey("2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C");
+export const AMM_CONFIG = new PublicKey("3FzzbxwpdJKxRW1yNT7UPYmna17SwC9PRmskMa8A2BuY");
+export const AMM_POOL_STATE = new PublicKey("CdD9sutJxR1nSRkUyHkYyDxo9D63JJcyiSuPVatDwFMt");
+export const AMM_GOLD_VAULT = new PublicKey("5mCfZdbYfUyYHwVLdDQwnAEv6YJgiGi2dihfrEuv3AYx");
+export const AMM_XNT_VAULT = new PublicKey("BBwRY3cCMyW524bgBoUheA8Tae6GtVKPKivz67xWGibH");
+export const AMM_OBSERVER_STATE = new PublicKey("DXf6rW8E5wnMGYFMjhJPjL1aKNh8eAfwmLBqAkGF7t7v");
+export const AMM_GOLD_MINT = new PublicKey("HRby9JcNp67dWCrdxwKyNohDu7WqoWmM9cbrodQCTEAq");
+export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+export const AMM_LP_MINT = new PublicKey("cWf87wGwVpv1TfMac8PimFmEPi1W4WqguFi2vEWQqkL");
+export const AMM_XNT_TOKEN_PROG = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+export const AMM_GOLD_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+export const INCINERATOR = new PublicKey("1nc1nerator11111111111111111111111111111111");
+
+// Treasury's XNT ATA (Token2022)
+export function getTreasuryXntAta(treasuryPda: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [
+      treasuryPda.toBuffer(),
+      AMM_XNT_TOKEN_PROG.toBuffer(),
+      AMM_XNT_MINT.toBuffer(),
+    ],
+    getAtaProgramId()
+  )[0];
+}
+
+// Treasury's LP ATA (regular SPL Token)
+export function getTreasuryLpAta(treasuryPda: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [
+      treasuryPda.toBuffer(),
+      AMM_GOLD_TOKEN_PROG.toBuffer(),
+      AMM_LP_MINT.toBuffer(),
+    ],
+    getAtaProgramId()
+  )[0];
+}
+
 // ─── Formatting ───
 
 export function formatXNT(lamports: number, decimals: number = 4): string {

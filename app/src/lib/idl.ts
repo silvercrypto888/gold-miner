@@ -25,6 +25,17 @@ export const GoldMinerIDL: Idl = {
       args: [],
     },
     {
+      name: "initTreasury",
+      discriminator: [105, 152, 173, 51, 158, 151, 49, 14],
+      accounts: [
+        { name: "authority", writable: true, signer: true },
+        { name: "gameConfig", writable: true },
+        { name: "treasury", writable: true },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
+      ],
+      args: [],
+    },
+    {
       name: "joinGame",
       discriminator: [107, 112, 18, 38, 56, 173, 60, 128],
       accounts: [
@@ -59,6 +70,8 @@ export const GoldMinerIDL: Idl = {
         { name: "goldBitmap", writable: true },
         { name: "goldMint", writable: true },
         { name: "playerTokenAccount", writable: true },
+        { name: "treasury", writable: true },
+        { name: "treasuryTokenAccount", writable: true },
         { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
         { name: "associatedTokenProgram", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
         { name: "systemProgram", address: "11111111111111111111111111111111" },
@@ -69,6 +82,35 @@ export const GoldMinerIDL: Idl = {
           type: { defined: { name: "Direction" } },
         },
       ],
+    },
+    {
+      name: "treasuryAutoLp",
+      discriminator: [88, 214, 22, 127, 104, 230, 169, 225],
+      accounts: [
+        { name: "authority", signer: true },
+        { name: "gameConfig", writable: true },
+        { name: "treasury", writable: true },
+        { name: "ammProgram" },
+        { name: "marketAuthority" },
+        { name: "ammConfig" },
+        { name: "poolState" },
+        { name: "goldVault" },
+        { name: "xntVault" },
+        { name: "observerState" },
+        { name: "treasuryGoldAta", writable: true },
+        { name: "treasuryXntAta", writable: true },
+        { name: "treasuryLpAta", writable: true },
+        { name: "goldMint" },
+        { name: "xntMint" },
+        { name: "lpMint" },
+        { name: "goldTokenProg" },
+        { name: "xntTokenProg" },
+        { name: "lpTokenProg" },
+        { name: "incineratorAta", writable: true },
+        { name: "associatedTokenProgram" },
+        { name: "systemProgram" },
+      ],
+      args: [],
     },
     {
       name: "depositXnt",
@@ -102,6 +144,10 @@ export const GoldMinerIDL: Idl = {
       name: "Player",
       discriminator: [205, 222, 112, 7, 165, 155, 206, 218],
     },
+    {
+      name: "Treasury",
+      discriminator: [238, 239, 123, 238, 89, 1, 168, 253],
+    },
   ],
   types: [
     {
@@ -133,6 +179,19 @@ export const GoldMinerIDL: Idl = {
       },
     },
     {
+      name: "Treasury",
+      type: {
+        kind: "struct",
+        fields: [
+          { name: "gameConfig", type: "pubkey" },
+          { name: "goldAccumulated", type: "u64" },
+          { name: "xntAccumulated", type: "u64" },
+          { name: "lpBurned", type: "u64" },
+          { name: "bump", type: "u8" },
+        ],
+      },
+    },
+    {
       name: "Direction",
       type: {
         kind: "enum",
@@ -153,6 +212,8 @@ export const GoldMinerIDL: Idl = {
     { code: 6004, name: "ArithmeticError", msg: "Arithmetic error" },
     { code: 6005, name: "AlreadyMined", msg: "Position already mined" },
     { code: 6006, name: "NoGoldHere", msg: "No gold at this position" },
+    { code: 6007, name: "InsufficientGoldForLp", msg: "Insufficient GOLD in treasury for LP" },
+    { code: 6008, name: "InsufficientLpMinted", msg: "Insufficient LP tokens minted" },
   ],
 };
 
@@ -172,5 +233,13 @@ export interface PlayerAccount {
   positionY: number;
   goldiumMinted: string;
   sessionExpiresAt: string;
+  bump: number;
+}
+
+export interface TreasuryAccount {
+  gameConfig: string;
+  goldAccumulated: string;
+  xntAccumulated: string;
+  lpBurned: string;
   bump: number;
 }
