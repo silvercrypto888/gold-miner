@@ -33,7 +33,7 @@ pub const GOLD_MINT_ADDR: &str = "HRby9JcNp67dWCrdxwKyNohDu7WqoWmM9cbrodQCTEAq";
 pub const XNT_MINT_ADDR: &str = "So11111111111111111111111111111111111111112";
 pub const LP_MINT_ADDR: &str = "cWf87wGwVpv1TfMac8PimFmEPi1W4WqguFi2vEWQqkL";
 pub const XNT_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-pub const GOLD_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+pub const GOLD_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 // AMM instruction discriminators
 pub const SWAP_BASE_INPUT_DISCRIMINATOR: [u8; 8] = [0x8f, 0xbe, 0x5a, 0xda, 0xc4, 0x1e, 0x33, 0xde];
@@ -476,9 +476,9 @@ pub struct TreasuryAutoLp<'info> {
     pub observer_state: UncheckedAccount<'info>,
 
     // ── Treasury token accounts ─────────────────────────────────────────────
-    /// Treasury's GOLD ATA (regular SPL Token — Tokenkeg)
+    /// Treasury's GOLD ATA (Token2022 — same as gold_mint)
     #[account(mut, associated_token::mint = gold_mint, associated_token::authority = treasury,
-              associated_token::token_program = gold_token_prog)]
+              associated_token::token_program = xnt_token_prog)]
     pub treasury_gold_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     /// Treasury's XNT ATA (Token2022 — TokenzQd)
     #[account(mut, associated_token::mint = xnt_mint, associated_token::authority = treasury,
@@ -503,7 +503,7 @@ pub struct TreasuryAutoLp<'info> {
     // ── Token programs ─────────────────────────────────────────────────────
     /// Token program for GOLD (regular SPL Token — Tokenkeg)
     #[account(address = GOLD_TOKEN_PROG.parse::<Pubkey>().unwrap())]
-    pub gold_token_prog: Program<'info, Token>,
+    pub gold_token_prog: Program<'info, Token2022>,
     /// Token program for XNT (Token2022 — TokenzQd)
     #[account(address = XNT_TOKEN_PROG.parse::<Pubkey>().unwrap())]
     pub xnt_token_prog: Program<'info, Token2022>,
