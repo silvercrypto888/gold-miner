@@ -34,6 +34,7 @@ pub const XNT_MINT_ADDR: &str = "So11111111111111111111111111111111111111112";
 pub const LP_MINT_ADDR: &str = "cWf87wGwVpv1TfMac8PimFmEPi1W4WqguFi2vEWQqkL";
 pub const XNT_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 pub const GOLD_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+pub const LP_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 // AMM instruction discriminators
 pub const SWAP_BASE_INPUT_DISCRIMINATOR: [u8; 8] = [0x8f, 0xbe, 0x5a, 0xda, 0xc4, 0x1e, 0x33, 0xde];
@@ -197,12 +198,12 @@ pub mod gold_miner {
                     solana_program::instruction::AccountMeta::new(ctx.accounts.market_authority.key(), false),
                     solana_program::instruction::AccountMeta::new(ctx.accounts.amm_config.key(), false),
                     solana_program::instruction::AccountMeta::new(ctx.accounts.pool_state.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_xnt_ata.key(), false),
                     solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_gold_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_xnt_ata.key(), false),
                     solana_program::instruction::AccountMeta::new(ctx.accounts.gold_vault.key(), false),
                     solana_program::instruction::AccountMeta::new(ctx.accounts.xnt_vault.key(), false),
-                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_token_prog.key(), false),
                     solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_token_prog.key(), false),
                     solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_mint.key(), false),
                     solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_mint.key(), false),
                     solana_program::instruction::AccountMeta::new(ctx.accounts.observer_state.key(), false),
@@ -214,8 +215,8 @@ pub mod gold_miner {
                 ctx.accounts.market_authority.to_account_info(),
                 ctx.accounts.amm_config.to_account_info(),
                 ctx.accounts.pool_state.to_account_info(),
-                ctx.accounts.treasury_xnt_ata.to_account_info(),
                 ctx.accounts.treasury_gold_ata.to_account_info(),
+                ctx.accounts.treasury_xnt_ata.to_account_info(),
                 ctx.accounts.gold_vault.to_account_info(),
                 ctx.accounts.xnt_vault.to_account_info(),
                 ctx.accounts.xnt_token_prog.to_account_info(),
@@ -255,7 +256,7 @@ pub mod gold_miner {
                     solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_token_prog.key(), false),
                     solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_mint.key(), false),
                     solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_mint.key(), false),
-                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.lp_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.lp_mint.key(), false),
                 ],
                 data: deposit_data,
             },
@@ -446,33 +447,33 @@ pub struct TreasuryAutoLp<'info> {
 
     /// Game config — used for treasury PDA derivation
     #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
-    pub game_config: Account<'info, GameConfig>,
+    pub game_config: Box<Account<'info, GameConfig>>,
 
     /// Treasury PDA
     #[account(mut, seeds = [b"treasury", game_config.key().as_ref()], bump = treasury.bump)]
-    pub treasury: Account<'info, Treasury>,
+    pub treasury: Box<Account<'info, Treasury>>,
 
     // ── AMM accounts ──────────────────────────────────────────────────────
     /// CHECK: AMM program
     #[account(address = AMM_PROGRAM_ID.parse::<Pubkey>().unwrap())]
     pub amm_program: UncheckedAccount<'info>,
     /// CHECK: Market authority PDA
-    #[account(address = MARKET_AUTHORITY.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = MARKET_AUTHORITY.parse::<Pubkey>().unwrap())]
     pub market_authority: UncheckedAccount<'info>,
     /// CHECK: AMM config account
-    #[account(address = AMM_CONFIG.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = AMM_CONFIG.parse::<Pubkey>().unwrap())]
     pub amm_config: UncheckedAccount<'info>,
     /// CHECK: Pool state PDA
-    #[account(address = POOL_STATE.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = POOL_STATE.parse::<Pubkey>().unwrap())]
     pub pool_state: UncheckedAccount<'info>,
     /// CHECK: GOLD vault
-    #[account(address = GOLD_VAULT.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = GOLD_VAULT.parse::<Pubkey>().unwrap())]
     pub gold_vault: UncheckedAccount<'info>,
     /// CHECK: XNT vault
-    #[account(address = XNT_VAULT.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = XNT_VAULT.parse::<Pubkey>().unwrap())]
     pub xnt_vault: UncheckedAccount<'info>,
     /// CHECK: Observer state
-    #[account(address = OBSERVER_STATE.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = OBSERVER_STATE.parse::<Pubkey>().unwrap())]
     pub observer_state: UncheckedAccount<'info>,
 
     // ── Treasury token accounts ─────────────────────────────────────────────
@@ -497,7 +498,7 @@ pub struct TreasuryAutoLp<'info> {
     #[account(address = XNT_MINT_ADDR.parse::<Pubkey>().unwrap())]
     pub xnt_mint: Box<InterfaceAccount<'info, Mint>>,
     /// LP mint (regular SPL Token)
-    #[account(address = LP_MINT_ADDR.parse::<Pubkey>().unwrap())]
+    #[account(mut, address = LP_MINT_ADDR.parse::<Pubkey>().unwrap())]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
 
     // ── Token programs ─────────────────────────────────────────────────────
@@ -508,12 +509,12 @@ pub struct TreasuryAutoLp<'info> {
     #[account(address = XNT_TOKEN_PROG.parse::<Pubkey>().unwrap())]
     pub xnt_token_prog: Program<'info, Token>,
     /// Token program for LP (regular SPL Token — Tokenkeg)
-    #[account(address = GOLD_TOKEN_PROG.parse::<Pubkey>().unwrap())]
+    #[account(address = LP_TOKEN_PROG.parse::<Pubkey>().unwrap())]
     pub lp_token_prog: Program<'info, Token>,
 
     // ── Incinerator ─────────────────────────────────────────────────────────
-    /// CHECK: Incinerator address — receives burned LP tokens
-    #[account(mut, address = INCINERATOR.parse::<Pubkey>().unwrap())]
+    /// CHECK: Incinerator's LP ATA — receives burned LP tokens
+    #[account(mut)]
     pub incinerator_ata: UncheckedAccount<'info>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
