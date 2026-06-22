@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   getProgramId,
@@ -12,19 +12,20 @@ import {
   RPC_URL,
   AMM_PROGRAM_ID,
   AMM_MARKET_AUTHORITY,
-  AMM_CONFIG,
   AMM_POOL_STATE,
   AMM_GOLD_VAULT,
   AMM_XNT_VAULT,
-  AMM_OBSERVER_STATE,
   AMM_GOLD_MINT,
   AMM_XNT_MINT,
   AMM_LP_MINT,
   AMM_XNT_TOKEN_PROG,
   AMM_GOLD_TOKEN_PROG,
+  AMM_LP_TOKEN_PROG,
   INCINERATOR,
   getTreasuryXntAta,
   getTreasuryLpAta,
+  getIncineratorLpAta,
+  getAtaProgramId,
 } from "@/lib/constants";
 
 // treasury_auto_lp discriminator = sha256("global:treasury_auto_lp")[0..8]
@@ -83,28 +84,29 @@ export function TreasuryPanel() {
 
       const data = Buffer.concat([Buffer.from(TREASURY_AUTO_LP_DISC)]);
 
+      const incineratorLpAta = getIncineratorLpAta();
+      const ataProgramId = getAtaProgramId();
+
       const keys = [
         { pubkey: publicKey, isSigner: true, isWritable: false },
         { pubkey: gameConfigPda, isSigner: false, isWritable: true },
         { pubkey: treasuryPda, isSigner: false, isWritable: true },
         { pubkey: AMM_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: AMM_MARKET_AUTHORITY, isSigner: false, isWritable: false },
-        { pubkey: AMM_CONFIG, isSigner: false, isWritable: false },
-        { pubkey: AMM_POOL_STATE, isSigner: false, isWritable: false },
-        { pubkey: AMM_GOLD_VAULT, isSigner: false, isWritable: false },
-        { pubkey: AMM_XNT_VAULT, isSigner: false, isWritable: false },
-        { pubkey: AMM_OBSERVER_STATE, isSigner: false, isWritable: false },
+        { pubkey: AMM_MARKET_AUTHORITY, isSigner: false, isWritable: true },
+        { pubkey: AMM_POOL_STATE, isSigner: false, isWritable: true },
+        { pubkey: AMM_GOLD_VAULT, isSigner: false, isWritable: true },
+        { pubkey: AMM_XNT_VAULT, isSigner: false, isWritable: true },
         { pubkey: treasuryGoldAta, isSigner: false, isWritable: true },
         { pubkey: treasuryXntAta, isSigner: false, isWritable: true },
         { pubkey: treasuryLpAta, isSigner: false, isWritable: true },
         { pubkey: AMM_GOLD_MINT, isSigner: false, isWritable: false },
         { pubkey: AMM_XNT_MINT, isSigner: false, isWritable: false },
-        { pubkey: AMM_LP_MINT, isSigner: false, isWritable: false },
+        { pubkey: AMM_LP_MINT, isSigner: false, isWritable: true },
         { pubkey: AMM_GOLD_TOKEN_PROG, isSigner: false, isWritable: false },
         { pubkey: AMM_XNT_TOKEN_PROG, isSigner: false, isWritable: false },
-        { pubkey: AMM_GOLD_TOKEN_PROG, isSigner: false, isWritable: false },
-        { pubkey: INCINERATOR, isSigner: false, isWritable: true },
-        { pubkey: new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"), isSigner: false, isWritable: false },
+        { pubkey: AMM_LP_TOKEN_PROG, isSigner: false, isWritable: false },
+        { pubkey: incineratorLpAta, isSigner: false, isWritable: true },
+        { pubkey: ataProgramId, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ];
 
@@ -115,6 +117,7 @@ export function TreasuryPanel() {
       });
 
       const tx = new Transaction({ feePayer: publicKey });
+      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
       tx.add(ix);
       const blockhash = await connRef.current.getLatestBlockhash();
       tx.recentBlockhash = blockhash.blockhash;

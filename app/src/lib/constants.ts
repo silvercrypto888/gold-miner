@@ -201,6 +201,7 @@ export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111
 export const AMM_LP_MINT = new PublicKey("cWf87wGwVpv1TfMac8PimFmEPi1W4WqguFi2vEWQqkL");
 export const AMM_XNT_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const AMM_GOLD_TOKEN_PROG = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+export const AMM_LP_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const INCINERATOR = new PublicKey("1nc1nerator11111111111111111111111111111111");
 
 // Treasury's XNT ATA (Tokenkeg — XNT is regular SPL Token on X1 testnet)
@@ -225,6 +226,22 @@ export function getTreasuryLpAta(treasuryPda: PublicKey): PublicKey {
     ],
     getAtaProgramId()
   )[0];
+}
+
+// Incinerator's LP ATA
+let _INCINERATOR_LP_ATA: PublicKey | null = null;
+export function getIncineratorLpAta(): PublicKey {
+  if (!_INCINERATOR_LP_ATA) {
+    _INCINERATOR_LP_ATA = PublicKey.findProgramAddressSync(
+      [
+        INCINERATOR.toBuffer(),
+        AMM_XNT_TOKEN_PROG.toBuffer(),
+        AMM_LP_MINT.toBuffer(),
+      ],
+      getAtaProgramId()
+    )[0];
+  }
+  return _INCINERATOR_LP_ATA;
 }
 
 // ─── Formatting ───
