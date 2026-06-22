@@ -228,95 +228,45 @@ pub mod gold_miner {
             signer_seeds,
         )?;
 
-        let xnt_received = ctx.accounts.treasury_xnt_ata.amount;
+        // Re-read XNT balance from account data after swap CPI (cached amount is stale)
+        let xnt_received = {
+            let info = ctx.accounts.treasury_xnt_ata.to_account_info();
+            let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
+            acc.amount
+        };
         msg!("XNT received from swap: {}", xnt_received);
 
-        // CPI Deposit: add remaining GOLD + XNT as LP
-        let mut deposit_data = Vec::with_capacity(32);
-        deposit_data.extend_from_slice(&DEPOSIT_DISCRIMINATOR);
-        deposit_data.extend_from_slice(&0u64.to_le_bytes());
-        deposit_data.extend_from_slice(&xnt_received.to_le_bytes());
-        deposit_data.extend_from_slice(&remaining_gold.to_le_bytes());
-
-        msg!("Depositing {} GOLD + {} XNT as LP", remaining_gold, xnt_received);
-
-        solana_program::program::invoke_signed(
-            &solana_program::instruction::Instruction {
-                program_id: ctx.accounts.amm_program.key(),
-                accounts: vec![
-                    solana_program::instruction::AccountMeta::new(treasury_key, true),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.market_authority.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.pool_state.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_lp_ata.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_xnt_ata.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_gold_ata.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.xnt_vault.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.gold_vault.key(), false),
-                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_token_prog.key(), false),
-                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_token_prog.key(), false),
-                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_mint.key(), false),
-                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_mint.key(), false),
-                    solana_program::instruction::AccountMeta::new(ctx.accounts.lp_mint.key(), false),
-                ],
-                data: deposit_data,
-            },
-            &[
-                ctx.accounts.treasury.to_account_info(),
-                ctx.accounts.market_authority.to_account_info(),
-                ctx.accounts.pool_state.to_account_info(),
-                ctx.accounts.treasury_lp_ata.to_account_info(),
-                ctx.accounts.treasury_xnt_ata.to_account_info(),
-                ctx.accounts.treasury_gold_ata.to_account_info(),
-                ctx.accounts.xnt_vault.to_account_info(),
-                ctx.accounts.gold_vault.to_account_info(),
-                ctx.accounts.xnt_token_prog.to_account_info(),
-                ctx.accounts.gold_token_prog.to_account_info(),
-                ctx.accounts.xnt_mint.to_account_info(),
-                ctx.accounts.gold_mint.to_account_info(),
-                ctx.accounts.lp_mint.to_account_info(),
-            ],
-            signer_seeds,
-        )?;
-
-        let lp_minted = ctx.accounts.treasury_lp_ata.amount;
-        msg!("LP tokens minted: {}", lp_minted);
-
-        require!(lp_minted >= MIN_LP_TO_BURN, GoldMinerError::InsufficientLpMinted);
-
-        // Transfer LP tokens → incinerator
-        let incinerator = INCINERATOR.parse::<Pubkey>().unwrap();
-
-        let transfer_ix = spl_token::instruction::transfer(
-            &spl_token::ID,
-            &ctx.accounts.treasury_lp_ata.key(),
-            &incinerator,
-            &treasury_key,
-            &[],
-            lp_minted,
-        )?;
-
-        solana_program::program::invoke_signed(
-            &transfer_ix,
-            &[
-                ctx.accounts.treasury_lp_ata.to_account_info(),
-                ctx.accounts.incinerator_ata.to_account_info(),
-                ctx.accounts.treasury.to_account_info(),
-                ctx.accounts.lp_token_prog.to_account_info(),
-            ],
-            signer_seeds,
-        )?;
+        // Calculate proportional GOLD to deposit (match pool ratio)
+        // Pool has xnt_vault.amount GOLD and gold_vault.amount XNT
+        // We received xnt_received XNT, so proportional GOLD = xnt_received * gold_vault / xnt_vault
+        let pool_xnt = {
+            let info = ctx.accounts.xnt_vault.to_account_info();
+            let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
+            acc.amount
+        };
+        let pool_gold = {
+            let info = ctx.accounts.gold_vault.to_account_info();
+            let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
+            acc.amount
+        };
+        let deposit_gold = if pool_xnt > 0 && xnt_received > 0 {
+            // proportional_gold = xnt_received * pool_gold / pool_xnt
+            ((xnt_received as u128).saturating_mul(pool_gold as u128) / (pool_xnt as u128)) as u64
+        } else {
+            0
+        };
+        let deposit_gold = std::cmp::min(deposit_gold, remaining_gold);
+        msg!("Pool: {} XNT, {} GOLD. XNT accumulated in treasury: {}", pool_xnt, pool_gold, xnt_received);
 
         // Update treasury accumulators
         let treasury = &mut ctx.accounts.treasury;
         treasury.xnt_accumulated = treasury.xnt_accumulated.saturating_add(xnt_received);
-        treasury.lp_burned = treasury.lp_burned.saturating_add(lp_minted);
+
 
         msg!(
-            "Auto-LP complete: swapped {} GOLD, deposited {} GOLD + {} XNT, burned {} LP",
+            "Auto-LP complete: swapped {} GOLD, received {} XNT",
             swap_amount,
-            remaining_gold,
-            xnt_received,
-            lp_minted
+            xnt_received
         );
 
         Ok(())
