@@ -172,7 +172,7 @@ pub mod gold_miner {
 
         require!(gold_balance >= MIN_GOLD_FOR_LP, GoldMinerError::InsufficientGoldForLp);
 
-        let swap_amount = gold_balance / 2;
+        let swap_amount = std::cmp::min(gold_balance / 20, 100_000_000_000u64); // 5% of GOLD, max 100 GOLD
         let remaining_gold = gold_balance - swap_amount;
         let min_xnt_out: u64 = 0;
 
