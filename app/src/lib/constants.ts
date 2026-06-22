@@ -160,6 +160,8 @@ export function getGoldBitmapPda(programId?: PublicKey): [PublicKey, number] {
   return [new PublicKey(BITMAP_KEYPAIR_ADDRESS), 255]; // keypair, not PDA
 }
 
+export const GOLD_BITMAP_PUBKEY = new PublicKey(BITMAP_KEYPAIR_ADDRESS);
+
 export function getPlayerPda(wallet: PublicKey, programId?: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("player"), wallet.toBuffer()],

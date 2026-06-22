@@ -14,6 +14,8 @@ pub const GOLD_DECIMALS: u8 = 9;
 pub const SESSION_DURATION_SLOTS: u64 = 36000;
 pub const BITMAP_BODY: usize = 131_072;
 pub const BITMAP_ACCT: usize = BITMAP_BODY;
+pub const TOTAL_GOLD_SPOTS: u64 = 161_390;
+pub const RESET_THRESHOLD: u64 = 121_042; // 75% of TOTAL_GOLD_SPOTS
 
 // Treasury / LP constants
 pub const MIN_GOLD_FOR_LP: u64 = 1000 * 10u64.pow(GOLD_DECIMALS as u32);
@@ -165,6 +167,27 @@ pub mod gold_miner {
         Ok(())
     }
 
+    /// Permissionless bitmap reset: anyone can call this once 75% of gold spots are mined.
+    /// Zeroes the bitmap and resets the counter, letting gold respawn across the grid.
+    pub fn reset_bitmap(ctx: Context<ResetBitmap>) -> Result<()> {
+        let cfg = &mut ctx.accounts.game_config;
+        require!(
+            cfg.total_gold_mined >= RESET_THRESHOLD,
+            GoldMinerError::NotEnoughMinedForReset
+        );
+
+        let data = &mut ctx.accounts.gold_bitmap.try_borrow_mut_data()?;
+        // Zero out the bitmap body (skip 8-byte discriminator)
+        for byte in data[8..].iter_mut() {
+            *byte = 0;
+        }
+        drop(data);
+
+        cfg.total_gold_mined = 0;
+        msg!("Bitmap reset. {} gold spots mined before reset.", RESET_THRESHOLD);
+        Ok(())
+    }
+
     /// Treasury auto-LP: swaps ~50% of treasury GOLD for XNT, then deposits both as LP, burns LP tokens.
     pub fn treasury_auto_lp(ctx: Context<TreasuryAutoLp>) -> Result<()> {
         let gold_balance = ctx.accounts.treasury_gold_ata.amount;
@@ -172,7 +195,7 @@ pub mod gold_miner {
 
         require!(gold_balance >= MIN_GOLD_FOR_LP, GoldMinerError::InsufficientGoldForLp);
 
-        let swap_amount = std::cmp::min(gold_balance / 20, 100_000_000_000u64); // 5% of GOLD, max 100 GOLD
+        let swap_amount = gold_balance / 2; // 50% of treasury GOLD
         let remaining_gold = gold_balance - swap_amount;
         let min_xnt_out: u64 = 0;
 
@@ -258,15 +281,132 @@ pub mod gold_miner {
         let deposit_gold = std::cmp::min(deposit_gold, remaining_gold);
         msg!("Pool: {} XNT, {} GOLD. XNT accumulated in treasury: {}", pool_xnt, pool_gold, xnt_received);
 
-        // Update treasury accumulators
+        // ── Step 2: Deposit proportional GOLD + XNT as LP ────────────────────
+        // Raydium CP Swap deposit accounts:
+        // Pool has XNT as token0, GOLD as token1 (based on pool state layout)
+        // 1. owner (signer) = treasury
+        // 2. authority = market_authority
+        // 3. poolState = pool_state
+        // 4. ownerLpToken = treasury_lp_ata
+        // 5. token0Account = treasury_xnt_ata (token0 = XNT)
+        // 6. token1Account = treasury_gold_ata (token1 = GOLD)
+        // 7. token0Vault = xnt_vault
+        // 8. token1Vault = gold_vault
+        // 9. tokenProgram = xnt_token_prog (SPL Token for XNT)
+        // 10. tokenProgram2022 = gold_token_prog (Token2022 for GOLD)
+        // 11. vault0Mint = xnt_mint
+        // 12. vault1Mint = gold_mint
+        // 13. lpMint = lp_mint
+        //
+        // Args: lp_token_amount (u64), maximum_token0_amount (u64), maximum_token1_amount (u64)
+        //
+        // Calculate LP tokens to mint based on the limiting token
+        let total_lp_supply = {
+            let info = ctx.accounts.lp_mint.to_account_info();
+            let mint = anchor_spl::token::Mint::try_deserialize(&mut &**info.data.borrow())?;
+            mint.supply
+        };
+        // LP from XNT side: xnt_received * total_lp / pool_xnt
+        let lp_from_xnt = if pool_xnt > 0 && total_lp_supply > 0 {
+            ((xnt_received as u128).saturating_mul(total_lp_supply as u128) / (pool_xnt as u128)) as u64
+        } else { 0 };
+        // LP from GOLD side: deposit_gold * total_lp / pool_gold
+        let lp_from_gold = if pool_gold > 0 && total_lp_supply > 0 {
+            ((deposit_gold as u128).saturating_mul(total_lp_supply as u128) / (pool_gold as u128)) as u64
+        } else { 0 };
+        // Use the smaller LP amount (whichever token is the constraint)
+        let lp_token_amount = std::cmp::min(lp_from_xnt, lp_from_gold);
+        msg!("LP to mint: {} (from XNT: {}, from GOLD: {}), total LP supply: {}",
+            lp_token_amount, lp_from_xnt, lp_from_gold, total_lp_supply);
+
+        // Use full treasury balances as max amounts to avoid slippage issues
+        let max_token0 = xnt_received;  // max XNT (token0)
+        let max_token1 = remaining_gold; // max GOLD (token1)
+
+        let mut deposit_data = Vec::with_capacity(32);
+        deposit_data.extend_from_slice(&DEPOSIT_DISCRIMINATOR);
+        deposit_data.extend_from_slice(&lp_token_amount.to_le_bytes());
+        deposit_data.extend_from_slice(&max_token0.to_le_bytes());
+        deposit_data.extend_from_slice(&max_token1.to_le_bytes());
+
+        solana_program::program::invoke_signed(
+            &solana_program::instruction::Instruction {
+                program_id: ctx.accounts.amm_program.key(),
+                accounts: vec![
+                    solana_program::instruction::AccountMeta::new(treasury_key, true),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.market_authority.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.pool_state.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_lp_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_xnt_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.treasury_gold_ata.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.xnt_vault.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.gold_vault.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_token_prog.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.xnt_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new_readonly(ctx.accounts.gold_mint.key(), false),
+                    solana_program::instruction::AccountMeta::new(ctx.accounts.lp_mint.key(), false),
+                ],
+                data: deposit_data,
+            },
+            &[
+                ctx.accounts.treasury.to_account_info(),
+                ctx.accounts.market_authority.to_account_info(),
+                ctx.accounts.pool_state.to_account_info(),
+                ctx.accounts.treasury_lp_ata.to_account_info(),
+                ctx.accounts.treasury_xnt_ata.to_account_info(),
+                ctx.accounts.treasury_gold_ata.to_account_info(),
+                ctx.accounts.xnt_vault.to_account_info(),
+                ctx.accounts.gold_vault.to_account_info(),
+                ctx.accounts.xnt_token_prog.to_account_info(),
+                ctx.accounts.gold_token_prog.to_account_info(),
+                ctx.accounts.xnt_mint.to_account_info(),
+                ctx.accounts.gold_mint.to_account_info(),
+                ctx.accounts.lp_mint.to_account_info(),
+            ],
+            signer_seeds,
+        )?;
+
+        // ── Step 3: Read LP balance and burn ────────────────────────────────
+        let lp_minted = {
+            let info = ctx.accounts.treasury_lp_ata.to_account_info();
+            let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
+            acc.amount
+        };
+        msg!("LP tokens minted: {}", lp_minted);
+
+        require!(lp_minted >= MIN_LP_TO_BURN, GoldMinerError::InsufficientLpMinted);
+
+        // Transfer LP tokens to incinerator (burn)
+        let transfer_ix = spl_token::instruction::transfer(
+            &ctx.accounts.lp_token_prog.key(),
+            &ctx.accounts.treasury_lp_ata.key(),
+            &ctx.accounts.incinerator_ata.key(),
+            &treasury_key,
+            &[],
+            lp_minted,
+        )?;
+        solana_program::program::invoke_signed(
+            &transfer_ix,
+            &[
+                ctx.accounts.treasury_lp_ata.to_account_info(),
+                ctx.accounts.incinerator_ata.to_account_info(),
+                ctx.accounts.treasury.to_account_info(),
+                ctx.accounts.lp_token_prog.to_account_info(),
+            ],
+            signer_seeds,
+        )?;
+
+        // Update treasury (all CPI calls done, safe to borrow mutably now)
         let treasury = &mut ctx.accounts.treasury;
         treasury.xnt_accumulated = treasury.xnt_accumulated.saturating_add(xnt_received);
-
+        treasury.lp_burned = treasury.lp_burned.saturating_add(lp_minted);
 
         msg!(
-            "Auto-LP complete: swapped {} GOLD, received {} XNT",
+            "Auto-LP complete: swapped {} GOLD, received {} XNT, deposited LP, burned {} LP tokens",
             swap_amount,
-            xnt_received
+            xnt_received,
+            lp_minted
         );
 
         Ok(())
@@ -391,6 +531,21 @@ pub struct MoveAndMine<'info> {
 }
 
 #[derive(Accounts)]
+#[derive(Accounts)]
+pub struct ResetBitmap<'info> {
+    /// Anyone can call — no signer restriction
+    pub caller: Signer<'info>,
+
+    /// Game config — tracks total_gold_mined
+    #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
+    pub game_config: Account<'info, GameConfig>,
+
+    /// CHECK: raw bitmap bytes, owned by program
+    #[account(mut, owner = crate::ID)]
+    pub gold_bitmap: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
 pub struct TreasuryAutoLp<'info> {
     /// Authority signer (game admin or designated operator)
     pub authority: Signer<'info>,
@@ -495,4 +650,6 @@ pub enum GoldMinerError {
     InsufficientGoldForLp,
     #[msg("Insufficient LP tokens minted")]
     InsufficientLpMinted,
+    #[msg("Not enough gold spots mined yet for reset (need 75%)")]
+    NotEnoughMinedForReset,
 }
