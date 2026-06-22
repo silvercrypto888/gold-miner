@@ -252,9 +252,9 @@ export function TreasuryPanel() {
           {/* Reset Bitmap Button */}
           <button
             onClick={handleResetBitmap}
-            disabled={isLoading}
+            disabled={isLoading || minedCount === null || minedCount < 162}
             className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${
-              isLoading
+              isLoading || minedCount === null || minedCount < 162
                 ? "bg-green-600/30 text-green-400/50 cursor-not-allowed"
                 : "bg-gradient-to-r from-green-500 to-emerald-500 text-black hover:from-green-400 hover:to-emerald-400 active:scale-[0.98]"
             }`}
