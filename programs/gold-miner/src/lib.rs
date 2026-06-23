@@ -197,7 +197,32 @@ pub mod gold_miner {
 
         let swap_amount = gold_balance / 2; // 50% of treasury GOLD
         let remaining_gold = gold_balance - swap_amount;
-        let min_xnt_out: u64 = 0;
+
+        // Read pool reserves to compute expected XNT output (anti-sandwich)
+        let pool_gold = {
+            let info = ctx.accounts.gold_vault.to_account_info();
+            let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
+            acc.amount
+        };
+        let pool_xnt = {
+            let info = ctx.accounts.xnt_vault.to_account_info();
+            let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
+            acc.amount
+        };
+        // Constant product: k = pool_gold * pool_xnt
+        // After swap: (pool_gold + swap_amount) * (pool_xnt - xnt_out) = k
+        // xnt_out = pool_xnt - (k / (pool_gold + swap_amount))
+        let k = (pool_gold as u128).saturating_mul(pool_xnt as u128);
+        let new_pool_gold = (pool_gold as u128).saturating_add(swap_amount as u128);
+        let expected_xnt_out = if new_pool_gold > 0 {
+            (pool_xnt as u128).saturating_sub(k / new_pool_gold)
+        } else {
+            0u128
+        };
+        // Apply slippage tolerance (SLIPPAGE_BPS = 100 = 1%)
+        let min_xnt_out = (expected_xnt_out * (10_000u128 - SLIPPAGE_BPS as u128) / 10_000u128) as u64;
+        msg!("Pool: {} GOLD, {} XNT. Expected XNT out: {}, min ({} bps slippage): {}",
+            pool_gold, pool_xnt, expected_xnt_out, SLIPPAGE_BPS, min_xnt_out);
 
         msg!("Swapping {} GOLD for XNT", swap_amount);
 
@@ -259,9 +284,7 @@ pub mod gold_miner {
         };
         msg!("XNT received from swap: {}", xnt_received);
 
-        // Calculate proportional GOLD to deposit (match pool ratio)
-        // Pool has xnt_vault.amount GOLD and gold_vault.amount XNT
-        // We received xnt_received XNT, so proportional GOLD = xnt_received * gold_vault / xnt_vault
+        // Re-read pool reserves after swap (they changed)
         let pool_xnt = {
             let info = ctx.accounts.xnt_vault.to_account_info();
             let acc = anchor_spl::token::TokenAccount::try_deserialize(&mut &**info.data.borrow())?;
