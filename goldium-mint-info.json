@@ -1,7 +1,33 @@
 {
-  "mintAddress": "CnacgNEjpATghhtnvBtHvRPZWdMiZts7ztDksS3DbUhn",
-  "gameConfigAddress": "FoxTZk6jXgaoqwybZDJtnuz337nYtMvDxUfh3eKyH548",
-  "authority": "2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS",
-  "txSignature": "4YSRqTZKNntdhZBiJtWeBx2dPqxaqTuF9WurDZiDoTaQosHKxxCodMXFCfoQB3KXVLxXTutxE88Aoi6caNur5CCG",
-  "createdAt": "2026-05-12T04:11:59.598Z"
+  "name": "Goldium",
+  "symbol": "GOLD",
+  "description": "Goldium — the native token of Gold Miner, an on-chain grid mining game on X1.",
+  "image": "ipfs://QmZxVjTkmjdRmpp6fhtAaKWDWKHVK2z6fpB5LuDiKQk6k7",
+  "attributes": [
+    {
+      "trait_type": "Token Standard",
+      "value": "SPL Token-2022"
+    },
+    {
+      "trait_type": "Chain",
+      "value": "X1 Testnet"
+    },
+    {
+      "trait_type": "Decimals",
+      "value": "9"
+    },
+    {
+      "trait_type": "Utility",
+      "value": "In-game mining reward"
+    }
+  ],
+  "properties": {
+    "files": [
+      {
+        "uri": "ipfs://QmZxVjTkmjdRmpp6fhtAaKWDWKHVK2z6fpB5LuDiKQk6k7",
+        "type": "image/jpeg"
+      }
+    ],
+    "category": "token"
+  }
 }

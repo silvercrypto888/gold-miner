@@ -84,6 +84,18 @@ export const GoldMinerIDL: Idl = {
       ],
     },
     {
+      name: "updateGoldMint",
+      discriminator: [240, 238, 95, 74, 241, 241, 128, 117],
+      accounts: [
+        { name: "authority", writable: true, signer: true },
+        { name: "gameConfig", writable: true },
+        { name: "newGoldMint", writable: true },
+        { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
+        { name: "systemProgram", address: "11111111111111111111111111111111" },
+      ],
+      args: [],
+    },
+    {
       name: "treasuryAutoLp",
       discriminator: [88, 214, 22, 127, 104, 230, 169, 225],
       accounts: [

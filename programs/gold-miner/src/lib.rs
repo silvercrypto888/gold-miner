@@ -188,6 +188,18 @@ pub mod gold_miner {
         Ok(())
     }
 
+    pub fn update_gold_mint(ctx: Context<UpdateGoldMint>) -> Result<()> {
+        let cfg = &mut ctx.accounts.game_config;
+        require!(
+            ctx.accounts.authority.key() == cfg.authority,
+            GoldMinerError::InvalidSessionKey
+        );
+        let old_mint = cfg.gold_mint;
+        cfg.gold_mint = ctx.accounts.new_gold_mint.key();
+        msg!("Gold mint updated: {} -> {}", old_mint, cfg.gold_mint);
+        Ok(())
+    }
+
     /// Treasury auto-LP: swaps ~50% of treasury GOLD for XNT, then deposits both as LP, burns LP tokens.
     pub fn treasury_auto_lp(ctx: Context<TreasuryAutoLp>) -> Result<()> {
         let gold_balance = ctx.accounts.treasury_gold_ata.amount;
@@ -554,6 +566,22 @@ pub struct MoveAndMine<'info> {
 }
 
 #[derive(Accounts)]
+pub struct UpdateGoldMint<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut, seeds = [b"game_config"], bump = game_config.bump,
+              has_one = authority @ GoldMinerError::InvalidSessionKey)]
+    pub game_config: Account<'info, GameConfig>,
+
+    #[account(mut)]
+    pub new_gold_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    pub token_program: Program<'info, Token2022>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct ResetBitmap<'info> {
     /// Anyone can call — no signer restriction
     pub caller: Signer<'info>,
@@ -618,8 +646,8 @@ pub struct TreasuryAutoLp<'info> {
     pub treasury_lp_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     // ── Mint accounts ──────────────────────────────────────────────────────
-    /// GOLD mint (regular SPL Token)
-    #[account(address = GOLD_MINT_ADDR.parse::<Pubkey>().unwrap())]
+    /// GOLD mint (Token2022 — validated at runtime via game_config.gold_mint)
+    #[account(mut, address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
     /// XNT mint (wrapped SOL, Token2022)
     #[account(address = XNT_MINT_ADDR.parse::<Pubkey>().unwrap())]
