@@ -474,7 +474,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     const bitsBefore = bitmapRef.current;
     const goldFormula = hasGoldAt(newX, newY);
     const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
-    const expectedNewMine = goldFormula && !alreadyMined;
+    const isAlreadyPending = pendingMinesRef.current.has(`${newX},${newY}`);
+    const expectedNewMine = goldFormula && !alreadyMined && !isAlreadyPending;
 
     const programId = getProgramId();
     const walletPk = playerState.wallet;
