@@ -5,6 +5,7 @@ import { ReactNode, useMemo } from "react";
 import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@solana/wallet-adapter-react";
 // @ts-ignore
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 import { RPC_URL } from "@/lib/constants";
 
 // Import wallet adapter CSS
@@ -14,9 +15,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Custom RPC endpoint for X1 Testnet
   const endpoint = RPC_URL;
 
-  // Don't pass wallets array — let wallet-standard auto-discover
-  // X1 Wallet, Phantom, Solflare, etc. all register via wallet-standard
-  const wallets = useMemo(() => [], []);
+  // Explicit wallet adapters for Backpack + wallet-standard auto-discover
+  const wallets = useMemo(() => [new BackpackWalletAdapter()], []);
 
   return (
     // @ts-ignore
