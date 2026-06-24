@@ -192,12 +192,8 @@ export default function LitepaperPage() {
               with on-chain slippage protection.
             </li>
             <li>
-              <strong>Phase 2 — Planned:</strong> Player inventory, equipment NFTs, expanded map
-              regions, guild / clan mechanics.
-            </li>
-            <li>
-              <strong>Phase 3 — Planned:</strong> Cross-game GOLD utility, staking rewards for long-term
-              liquidity providers, governance token integration.
+              <strong>Phase 2 — Planned:</strong> GOLD utility beyond the game. Possibly including GOLD NFTs
+              or similar collectibles.
             </li>
           </ul>
         </section>
