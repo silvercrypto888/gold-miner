@@ -35,8 +35,8 @@ export default function LitepaperPage() {
           </p>
           <p className="text-gray-300 leading-relaxed">
             The game is designed as a <strong>zero-developer-fee, zero-developer-preallocation</strong> 
-            protocol. Every GOLD token minted through gameplay flows into the protocol treasury,
-            where it is used to deepen and permanently burn liquidity — directly benefiting the
+            protocol. Every GOLD token minted through gameplay that flows into the protocol treasury 
+            is used to deepen and permanently burn liquidity — directly benefiting the
             entire ecosystem.
           </p>
         </section>
