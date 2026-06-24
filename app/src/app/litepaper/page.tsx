@@ -34,7 +34,7 @@ export default function LitepaperPage() {
             logic, and earn <strong>GOLD</strong> tokens with every successful mine.
           </p>
           <p className="text-gray-300 leading-relaxed">
-            The game is designed as a <strong>zero-developer-fee, zero-developer-preallocation</strong>
+            The game is designed as a <strong>zero-developer-fee, zero-developer-preallocation</strong> 
             protocol. Every GOLD token minted through gameplay flows into the protocol treasury,
             where it is used to deepen and permanently burn liquidity — directly benefiting the
             entire ecosystem.
@@ -97,7 +97,8 @@ export default function LitepaperPage() {
           <ul className="list-disc list-inside text-gray-300 space-y-2 leading-relaxed">
             <li>
               <strong>Total Supply:</strong> Uncapped — limited only by total gold spots (~15 million
-              GOLD theoretical max at 100 GOLD per mine).
+              GOLD theoretical max at 100 GOLD per mine). Respawning of gold spots may be permitted if 
+              sufficiently many are mined.
             </li>
             <li>
               <strong>Minting:</strong> Only via on-chain <code>move_and_mine</code> instructions.
@@ -117,7 +118,8 @@ export default function LitepaperPage() {
           <p className="text-gray-300 leading-relaxed mb-4">
             All GOLD tokens minted into the game treasury are deployed to deepen protocol-owned
             liquidity on the native X1 DEX. The treasury periodically pairs GOLD with XNT and
-            deposits liquidity into a CPMM pool.
+            deposits liquidity into a CPMM pool. Every time a gold spot is mined, 100 GOLD is 
+            minted into the treasury.
           </p>
           <p className="text-gray-300 leading-relaxed mb-4">
             Upon reaching predefined thresholds, the protocol executes an <strong>auto-LP burn</strong>:
