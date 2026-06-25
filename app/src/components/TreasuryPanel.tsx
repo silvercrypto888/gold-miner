@@ -143,6 +143,8 @@ export function TreasuryPanel() {
 
       const data = Buffer.concat([Buffer.from(TREASURY_AUTO_LP_DISC)]);
 
+      const ataProgramId = getAtaProgramId();
+
       const keys = [
         { pubkey: publicKey, isSigner: true, isWritable: false },
         { pubkey: gameConfigPda, isSigner: false, isWritable: true },
