@@ -412,20 +412,20 @@ pub mod gold_miner {
 
         require!(lp_minted >= MIN_LP_TO_BURN, GoldMinerError::InsufficientLpMinted);
 
-        // Transfer LP tokens to incinerator (burn)
-        let transfer_ix = spl_token::instruction::transfer(
+        // Burn LP tokens directly (treasury PDA is the owner of treasury_lp_ata)
+        let burn_ix = spl_token::instruction::burn(
             &ctx.accounts.lp_token_prog.key(),
             &ctx.accounts.treasury_lp_ata.key(),
-            &ctx.accounts.incinerator_ata.key(),
+            &ctx.accounts.lp_mint.key(),
             &treasury_key,
             &[],
             lp_minted,
         )?;
         solana_program::program::invoke_signed(
-            &transfer_ix,
+            &burn_ix,
             &[
                 ctx.accounts.treasury_lp_ata.to_account_info(),
-                ctx.accounts.incinerator_ata.to_account_info(),
+                ctx.accounts.lp_mint.to_account_info(),
                 ctx.accounts.treasury.to_account_info(),
                 ctx.accounts.lp_token_prog.to_account_info(),
             ],
@@ -647,7 +647,7 @@ pub struct TreasuryAutoLp<'info> {
 
     // ── Mint accounts ──────────────────────────────────────────────────────
     /// GOLD mint (Token2022 — validated at runtime via game_config.gold_mint)
-    #[account(mut, address = game_config.gold_mint)]
+    #[account(address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
     /// XNT mint (wrapped SOL, Token2022)
     #[account(address = XNT_MINT_ADDR.parse::<Pubkey>().unwrap())]
@@ -666,11 +666,6 @@ pub struct TreasuryAutoLp<'info> {
     /// Token program for LP (regular SPL Token — Tokenkeg)
     #[account(address = LP_TOKEN_PROG.parse::<Pubkey>().unwrap())]
     pub lp_token_prog: Program<'info, Token>,
-
-    // ── Incinerator ─────────────────────────────────────────────────────────
-    /// CHECK: Incinerator's LP ATA — receives burned LP tokens
-    #[account(mut)]
-    pub incinerator_ata: UncheckedAccount<'info>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,

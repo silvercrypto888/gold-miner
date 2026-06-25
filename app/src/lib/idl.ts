@@ -118,7 +118,6 @@ export const GoldMinerIDL: Idl = {
         { name: "goldTokenProg" },
         { name: "xntTokenProg" },
         { name: "lpTokenProg" },
-        { name: "incineratorAta", writable: true },
         { name: "associatedTokenProgram" },
         { name: "systemProgram" },
       ],

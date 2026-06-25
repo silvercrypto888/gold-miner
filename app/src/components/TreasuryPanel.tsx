@@ -23,11 +23,9 @@ import {
   AMM_XNT_TOKEN_PROG,
   AMM_GOLD_TOKEN_PROG,
   AMM_LP_TOKEN_PROG,
-  INCINERATOR,
   GOLD_BITMAP_PUBKEY,
   getTreasuryXntAta,
   getTreasuryLpAta,
-  getIncineratorLpAta,
   getAtaProgramId,
 } from "@/lib/constants";
 
@@ -145,9 +143,6 @@ export function TreasuryPanel() {
 
       const data = Buffer.concat([Buffer.from(TREASURY_AUTO_LP_DISC)]);
 
-      const incineratorLpAta = getIncineratorLpAta();
-      const ataProgramId = getAtaProgramId();
-
       const keys = [
         { pubkey: publicKey, isSigner: true, isWritable: false },
         { pubkey: gameConfigPda, isSigner: false, isWritable: true },
@@ -168,7 +163,6 @@ export function TreasuryPanel() {
         { pubkey: AMM_GOLD_TOKEN_PROG, isSigner: false, isWritable: false },
         { pubkey: AMM_XNT_TOKEN_PROG, isSigner: false, isWritable: false },
         { pubkey: AMM_LP_TOKEN_PROG, isSigner: false, isWritable: false },
-        { pubkey: incineratorLpAta, isSigner: false, isWritable: true },
         { pubkey: ataProgramId, isSigner: false, isWritable: false },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ];
