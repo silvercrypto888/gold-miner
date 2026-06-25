@@ -26,7 +26,6 @@ import {
   GOLD_BITMAP_PUBKEY,
   getTreasuryXntAta,
   getTreasuryLpAta,
-  getAtaProgramId,
 } from "@/lib/constants";
 
 // treasury_auto_lp discriminator = sha256("global:treasury_auto_lp")[0..8]
@@ -143,7 +142,8 @@ export function TreasuryPanel() {
 
       const data = Buffer.concat([Buffer.from(TREASURY_AUTO_LP_DISC)]);
 
-      const ataProgramId = getAtaProgramId();
+      // Explicitly use ATA program ID to avoid any import resolution issues
+      const ataProgramId = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
       const keys = [
         { pubkey: publicKey, isSigner: true, isWritable: false },
