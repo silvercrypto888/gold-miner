@@ -182,6 +182,26 @@ export function TreasuryPanel() {
       tx.recentBlockhash = blockhash.blockhash;
       tx.lastValidBlockHeight = blockhash.lastValidBlockHeight;
 
+      // Simulate first — this gives detailed error logs without spending gas
+      try {
+        const sim = await connRef.current.simulateTransaction(tx, [/* signers: none */], true);
+        if (sim.value.err) {
+          console.error("Simulation error:", sim.value.err);
+          console.error("Simulation logs:", sim.value.logs);
+          throw {
+            message: `Simulation failed: ${JSON.stringify(sim.value.err).slice(0, 100)}`,
+            logs: sim.value.logs,
+            instructionError: sim.value.err,
+          };
+        }
+      } catch (simErr: any) {
+        // If simulation throws, pass it through with logs
+        if (simErr.logs || simErr.instructionError) {
+          throw simErr;
+        }
+        // Otherwise fall through to try sending anyway
+      }
+
       const signed = await signTransaction(tx);
       const sig = await connRef.current.sendRawTransaction(signed.serialize());
       await connRef.current.confirmTransaction(sig);
@@ -190,17 +210,43 @@ export function TreasuryPanel() {
       setTimeout(() => setTxStatus(null), 8000);
       fetchTreasuryBalance();
     } catch (err: any) {
-      const msg = err.message || String(err);
-      if (msg.includes("InsufficientGoldForLp") || msg.includes("0x1777")) {
+      console.error("=== Treasury Auto-LP FULL ERROR ===", err);
+      console.error("Error logs:", err.logs || "(none)");
+      console.error("Error keys:", Object.keys(err));
+
+      let msg = err.message || String(err);
+
+      // Solana wraps the real error deep in the object
+      if (err.logs && Array.isArray(err.logs)) {
+        const failLog = err.logs.find((l: string) =>
+          l.includes("Error") || l.includes("failed") || l.includes("panicked")
+        );
+        if (failLog) msg = failLog;
+      }
+
+      // Check for custom program error codes
+      const instructionErr = err?.InstructionError || err?.instructionError;
+      if (instructionErr && Array.isArray(instructionErr)) {
+        const custom = instructionErr[1]?.Custom;
+        if (custom === 6007 || custom === 0x1777) {
+          msg = "Not enough GOLD in treasury (need 1,000+)";
+        } else if (custom === 6008 || custom === 0x1778) {
+          msg = "LP tokens too small to burn";
+        } else if (custom !== undefined) {
+          msg = `Program error code: ${custom} (0x${custom.toString(16)})`;
+        }
+      }
+
+      if (msg.includes("User rejected") || msg.includes("cancelled")) {
+        setTxStatus("Cancelled");
+      } else if (msg.includes("InsufficientGoldForLp") || msg.includes("0x1777")) {
         setTxStatus("⚠️ Not enough GOLD in treasury (need 1,000+)");
       } else if (msg.includes("InsufficientLpMinted") || msg.includes("0x1778")) {
         setTxStatus("⚠️ LP tokens too small to burn");
-      } else if (msg.includes("User rejected")) {
-        setTxStatus("Cancelled");
       } else {
-        setTxStatus(`❌ ${msg.slice(0, 60)}`);
+        setTxStatus(`❌ ${msg.slice(0, 120)}`);
       }
-      setTimeout(() => setTxStatus(null), 8000);
+      setTimeout(() => setTxStatus(null), 12000);
     } finally {
       setIsLoading(false);
     }
