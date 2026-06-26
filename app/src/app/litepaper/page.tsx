@@ -123,10 +123,9 @@ export default function LitepaperPage() {
           </p>
           <p className="text-gray-300 leading-relaxed mb-4">
             Upon reaching predefined thresholds, the protocol executes an <strong>auto-LP burn</strong>:
-            the treasury mints LP tokens and sends them permanently to an incinerator address
-            (<code>1nc1nerator11111111111111111111111111111111</code>), removing them from circulation
-            forever. This creates <strong>deflationary pressure</strong> and benefits all token holders by
-            permanently locking liquidity.
+            the treasury mints LP tokens and burns them directly via the SPL Token burn instruction,
+            permanently removing them from the total supply. This creates <strong>deflationary pressure</strong>
+            and benefits all token holders by permanently locking liquidity.
           </p>
           <p className="text-gray-300 leading-relaxed">
             In summary: <strong>the more people play and mine, the deeper and more permanent the
