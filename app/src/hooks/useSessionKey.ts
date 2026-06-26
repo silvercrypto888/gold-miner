@@ -203,6 +203,7 @@ export function useSessionKey() {
     if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
+    const hadSession = !!loadSessionKey();
     await sweepSessionKey();
     setIsLoading(true); setError(null);
     try {
@@ -217,7 +218,7 @@ export function useSessionKey() {
       );
       // Notify immediately before prompting wallet
       window.dispatchEvent(new CustomEvent("gas-deposit", {
-        detail: { amountLamports: SESSION_FUND_LAMPORTS },
+        detail: { amountLamports: SESSION_FUND_LAMPORTS, isRenewal: hadSession },
       }));
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
@@ -267,7 +268,7 @@ export function useSessionKey() {
       );
       // Notify immediately before prompting wallet
       window.dispatchEvent(new CustomEvent("gas-deposit", {
-        detail: { amountLamports: SESSION_FUND_LAMPORTS },
+        detail: { amountLamports: SESSION_FUND_LAMPORTS, isRenewal: false },
       }));
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());

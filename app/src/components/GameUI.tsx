@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { WalletProvider } from "@/components/WalletProvider";
 import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
@@ -18,8 +17,13 @@ export default function GameUI() {
   useEffect(() => {
     const handler = (e: CustomEvent) => {
       const lamports = e.detail?.amountLamports ?? 0;
+      const isRenewal = e.detail?.isRenewal ?? false;
       const xnt = (lamports / LAMPORTS_PER_SOL).toFixed(1);
-      setGasToast(`Requested to deposit ${xnt} XNT for gas, withdrawable.`);
+      if (isRenewal) {
+        setGasToast("Renew session key, withdrawable.");
+      } else {
+        setGasToast(`Deposit ${xnt} XNT, withdrawable.`);
+      }
       setTimeout(() => setGasToast(null), 5000);
     };
     window.addEventListener("gas-deposit", handler as EventListener);
@@ -107,15 +111,17 @@ export default function GameUI() {
               <TreasuryPanel />
               <Leaderboard />
               {/* Terms link at bottom of sidebar */}
-              <Link
+              <a
                 href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors text-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Terms and Conditions
-              </Link>
+              </a>
               <a
                 href="/litepaper"
                 target="_blank"
