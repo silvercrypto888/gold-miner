@@ -443,10 +443,17 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [sessionPubkey]);
 
   const move = useCallback(async (direction: Direction) => {
-    if (!sessionKeypair || !sessionPubkey || !playerState || !connRef.current) return;
+    console.log("move() called:", direction, "sessionKeypair:", !!sessionKeypair, "sessionPubkey:", !!sessionPubkey, "playerState:", !!playerState, "conn:", !!connRef.current);
+    if (!sessionKeypair || !sessionPubkey || !playerState || !connRef.current) {
+      console.log("move() RETURNING EARLY — missing dependency");
+      return;
+    }
 
     const now = Date.now();
-    if (now - lastMoveTime < MOVE_COOLDOWN_MS) return;
+    if (now - lastMoveTime < MOVE_COOLDOWN_MS) {
+      console.log("move() RETURNING EARLY — cooldown");
+      return;
+    }
 
     const curPos = positionRef.current;
     let newX = curPos.x, newY = curPos.y;
