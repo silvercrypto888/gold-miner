@@ -1,6 +1,6 @@
 # Gold Miner — Mainnet Launch Plan
 
-> **Status:** `DRAFT` — Awaiting Silver's decisions on key open questions.  
+> **Status:** `DRAFT` — Phase 1 decisions captured. Awaiting testnet blockers + Silver's final green light.  
 > **Target:** X1 Mainnet (`https://rpc.mainnet.x1.xyz`)  
 > **Current:** X1 Testnet (`https://rpc.testnet.x1.xyz`)
 
@@ -33,110 +33,126 @@ These must be resolved on testnet first. Do not skip.
 
 ---
 
-## Phase 1: Silver's Decisions (I Need These From You)
+## Phase 1: Silver's Decisions (CAPTURED ✓)
 
-Before I can write the exact deploy scripts and sequence, I need you to answer the following. These are one-way doors.
+The following decisions are locked in. One-way doors have been answered.
 
-### 1.1 Token Strategy — What happens to the testnet GOLD token?
+### 1.1 Token Strategy — Fresh mainnet mint ✓
 
-**Option A: Fresh mainnet mint (recommended)**
-- Deploy a brand-new Token-2022 GOLD mint on mainnet
-- Testnet GOLD (`HAPJs...`) stays on testnet for continued testing
+**Decision:** Option A — fresh mainnet Token-2022 GOLD mint.
+
+- Same metadata as testnet: name="Goldium", symbol="GOLD", decimals=9
+- Same image URI (IPFS)
+- Testnet GOLD (`HAPJs...`) stays on testnet for continued dev/testing
 - Clean slate, no migration headaches
-- **Question for you:** Same metadata (name="Goldium", symbol="GOLD") or rebrand?
 
-**Option B: Bridge / migrate testnet GOLD**
-- Testnet GOLD has `HAPJsAGEXkeE41VqcytFfUm3fMWiiz5baJFvCpDziyTa`
-- Mainnet would need a "claim" contract or airdrop
-- Complex, error-prone, rarely worth it for a game token
-- **Not recommended unless you have a strong reason**
-
-**What I need from you:** Pick A or B. If A, confirm name/symbol/decimals.
+**Action item:** Deploy new Token-2022 mint on mainnet with metadata enabled.
 
 ---
 
-### 1.2 Program ID Strategy — Same or new?
+### 1.2 Program ID Strategy — New keypair ✓
 
-**Option A: New program ID (recommended for mainnet)**
-- Deploy a fresh program ID on mainnet
-- Testnet program (`EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf` or `GLDFu...`) stays active for testing
-- Clean separation, no risk of cross-network confusion
-- Anchor.toml currently points `GLDFu...` for all clusters — this is a bug waiting to happen
+**Decision:** Option A — new program ID for mainnet.
 
-**Option B: Same program ID across networks**
-- Requires the same keypair to deploy on both testnet and mainnet
-- Risk: someone front-runs the ID on mainnet if you leak the keypair
-- Risk: hard to distinguish testnet vs mainnet transactions in explorers
+- Fresh keypair will be generated for mainnet deployment
+- Testnet program stays active for continued testing
+- Anchor.toml currently points `GLDFu...` for all clusters — **this must be fixed** to use distinct IDs per cluster
+- Clean separation between testnet and mainnet
 
-**What I need from you:** Pick A or B. If A, generate a new keypair for mainnet deployment.
+**Action item:** Generate new keypair, update `Anchor.toml` with distinct program IDs per cluster.
 
 ---
 
-### 1.3 AMM Pool Setup — Which pool on mainnet?
+### 1.3 AMM Pool Setup — TBD by Silver ✓
 
-On testnet you may have a mock or dev AMM pool. On mainnet, the pool must be real.
+**Decision:** Silver will confirm the AMM program ID later.
 
-**Questions for you:**
-1. Which AMM program ID will be the CPI target on mainnet? (Same `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` or a different one?)
-2. Who creates the GOLD/XNT liquidity pool? You, or the AMM team?
-3. What is the initial liquidity ratio? (e.g., 1M GOLD + 10,000 XNT)
-4. Is the pool a Raydium-style CP swap or something else? (This affects the CPI instruction layout.)
+- CPI target TBD (may be same `7EEuq...` or different on mainnet)
+- **Silver creates the initial GOLD/XNT liquidity pool**
+- **Small seed liquidity initially** — program must handle low-liquidity pools gracefully
+- Pool type TBD (Raydium CP swap or other)
 
-**What I need from you:** AMM program ID, pool creation plan, and initial liquidity commitment.
+⚠️ **Note:** Small initial LP means slippage will be high. The treasury auto-LP instruction may need tolerance adjustments or Silver may delay auto-LP until liquidity deepens.
 
----
-
-### 1.4 Treasury Strategy — How much XNT do you seed?
-
-The treasury auto-LP feature converts accumulated GOLD into XNT + GOLD LP tokens.
-
-**Questions for you:**
-1. Do you pre-seed the treasury with XNT so early players can withdraw immediately?
-2. If yes, how much? (Suggested: 1,000–10,000 XNT depending on expected player volume)
-3. What % of GOLD minted goes to treasury vs players? (Currently: 100 GOLD per mine to player, treasury gets nothing directly — it only gets GOLD via player deposits? Clarify the flow.)
-
-**What I need from you:** Treasury seed amount and funding wallet address.
+**Action item:** Silver to confirm AMM program ID and pool type before deploy.
 
 ---
 
-### 1.5 Upgrade Authority — Who controls the program after deploy?
+### 1.4 Treasury Strategy — No XNT seed ✓
 
-Solana programs have an `upgrade authority` that can overwrite the program binary.
+**Decision:** Treasury will **not** be seeded with XNT.
 
-**Options:**
-- **A:** Your deployer wallet (fast fixes, but centralized)
-- **B:** A multisig (e.g., 2-of-3 with you + trusted community members)
-- **C:** Immutable (burn upgrade authority — safest for players, but you can never patch bugs)
+- Treasury only holds GOLD (accumulated via player deposits or mint mechanics)
+- No XNT pre-funding — players deposit their own XNT for gas/moves
+- Treasury auto-LP will trigger when sufficient GOLD accumulates, swapping for XNT from the pool
+- **Implication:** early players won't be able to "withdraw XNT from treasury" until the treasury has accumulated enough GOLD to swap into XNT + LP
 
-**What I need from you:** Pick A, B, or C. If B, specify the multisig addresses and threshold.
-
----
-
-### 1.6 Frontend Hosting — Where does the game live?
-
-**Current:** Likely local/Vercel dev mode.
-
-**Questions for you:**
-1. Do you want a custom domain? (e.g., `goldminer.x1.xyz` or `gold-miner.io`)
-2. Vercel, Cloudflare Pages, or self-hosted (like your other games on `64.20.42.194`)?
-3. Do you need a testnet staging site AND a mainnet production site?
-
-**What I need from you:** Hosting preference and domain name.
+**Action item:** Verify frontend messaging is clear about treasury being GOLD-only.
 
 ---
 
-### 1.7 Player Onboarding — Wallet support
+### 1.5 Upgrade Authority — New keypair, later immutable ✓
 
-**Questions for you:**
-1. Which wallets do you want to support on mainnet? (Backpack is the most common on X1.)
-2. Do you want a "free to play" faucet for testnet, or is mainnet pay-to-play from day one?
-3. Do you want a "demo mode" where players can explore without spending XNT?
+**Decision:** Two-stage authority.
 
-**What I need from you:** Wallet requirements and onboarding UX decisions.
+1. **Initial:** New deployer keypair holds upgrade authority
+   - Allows fast patches during early launch period
+   - Keypair backed up securely
+2. **Later:** Make immutable — **only after Silver explicitly gives the green light**
+   - Once the program is battle-tested and no further changes expected
+   - Permanent — no going back
+
+**Action item:** Generate and securely store new deployer keypair. Plan the "make immutable" ceremony for a future date.
 
 ---
 
-## Phase 2: Mainnet Preparation (After Decisions Are Made)
+### 1.6 Frontend Hosting — Personal Vercel ✓
+
+**Decision:** Silver's personal Vercel account.
+
+- Hosting: Vercel (Silver's personal account)
+- Domain: TBD (may use Vercel subdomain or custom domain later)
+- Should maintain a testnet staging build + mainnet production build
+- Same pattern as other projects
+
+**Action item:** Set up Vercel project with environment variables for mainnet/testnet switching.
+
+---
+
+### 1.7 Player Onboarding — Fair mine via gas ✓
+
+**Decision:** X1 Wallet + Backpack compatible. Pay-to-play via gas only.
+
+- **Wallets:** X1 Wallet and Backpack
+- **No free-to-play faucet on mainnet** — players pay gas (XNT) for every move
+- **No demo mode** — same fair-mining model as testnet
+- Entry = deposit XNT for gas, same as testnet experience
+- Players mine GOLD by moving on grid and finding gold squares
+
+**Action item:** Verify wallet adapter config supports both X1 Wallet and Backpack on mainnet.
+
+---
+
+## Phase 1 Summary: Silver's Decisions
+
+| # | Decision | Choice |
+|---|----------|--------|
+| 1.1 | Token | Fresh mainnet GOLD mint, same metadata (Goldium / GOLD / 9 decimals) |
+| 1.2 | Program ID | New keypair for mainnet, distinct from testnet |
+| 1.3 | AMM | Silver confirms program ID later; Silver creates small seed LP |
+| 1.4 | Treasury | No XNT seed — GOLD only |
+| 1.5 | Authority | New deployer keypair initially → immutable after Silver green-lights |
+| 1.6 | Hosting | Silver's personal Vercel |
+| 1.7 | Wallet | X1 Wallet + Backpack; fair mine via gas (no faucet) |
+
+⚠️ **Open items:**
+- AMM program ID confirmation (Silver to verify)
+- Initial LP size confirmation (Silver to decide)
+- Custom domain decision (optional, future)
+
+---
+
+## Phase 2: Mainnet Preparation (After Decisions + Testnet Blockers Cleared)
 
 Once you answer the Phase 1 questions, these become actionable tasks.
 
@@ -227,55 +243,60 @@ spl-token --url https://rpc.mainnet.x1.xyz create-token \
 Recommended order — do not skip or reorder.
 
 ```
+Step 0: Generate new keypair (done before deploy day)
+  ├── solana-keygen new -o ~/.config/solana/gold-miner-mainnet.json
+  ├── Airdrop/fund with XN for deployment fees
+  └── Back up keypair securely (Silver's responsibility)
+
 Step 1: Pre-flight
   ├── Verify deployer wallet balance (XN for fees)
-  ├── Verify SBF binary is fresh and signed
-  ├── Verify Anchor.toml points to mainnet
-  └── Verify program ID keypair is backed up
+  ├── Verify SBF binary is fresh, audit fixes merged
+  ├── Verify Anchor.toml points to mainnet + new program ID
+  └── Verify new program ID keypair is backed up
 
 Step 2: Token Deploy
-  ├── Create GOLD mint (Token-2022)
-  ├── Set metadata
-  ├── Mint initial supply
-  └── Record mint address
+  ├── Create GOLD mint (Token-2022) on mainnet
+  ├── Set metadata (same as testnet: Goldium, GOLD, 9 decimals)
+  ├── Mint initial supply to deployer
+  └── Record mainnet mint address
 
 Step 3: Program Deploy
-  ├── Deploy program to mainnet
-  ├── Record program ID
+  ├── Deploy program with NEW keypair to mainnet
+  ├── Record NEW mainnet program ID
   ├── Verify program on-chain
   └── Run idl init / verify
 
 Step 4: Game Init
   ├── init_game (creates config + bitmap)
-  ├── init_treasury
-  ├── update_gold_mint (point to mainnet GOLD)
+  ├── init_treasury (creates Treasury PDA — no XNT seed)
+  ├── update_gold_mint (point to mainnet GOLD mint)
   └── Verify all PDAs
 
 Step 5: AMM Pool
-  ├── Create GOLD/XNT pool (or verify existing)
-  ├── Add initial liquidity
-  └── Record pool addresses
+  ├── (Silver) Create GOLD/XNT pool with small seed liquidity
+  ├── Record pool addresses
+  └── Note: auto-LP may be deferred until liquidity deepens
 
-Step 6: Treasury Seed
-  ├── Transfer XNT to treasury vault
-  ├── Verify treasury balance
-  └── Test a deposit/withdraw cycle
-
-Step 7: Frontend Deploy
+Step 6: Frontend Deploy
   ├── Build with mainnet constants
-  ├── Deploy to hosting
-  ├── Verify wallet connection
+  ├── Deploy to Silver's Vercel
+  ├── Verify wallet connection (X1 Wallet + Backpack)
   └── Smoke test: Join → Move → Mine
 
-Step 8: Security Lock
-  ├── Execute AMM fingerprint upgrade
-  ├── Set upgrade authority per decision
-  └── Optional: make immutable
+Step 7: Security Lock (initial)
+  ├── Execute AMM fingerprint upgrade (if AMM program confirmed)
+  ├── Or defer until AMM program ID is confirmed
+  └── Keep upgrade authority on new deployer keypair
 
-Step 9: Monitoring
+Step 8: Monitoring
   ├── Start log scraping / error alerting
-  ├── Set up treasury balance monitoring
   └── Announce to community
+
+Step 9: Future — Make Immutable
+  └── Only after Silver gives explicit green light
+      ├── Build final audited binary
+      ├── solana program set-upgrade-authority <PROGRAM_ID> --final
+      └── Program is permanently locked
 ```
 
 ---
@@ -333,19 +354,33 @@ Once I have these, I will:
 
 ---
 
-## Appendix: Current Testnet State (Reference)
+## Appendix: Current Testnet State (Reference) + Mainnet Plan
+
+### Testnet (current)
 
 | Item | Address / Value |
 |------|-----------------|
 | Testnet Program ID | `EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf` |
 | Anchor.toml program ID | `GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6` |
 | Testnet GOLD Mint | `HAPJsAGEXkeE41VqcytFfUm3fMWiiz5baJFvCpDziyTa` |
-| Testnet Goldium v2 Mint | `HAPJsAGEXkeE41VqcytFfUm3fMWiiz5baJFvCpDziyTa` |
 | AMM Program (CPI target) | `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` |
 | Deployer Wallet | `2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS` |
 | Toolchain | SBF v3.1.14, Anchor 0.30.1 |
 
+### Mainnet (planned)
+
+| Item | Status |
+|------|--------|
+| Mainnet Program ID | 🆕 New keypair (TBD) |
+| Mainnet GOLD Mint | 🆕 Fresh deploy (TBD) |
+| AMM Program (CPI target) | ⏳ Silver to confirm |
+| Deployer Wallet | 🆕 New keypair (TBD) |
+| Treasury Seed XNT | ❌ None — GOLD only |
+| Authority | 🆕 New keypair → immutable (future) |
+| Hosting | Silver's Vercel |
+| Wallets | X1 Wallet + Backpack |
+
 ---
 
 *Document created: 2026-06-27*  
-*Version: Draft 1 — awaiting Silver's Phase 1 decisions*
+*Version: Draft 2 — Phase 1 decisions captured, awaiting testnet blockers + Silver's AMM confirmation*
