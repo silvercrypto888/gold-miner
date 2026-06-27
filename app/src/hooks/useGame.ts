@@ -86,6 +86,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const sessionBalanceRef = useRef<{ lamports: number; time: number } | null>(null);
   const lastFundTimeRef = useRef(0);
 
+  // Immediate TX-in-flight guard (React state is too slow for rapid keypresses)
+  const moveInProgressRef = useRef(false);
+
   // Pending confirmed move — prevents stale background confirmation from reverting a newer move
   const moveSeqRef = useRef(0);
 
@@ -443,15 +446,24 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [sessionPubkey]);
 
   const move = useCallback(async (direction: Direction) => {
+    // Immediate ref check — prevents duplicate TXs from rapid keypresses
+    if (moveInProgressRef.current) {
+      console.log("move() RETURNING EARLY — TX already in flight");
+      return;
+    }
+    moveInProgressRef.current = true;
+
     console.log("move() called:", direction, "sessionKeypair:", !!sessionKeypair, "sessionPubkey:", !!sessionPubkey, "playerState:", !!playerState, "conn:", !!connRef.current);
     if (!sessionKeypair || !sessionPubkey || !playerState || !connRef.current) {
       console.log("move() RETURNING EARLY — missing dependency");
+      moveInProgressRef.current = false;
       return;
     }
 
     const now = Date.now();
     if (now - lastMoveTime < MOVE_COOLDOWN_MS) {
       console.log("move() RETURNING EARLY — cooldown");
+      moveInProgressRef.current = false;
       return;
     }
 
@@ -504,6 +516,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         if (now - lastFundTimeRef.current < 5000) {
           // Still waiting for previous fund attempt — don't silently revert, keep status visible
           setIsMoving(false);
+          moveInProgressRef.current = false;
           return;
         }
         lastFundTimeRef.current = now;
@@ -515,12 +528,16 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           setStatus("⚠️ Top up needed — approve wallet prompt to add XNT to session");
           statusTimerRef.current = setTimeout(() => setStatus(""), 5000);
           setIsMoving(false);
+          moveInProgressRef.current = false;
           return;
         }
         sessionBalanceRef.current = { lamports: 1_000_000, time: now };
       }
 
-      if (!walletPk) return;
+      if (!walletPk) {
+        moveInProgressRef.current = false;
+        return;
+      }
 
       const [playerPda] = getPlayerPda(walletPk, programId);
       const [gameConfigPda] = getGameConfigPda(programId);
@@ -543,6 +560,15 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       }
 
       const goldAta = getGoldAta(walletPk, goldMintPk);
+
+      // ── Prevent duplicate TX from same blockhash ──
+      // If another move() slipped through the ref guard (e.g. before this awaited), bail now
+      if (moveInProgressRef.current && now !== lastMoveTime) {
+        // Another move already started after us — this one's stale
+        console.log("move() RETURNING EARLY — superseded by newer move");
+        moveInProgressRef.current = false;
+        return;
+      }
 
       // Build and send move TX
       // Derive treasury PDAs
@@ -592,6 +618,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       return;
     } catch (err: any) {
+      moveInProgressRef.current = false;
       console.error("MOVE_AND_MINE_ERROR:", err);
       console.error("Error details:", err.message || String(err), err.stack || "");
       const errMsg = err.message || String(err);
@@ -629,6 +656,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // DON'T clear status here — let the error message show
     } finally {
       setIsMoving(false);
+      moveInProgressRef.current = false;
     }
   }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx]);
 
