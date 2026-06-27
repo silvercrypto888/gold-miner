@@ -669,7 +669,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     }
   }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx]);
 
-  // Keyboard controls — hold-to-repeat with 600ms auto-move interval
+  // Keyboard controls — hold-to-repeat with 600ms post-move cooldown
   const moveRef = useRef(move);
   moveRef.current = move;
   const heldDirRef = useRef<Direction | null>(null);
@@ -686,14 +686,17 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const dir = km[e.key];
       if (!dir) return;
       e.preventDefault();
-      // On first press (or key changed), start/restart auto-repeat
+      // On first press (or key changed), fire immediately and start polling
       if (heldDirRef.current !== dir) {
         heldDirRef.current = dir;
         moveRef.current(dir); // immediate first step
         if (autoMoveTimerRef.current) clearInterval(autoMoveTimerRef.current);
+        // Poll every 100ms — fires as soon as the 600ms cooldown finishes
         autoMoveTimerRef.current = setInterval(() => {
-          moveRef.current(dir);
-        }, 600);
+          if (!moveInProgressRef.current && heldDirRef.current) {
+            moveRef.current(heldDirRef.current);
+          }
+        }, 100);
       }
     };
     const keyup = (e: KeyboardEvent) => {
