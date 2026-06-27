@@ -74,7 +74,33 @@ The following decisions are locked in. One-way doors have been answered.
 
 ⚠️ **Note:** Small initial LP means slippage will be high. The treasury auto-LP instruction may need tolerance adjustments or Silver may delay auto-LP until liquidity deepens.
 
-**Action item:** Silver to confirm AMM program ID and pool type before deploy.
+### 🔍 AMM Program ID Discovered (2026-06-27)
+
+Silver found a mainnet LP transaction for Capy token. Analysis:
+
+| Network | AMM Program ID | Source |
+|---------|---------------|--------|
+| **Testnet** | `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` | Gold Miner codebase |
+| **Mainnet** | `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` | Capy LP deposit TX |
+
+**The program IDs are DIFFERENT.** Mainnet uses `sEsYH...`, not `7EEuq...`.
+
+**Verified on-chain:**
+- `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` is executable, owned by `BPFLoaderUpgradeab1e11111111111111111111111` ✅
+- Instruction `Deposit` confirmed in log: `"Program log: Instruction: Deposit"`
+- Inner CPIs: `TransferChecked` (SPL Token) + `TransferChecked` (Token-2022) + `MintTo` (LP) — matches expected CP swap flow
+- The Capy pool uses SPL Token (SOL/XNT) + Token-2022 (Capy) — same pattern as GOLD + XNT
+
+**⚠️ CRITICAL — Before mainnet deploy:**
+1. The hardcoded `SWAP_BASE_INPUT_DISCRIMINATOR` in `treasury_auto_lp` may not match the mainnet AMM
+2. The account ordering in manual CPI construction may differ
+3. You MUST verify the deposit/swap instruction discriminators against `sEsYH...` on mainnet
+4. Best path: fetch the mainnet AMM's Anchor IDL and use generated CPI helpers (fixes audit issue #1 properly)
+
+**Action items:**
+- Silver to confirm `sEsYH...` is the intended AMM for GOLD/XNT
+- Dev to verify instruction discriminators match before mainnet deploy
+- Dev to fetch mainnet AMM IDL if available
 
 ---
 
@@ -146,9 +172,11 @@ The following decisions are locked in. One-way doors have been answered.
 | 1.7 | Wallet | X1 Wallet + Backpack; fair mine via gas (no faucet) |
 
 ⚠️ **Open items:**
-- AMM program ID confirmation (Silver to verify)
-- Initial LP size confirmation (Silver to decide)
-- Custom domain decision (optional, future)
+- ✅ AMM program ID discovered: `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` (different from testnet `7EEuq...`)
+- ⏳ Silver to confirm this is the intended AMM for GOLD/XNT
+- ⏳ Initial LP size confirmation (Silver to decide)
+- ⏳ Verify instruction discriminators match mainnet AMM (audit issue #1 blocker)
+- ⏳ Fetch mainnet AMM Anchor IDL if available
 
 ---
 
@@ -373,7 +401,7 @@ Once I have these, I will:
 |------|--------|
 | Mainnet Program ID | 🆕 New keypair (TBD) |
 | Mainnet GOLD Mint | 🆕 Fresh deploy (TBD) |
-| AMM Program (CPI target) | ⏳ Silver to confirm |
+| **AMM Program (CPI target)** | ✅ Discovered: `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` |
 | Deployer Wallet | 🆕 New keypair (TBD) |
 | Treasury Seed XNT | ❌ None — GOLD only |
 | Authority | 🆕 New keypair → immutable (future) |
