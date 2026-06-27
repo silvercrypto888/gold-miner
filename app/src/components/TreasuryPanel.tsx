@@ -107,8 +107,8 @@ export function TreasuryPanel() {
       const sig = await connRef.current.sendRawTransaction(signed.serialize());
       await connRef.current.confirmTransaction(sig);
 
-      setTxStatus(`✅ Bitmap reset! TX: ${sig.slice(0, 8)}...`);
-      setTimeout(() => setTxStatus(null), 8000);
+      setTxStatus(`✅ Bitmap reset! TX: ${sig}`);
+      setTimeout(() => setTxStatus(null), 20000);
       fetchTreasuryBalance();
     } catch (err: any) {
       const msg = err.message || String(err);
@@ -206,8 +206,8 @@ export function TreasuryPanel() {
       const sig = await connRef.current.sendRawTransaction(signed.serialize());
       await connRef.current.confirmTransaction(sig);
 
-      setTxStatus(`✅ LP done! TX: ${sig.slice(0, 8)}...`);
-      setTimeout(() => setTxStatus(null), 8000);
+      setTxStatus(`✅ LP done! TX: ${sig}`);
+      setTimeout(() => setTxStatus(null), 20000);
       fetchTreasuryBalance();
     } catch (err: any) {
       console.error("=== Treasury Auto-LP FULL ERROR ===", err);
@@ -306,7 +306,7 @@ export function TreasuryPanel() {
 
           {/* Status message */}
           {txStatus && (
-            <div className="text-xs text-center text-gray-400 animate-pulse">
+            <div className="text-xs text-center text-gray-400 animate-pulse break-all">
               {txStatus}
             </div>
           )}
