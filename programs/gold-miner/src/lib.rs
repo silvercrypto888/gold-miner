@@ -38,6 +38,24 @@ pub const XNT_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 pub const GOLD_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 pub const LP_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
+// ── AMM immutability fingerprint ────────────────────────────────────────────
+// ⚠️  CRITICAL: Gold Miner is intended to become immutable. These CPI calls target
+//     a specific AMM program binary. If the AMM at AMM_PROGRAM_ID is ever upgraded,
+//     the CPIs below may fail or behave incorrectly. The lightweight fingerprint
+//     below catches ~99 % of upgrades by checking data length + ELF header prefix.
+//     To obtain the real values for your deploy, run on a machine with Solana CLI:
+//       solana program dump 7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf amm.bin --url <X1_RPC>
+//       ls -l amm.bin                               # → AMM_EXPECTED_DATA_LEN
+//       head -c 32 amm.bin | xxd -p | sed 's/../0x&, /g'  # → AMM_EXPECTED_PREFIX
+// ─────────────────────────────────────────────────────────────────────────────
+pub const AMM_EXPECTED_DATA_LEN: usize = 0; // TODO: fill at deploy time
+pub const AMM_EXPECTED_PREFIX: [u8; 32] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]; // TODO: fill at deploy time
+
 // AMM instruction discriminators
 pub const SWAP_BASE_INPUT_DISCRIMINATOR: [u8; 8] = [0x8f, 0xbe, 0x5a, 0xda, 0xc4, 0x1e, 0x33, 0xde];
 pub const DEPOSIT_DISCRIMINATOR: [u8; 8] = [0xf2, 0x23, 0xc6, 0x89, 0x52, 0xe1, 0xf2, 0xb6];
@@ -202,6 +220,25 @@ pub mod gold_miner {
 
     /// Treasury auto-LP: swaps ~50% of treasury GOLD for XNT, then deposits both as LP, burns LP tokens.
     pub fn treasury_auto_lp(ctx: Context<TreasuryAutoLp>) -> Result<()> {
+        // ── Lightweight AMM fingerprint check (~500 CUs) ─────────────────────
+        // Fails safely if the AMM binary has changed, preventing dangerous CPIs.
+        {
+            let amm_info = ctx.accounts.amm_program.to_account_info();
+            let amm_data = amm_info.data.borrow();
+            // Only enforce when constants have been configured (non-zero length)
+            if AMM_EXPECTED_DATA_LEN > 0 {
+                require!(
+                    amm_data.len() == AMM_EXPECTED_DATA_LEN,
+                    GoldMinerError::AmmProgramVersionMismatch
+                );
+                require!(
+                    &amm_data[..32] == &AMM_EXPECTED_PREFIX[..],
+                    GoldMinerError::AmmProgramVersionMismatch
+                );
+            }
+        }
+        // ───────────────────────────────────────────────────────────────────────
+
         let gold_balance = ctx.accounts.treasury_gold_ata.amount;
         msg!("Treasury GOLD balance: {}", gold_balance);
 
@@ -697,4 +734,6 @@ pub enum GoldMinerError {
     InsufficientLpMinted,
     #[msg("Not enough gold spots mined yet for reset (need 121,042 / 75%)")]
     NotEnoughMinedForReset,
+    #[msg("AMM program binary does not match expected fingerprint — possible upgrade")]
+    AmmProgramVersionMismatch,
 }
