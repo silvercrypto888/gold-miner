@@ -561,15 +561,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       const goldAta = getGoldAta(walletPk, goldMintPk);
 
-      // ── Prevent duplicate TX from same blockhash ──
-      // If another move() slipped through the ref guard (e.g. before this awaited), bail now
-      if (moveInProgressRef.current && now !== lastMoveTime) {
-        // Another move already started after us — this one's stale
-        console.log("move() RETURNING EARLY — superseded by newer move");
-        moveInProgressRef.current = false;
-        return;
-      }
-
       // Build and send move TX
       // Derive treasury PDAs
       const [treasuryPda] = getTreasuryPda(programId);
