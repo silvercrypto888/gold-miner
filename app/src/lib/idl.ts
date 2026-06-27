@@ -1,9 +1,9 @@
 // Gold Miner v2 IDL — Bitmap Architecture (Anchor v0.30 format)
-// Generated program ID: GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6
+// Generated program ID: 4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr
 import { Idl } from "@coral-xyz/anchor";
 
 export const GoldMinerIDL: Idl = {
-  address: "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6",
+  address: "4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr",
   metadata: {
     name: "gold_miner",
     version: "0.2.0",
@@ -169,6 +169,7 @@ export const GoldMinerIDL: Idl = {
           { name: "authority", type: "pubkey" },
           { name: "gridSize", type: "u32" },
           { name: "goldMint", type: "pubkey" },
+          { name: "goldBitmap", type: "pubkey" },
           { name: "totalGoldMined", type: "u64" },
           { name: "bump", type: "u8" },
         ],
@@ -233,6 +234,7 @@ export interface GameConfigAccount {
   authority: string;
   gridSize: number;
   goldMint: string;
+  goldBitmap: string;
   totalGoldMined: string;
   bump: number;
 }

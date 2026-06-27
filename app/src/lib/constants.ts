@@ -5,7 +5,7 @@ let _PROGRAM_ID: PublicKey | null = null;
 export function getProgramId(): PublicKey {
   if (!_PROGRAM_ID) {
     _PROGRAM_ID = new PublicKey(
-      process.env.NEXT_PUBLIC_PROGRAM_ID || "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
+      process.env.NEXT_PUBLIC_PROGRAM_ID || "4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr"
     );
   }
   return _PROGRAM_ID;
@@ -65,7 +65,7 @@ export function getGoldAta(wallet: PublicKey, goldMint?: PublicKey): PublicKey {
 
 // ─── Game Constants ───
 
-const BITMAP_KEYPAIR_ADDRESS = process.env.NEXT_PUBLIC_GOLD_BITMAP || "7DVVV8f7mzXLW3pB3Xx1z9LQxVpTpNQ1Cm9NiggXDT8A";
+const BITMAP_KEYPAIR_ADDRESS = process.env.NEXT_PUBLIC_GOLD_BITMAP || "FwiSgEbAjCwmzP1GpVxZRdWRhq5tb7rMpDH5CfHvYtsV";
 export const VIEWPORT_SIZE = 15;
 export const CELL_SIZE = 40;
 export const GRID_SIZE = 1024;
@@ -151,7 +151,7 @@ export function getViewportRange(playerX: number, playerY: number): {
 
 export function getGameConfigPda(programId?: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("game_config")],
+    [Buffer.from("silver_config")],
     programId || getProgramId()
   );
 }

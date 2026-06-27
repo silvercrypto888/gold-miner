@@ -6,7 +6,7 @@ use anchor_spl::token::Token;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{Mint, TokenAccount, mint_to, MintTo};
 
-declare_id!("GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6");
+declare_id!("4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr");
 
 pub const GRID_SIZE: u32 = 1024;
 pub const GOLD_PER_MINE: u64 = 100;
@@ -134,7 +134,7 @@ pub mod gold_miner {
                             to: ctx.accounts.player_token_account.to_account_info(),
                             authority: ctx.accounts.game_config.to_account_info(),
                         },
-                        &[&[b"game_config", &[ctx.accounts.game_config.bump]]],
+                        &[&[b"silver_config", &[ctx.accounts.game_config.bump]]],
                     ),
                     amount,
                 )?;
@@ -148,7 +148,7 @@ pub mod gold_miner {
                             to: ctx.accounts.treasury_token_account.to_account_info(),
                             authority: ctx.accounts.game_config.to_account_info(),
                         },
-                        &[&[b"game_config", &[ctx.accounts.game_config.bump]]],
+                        &[&[b"silver_config", &[ctx.accounts.game_config.bump]]],
                     ),
                     amount,
                 )?;
@@ -492,7 +492,7 @@ impl Treasury { pub const SIZE: usize = 8 + 32 + 8 + 8 + 8 + 1; }
 pub struct InitializeGame<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(init, payer = authority, space = GameConfig::SIZE, seeds = [b"game_config"], bump)]
+    #[account(init, payer = authority, space = GameConfig::SIZE, seeds = [b"silver_config"], bump)]
     pub game_config: Account<'info, GameConfig>,
     /// CHECK: pre-created 128KB bitmap, program-owned
     #[account(mut, owner = crate::ID)]
@@ -507,7 +507,7 @@ pub struct InitializeGame<'info> {
 pub struct InitTreasury<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
     pub game_config: Account<'info, GameConfig>,
     #[account(init, payer = authority, space = Treasury::SIZE, seeds = [b"treasury", game_config.key().as_ref()], bump)]
     pub treasury: Account<'info, Treasury>,
@@ -570,7 +570,7 @@ pub struct UpdateGoldMint<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(mut, seeds = [b"game_config"], bump = game_config.bump,
+    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump,
               has_one = authority @ GoldMinerError::InvalidSessionKey)]
     pub game_config: Account<'info, GameConfig>,
 
@@ -587,7 +587,7 @@ pub struct ResetBitmap<'info> {
     pub caller: Signer<'info>,
 
     /// Game config — tracks total_gold_mined
-    #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
     pub game_config: Account<'info, GameConfig>,
 
     /// CHECK: raw bitmap bytes, owned by program
@@ -601,7 +601,7 @@ pub struct TreasuryAutoLp<'info> {
     pub authority: Signer<'info>,
 
     /// Game config — used for treasury PDA derivation
-    #[account(mut, seeds = [b"game_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
     pub game_config: Box<Account<'info, GameConfig>>,
 
     /// Treasury PDA
