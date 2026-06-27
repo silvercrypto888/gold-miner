@@ -15,7 +15,7 @@ pub const SESSION_DURATION_SLOTS: u64 = 36000;
 pub const BITMAP_BODY: usize = 131_072;
 pub const BITMAP_ACCT: usize = BITMAP_BODY;
 pub const TOTAL_GOLD_SPOTS: u64 = 161_390;
-pub const RESET_THRESHOLD: u64 = 162; // 0.1% of 161,390 total gold spots (for alpha testing)
+pub const RESET_THRESHOLD: u64 = 121_042; // 75% of 161,390 total gold spots
 
 // Treasury / LP constants
 pub const MIN_GOLD_FOR_LP: u64 = 1000 * 10u64.pow(GOLD_DECIMALS as u32);
@@ -181,7 +181,7 @@ pub mod gold_miner {
         for byte in data[8..].iter_mut() {
             *byte = 0;
         }
-        drop(data);
+        let _ = data;
 
         cfg.total_gold_mined = 0;
         msg!("Bitmap reset. {} gold spots mined before reset.", RESET_THRESHOLD);
@@ -695,6 +695,6 @@ pub enum GoldMinerError {
     InsufficientGoldForLp,
     #[msg("Insufficient LP tokens minted")]
     InsufficientLpMinted,
-    #[msg("Not enough gold spots mined yet for reset (need 75%)")]
+    #[msg("Not enough gold spots mined yet for reset (need 121,042 / 75%)")]
     NotEnoughMinedForReset,
 }
