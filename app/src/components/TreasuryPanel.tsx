@@ -294,9 +294,9 @@ export function TreasuryPanel() {
           {/* Reset Bitmap Button */}
           <button
             onClick={handleResetBitmap}
-            disabled={isLoading || minedCount === null || minedCount < 162}
+            disabled={isLoading || minedCount === null || minedCount < 121042}
             className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${
-              isLoading || minedCount === null || minedCount < 162
+              isLoading || minedCount === null || minedCount < 121042
                 ? "bg-green-600/30 text-green-400/50 cursor-not-allowed"
                 : "bg-gradient-to-r from-green-500 to-emerald-500 text-black hover:from-green-400 hover:to-emerald-400 active:scale-[0.98]"
             }`}
@@ -319,7 +319,7 @@ export function TreasuryPanel() {
               <strong>🔄 Reset Gold Map</strong> — Anyone can call once 75% of gold spots are mined.
               Zeroes the bitmap so gold respawns across the grid.
               {minedCount !== null && (
-                <span> Currently <strong>{minedCount.toLocaleString()}</strong> / 162 mined (alpha threshold).</span>
+                <span> Currently <strong>{minedCount.toLocaleString()}</strong> / 121,042 mined (75% threshold).</span>
               )}
             </p>
           </div>
