@@ -589,6 +589,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       console.error("Error details:", err.message || String(err), err.stack || "");
       const errMsg = err.message || String(err);
 
+      // Show error in UI status so user sees it even if console is closed
+      setStatus("Error: " + errMsg.substring(0, 60));
+      statusTimerRef.current = setTimeout(() => setStatus(""), 8000);
+
       if (errMsg.includes("SessionExpired") || errMsg.includes("0x1771")) {
         setStatus("Renewing session...");
         try {
@@ -610,12 +614,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       }
 
       try {
-        const [pda] = getPlayerPda(walletPk, programId);
+        const [pda] = getPlayerPda(walletPk!, programId);
         const info = await connRef.current.getAccountInfo(pda, "confirmed");
         if (info) setPosition({ x: info.data.readUInt32LE(72), y: info.data.readUInt32LE(76) });
         else setPosition(positionRef.current);
       } catch { setPosition(positionRef.current); }
-      setStatus("");
+      // DON'T clear status here — let the error message show
     } finally {
       setIsMoving(false);
     }
