@@ -14,3 +14,7 @@ app/tsconfig.tsbuildinfo
 .vercel
 *.json
 /*.json
+
+# Allow specific JSON files
+!scripts/gold-mint-v4-info.json
+!scripts/gold-mint-v3-info.json
