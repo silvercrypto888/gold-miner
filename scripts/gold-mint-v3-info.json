@@ -1,0 +1,13 @@
+{
+  "network": "X1 Testnet",
+  "mint": "EV2MitzvqE5m5rpiYiBHEv11PRAsJsb28J2UL5axtSye",
+  "decimals": 9,
+  "name": "Goldium",
+  "symbol": "GOLD",
+  "mintAuthority": "9kpUDvAvnrwrpp3mKiSDdr6ZB6LYhmizMf9nJfFsnTaV",
+  "freezeAuthority": null,
+  "programId": "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6",
+  "deployer": "2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS",
+  "gameConfigPda": "9kpUDvAvnrwrpp3mKiSDdr6ZB6LYhmizMf9nJfFsnTaV",
+  "createdAt": "2026-06-27T03:40:28.397Z"
+}
