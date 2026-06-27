@@ -669,12 +669,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     }
   }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx]);
 
-  // Keyboard controls
+  // Keyboard controls — hold-to-repeat with 600ms auto-move interval
   const moveRef = useRef(move);
   moveRef.current = move;
+  const heldDirRef = useRef<Direction | null>(null);
+  const autoMoveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.repeat) return;
+    const keydown = (e: KeyboardEvent) => {
       const km: Record<string, Direction> = {
         ArrowUp: Direction.Up, ArrowDown: Direction.Down,
         ArrowLeft: Direction.Left, ArrowRight: Direction.Right,
@@ -682,10 +684,40 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         a: Direction.Left, A: Direction.Left, d: Direction.Right, D: Direction.Right,
       };
       const dir = km[e.key];
-      if (dir) { e.preventDefault(); moveRef.current(dir); }
+      if (!dir) return;
+      e.preventDefault();
+      // On first press (or key changed), start/restart auto-repeat
+      if (heldDirRef.current !== dir) {
+        heldDirRef.current = dir;
+        moveRef.current(dir); // immediate first step
+        if (autoMoveTimerRef.current) clearInterval(autoMoveTimerRef.current);
+        autoMoveTimerRef.current = setInterval(() => {
+          moveRef.current(dir);
+        }, 600);
+      }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const keyup = (e: KeyboardEvent) => {
+      const km: Record<string, Direction> = {
+        ArrowUp: Direction.Up, ArrowDown: Direction.Down,
+        ArrowLeft: Direction.Left, ArrowRight: Direction.Right,
+        w: Direction.Up, W: Direction.Up, s: Direction.Down, S: Direction.Down,
+        a: Direction.Left, A: Direction.Left, d: Direction.Right, D: Direction.Right,
+      };
+      if (km[e.key] === heldDirRef.current) {
+        heldDirRef.current = null;
+        if (autoMoveTimerRef.current) {
+          clearInterval(autoMoveTimerRef.current);
+          autoMoveTimerRef.current = null;
+        }
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      if (autoMoveTimerRef.current) clearInterval(autoMoveTimerRef.current);
+    };
   }, []);
 
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
