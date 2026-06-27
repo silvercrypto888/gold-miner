@@ -386,6 +386,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     tokenProgram: PublicKey,
     ataProgram: PublicKey,
     systemProgram: PublicKey,
+    memo?: string,
   ): Promise<Transaction> => {
     // Use pre-fetched blockhash if available (common case, zero RPC wait)
     let blockhash: string, lastValidBlockHeight: number;
@@ -418,9 +419,15 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     const dirByte = DIRECTION_VARIANT[direction];
 
     // Instruction data: 8-byte discriminator + 1-byte enum variant (Direction)
-    const data = Buffer.alloc(9);
+    // + 8-byte move sequence (to make every TX unique — prevents duplicate
+    // signatures from rapid keypresses reusing the same blockhash).
+    const data = Buffer.alloc(17);
     MOVE_AND_MINE_DISC.copy(data, 0);
     data[8] = dirByte;
+    if (memo) {
+      const seq = parseInt(memo.split("_")[0] || "0", 10);
+      data.writeBigUInt64LE(BigInt(seq), 9);
+    }
 
     const keys = [
       { pubkey: sessionPubkey!, isSigner: true, isWritable: false },
@@ -572,10 +579,15 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         goldAta: goldAta.toBase58(), treasuryPda: treasuryPda.toBase58(),
         treasuryGoldAta: treasuryGoldAta.toBase58()
       });
+      // ── Build TX ──
+      // Build and send move TX. Append a memo so even with the same blockhash
+      // and same position, every TX has a unique signature (prevents "already
+      // processed" on rapid keypresses). The memo costs negligible CU.
       const tx = await buildMoveTx(
         direction, playerPda, gameConfigPda, goldBitmapPda,
         goldMintPk, goldAta, treasuryPda, treasuryGoldAta,
-        tokenProgram, ataProgram, SystemProgram.programId
+        tokenProgram, ataProgram, SystemProgram.programId,
+        Date.now().toString() + Math.random().toString(36).slice(2, 8),
       );
 
       tx.sign(signerKp);
@@ -584,7 +596,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const sig = await connRef.current.sendRawTransaction(serialized);
       console.log("TX sent! Sig:", sig);
 
-      // sendRawTransaction succeeded ≡ leader accepted TX (X1's processed). Unblock immediately.
+      // ── Post-send cooldown ──
+      // Keep moveInProgressRef true for ~600ms so rapid keypresses can't reuse
+      // the same blockhash (identical TX = duplicate signature = rejected).
+      // The blockhash advances every ~400ms, so 600ms guarantees uniqueness.
+      setTimeout(() => { moveInProgressRef.current = false; }, 600);
+
       setIsMoving(false);
       setStatus(expectedNewMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
       // Gray state: add to pending set instead of hiding gold immediately.
@@ -647,7 +664,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // DON'T clear status here — let the error message show
     } finally {
       setIsMoving(false);
-      moveInProgressRef.current = false;
+      // Success path clears ref via setTimeout (600ms cooldown).
+      // Error/catch paths clear it immediately so user can retry.
     }
   }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx]);
 
