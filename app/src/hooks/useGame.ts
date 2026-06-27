@@ -542,6 +542,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const [treasuryPda] = getTreasuryPda(programId);
       const treasuryGoldAta = getTreasuryGoldAta(treasuryPda, goldMintPk);
 
+      console.log("Building move TX with:", {
+        direction, playerPda: playerPda.toBase58(), gameConfigPda: gameConfigPda.toBase58(),
+        goldBitmapPda: goldBitmapPda.toBase58(), goldMintPk: goldMintPk.toBase58(),
+        goldAta: goldAta.toBase58(), treasuryPda: treasuryPda.toBase58(),
+        treasuryGoldAta: treasuryGoldAta.toBase58()
+      });
       const tx = await buildMoveTx(
         direction, playerPda, gameConfigPda, goldBitmapPda,
         goldMintPk, goldAta, treasuryPda, treasuryGoldAta,
@@ -550,7 +556,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       tx.sign(signerKp);
       const serialized = tx.serialize();
+      console.log("TX serialized, length:", serialized.length, "sending...");
       const sig = await connRef.current.sendRawTransaction(serialized);
+      console.log("TX sent! Sig:", sig);
 
       // sendRawTransaction succeeded ≡ leader accepted TX (X1's processed). Unblock immediately.
       setIsMoving(false);
@@ -577,6 +585,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       return;
     } catch (err: any) {
+      console.error("MOVE_AND_MINE_ERROR:", err);
+      console.error("Error details:", err.message || String(err), err.stack || "");
       const errMsg = err.message || String(err);
 
       if (errMsg.includes("SessionExpired") || errMsg.includes("0x1771")) {
