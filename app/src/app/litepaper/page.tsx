@@ -34,8 +34,8 @@ export default function LitepaperPage() {
             logic, and earn <strong>GOLD</strong> tokens with every successful mine.
           </p>
           <p className="text-gray-300 leading-relaxed">
-            The game is designed as a <strong>zero-developer-fee, zero-developer-preallocation</strong> 
-            protocol. Every GOLD token minted through gameplay that flows into the protocol treasury 
+            The game is designed as a <strong>zero-developer-fee, zero-developer-preallocation</strong> protocol. 
+            Every GOLD token minted through gameplay that flows into the protocol treasury 
             is used to deepen and permanently burn liquidity — directly benefiting the
             entire ecosystem.
           </p>
@@ -58,7 +58,7 @@ export default function LitepaperPage() {
               <strong>Mining Reward:</strong> Each valid gold mine yields <strong>100 GOLD</strong> tokens.
             </li>
             <li>
-              <strong>Session Keys:</strong> Players use ephemeral session keys for gasless, fast in-game
+              <strong>Session Keys:</strong> Players use session keys to cover gas for fast in-game
               movement and mining. Session keys expire after ~4 hours (36,000 slots) and can be topped
               up with XNT gas.
             </li>
@@ -124,8 +124,8 @@ export default function LitepaperPage() {
           <p className="text-gray-300 leading-relaxed mb-4">
             Upon reaching predefined thresholds, the protocol executes an <strong>auto-LP burn</strong>:
             the treasury mints LP tokens and burns them directly via the SPL Token burn instruction,
-            permanently removing them from the total supply. This creates <strong>deflationary pressure</strong>
-            and benefits all token holders by permanently locking liquidity.
+            permanently removing them from the total supply. This creates <strong>deflationary pressure</strong> and 
+            benefits all token holders by permanently locking liquidity.
           </p>
           <p className="text-gray-300 leading-relaxed">
             In summary: <strong>the more people play and mine, the deeper and more permanent the
