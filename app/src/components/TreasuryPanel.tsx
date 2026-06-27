@@ -117,7 +117,7 @@ export function TreasuryPanel() {
       } else if (msg.includes("User rejected")) {
         setTxStatus("Cancelled");
       } else {
-        setTxStatus(`❌ ${msg.slice(0, 60)}`);
+        setTxStatus("Error (see console)");
       }
       setTimeout(() => setTxStatus(null), 8000);
     } finally {
@@ -244,7 +244,7 @@ export function TreasuryPanel() {
       } else if (msg.includes("InsufficientLpMinted") || msg.includes("0x1778")) {
         setTxStatus("⚠️ LP tokens too small to burn");
       } else {
-        setTxStatus(`❌ ${msg.slice(0, 120)}`);
+        setTxStatus("Error (see console)");
       }
       setTimeout(() => setTxStatus(null), 12000);
     } finally {

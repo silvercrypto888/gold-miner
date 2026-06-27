@@ -519,7 +519,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       }
       if (bal < 500_000) {
         // Show clear status immediately so user knows what's happening
-        setStatus("Session low on XNT — topping up...");
+        setStatus("Topping up gas funds");
         if (now - lastFundTimeRef.current < 5000) {
           // Still waiting for previous fund attempt — don't silently revert, keep status visible
           setIsMoving(false);
@@ -532,7 +532,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           await fundSessionKey(sessionPubkey, fbh, flvb);
           await new Promise(r => setTimeout(r, 500));
         } catch {
-          setStatus("⚠️ Top up needed — approve wallet prompt to add XNT to session");
+          setStatus("Topping up gas funds");
           statusTimerRef.current = setTimeout(() => setStatus(""), 5000);
           setIsMoving(false);
           moveInProgressRef.current = false;
@@ -632,7 +632,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const errMsg = err.message || String(err);
 
       // Show error in UI status so user sees it even if console is closed
-      setStatus("Error: " + errMsg.substring(0, 60));
+      setStatus("Error (see console)");
       statusTimerRef.current = setTimeout(() => setStatus(""), 8000);
 
       if (errMsg.includes("SessionExpired") || errMsg.includes("0x1771")) {

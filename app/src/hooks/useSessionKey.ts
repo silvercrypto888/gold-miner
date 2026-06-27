@@ -159,14 +159,14 @@ export function useSessionKey() {
     const spk = new PublicKey(loaded.keypair.publicKey);
     try {
       toppingUpRef.current = true;
-      setTopUpStatus("Topping up...");
+      setTopUpStatus("Topping up gas funds");
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
       await fundSessionKey(spk, blockhash, lastValidBlockHeight);
       setTopUpStatus("Topped up ✓");
       setTimeout(() => setTopUpStatus(null), 3000);
       return true;
     } catch (err: any) {
-      setTopUpStatus(err?.message?.includes("User rejected") ? "Cancelled" : "Top up failed");
+      setTopUpStatus(err?.message?.includes("User rejected") ? "Cancelled" : "Error (see console)");
       setTimeout(() => setTopUpStatus(null), 3000);
       return false;
     } finally {

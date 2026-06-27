@@ -99,7 +99,7 @@ export function useGoldMiner() {
       return { signature, success: true };
     } catch (err: any) {
       const msg = err.message || "Deposit failed";
-      setError(msg);
+      setError("Error (see console)");
       return { signature: "", success: false, error: msg };
     } finally { setIsLoading(false); }
   }, [publicKey, signTransaction, fetchPlayerData]);
@@ -123,7 +123,7 @@ export function useGoldMiner() {
       return { signature, success: true };
     } catch (err: any) {
       const msg = err.message || "Withdrawal failed";
-      setError(msg);
+      setError("Error (see console)");
       return { signature: "", success: false, error: msg };
     } finally { setIsLoading(false); }
   }, [publicKey, signTransaction, fetchPlayerData]);
