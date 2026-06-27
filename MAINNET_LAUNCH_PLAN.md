@@ -112,6 +112,21 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 - Dev to update `AMM_PROGRAM_ID` constant for mainnet builds (discriminator stays the same)
 - Consider fetching AMM source/IDL from the AMM team for 100% account layout certainty
 
+### 🔒 Upgrade History Verification
+
+**Upgrade authority:** `cveZ26DWAWDQb3jUubHmdEM3GxvYt6gqfxdxD2ASNNY`
+
+| Event | Slot | Time |
+|-------|------|------|
+| Buffer creation | 21171533–21171534 | 2026-01-07 08:34 UTC |
+| **Initial deployment** | **21171632** | **2026-01-07 08:34 UTC** |
+| ApexFaucet memo (unrelated) | 27236932 | 2026-01-28 |
+| **Any upgrades since deploy** | ❌ **NONE** | — |
+
+**Verified on-chain:** The program was deployed on **2026-01-07** and has **never been upgraded** since. The upgrade authority still holds the key (flag=1 in ProgramData), but there are zero upgrade transactions in the ~39 million slots since deployment.
+
+**Fingerprint concern answered:** Since the AMM has never been upgraded, the binary hash you capture as a fingerprint today will match the binary hash at any future point. If the AMM team *does* upgrade it (requires upgrade authority signature), the fingerprint mismatch will trigger a safety pause in Gold Miner's treasury auto-LP — which is exactly the protection you want.
+
 ---
 
 ### 1.4 Treasury Strategy — No XNT seed ✓
@@ -183,10 +198,11 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 
 ⚠️ **Open items:**
 - ✅ AMM program ID discovered: `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` (different from testnet `7EEuq...`)
+- ✅ Discriminator **VERIFIED** — exact match between testnet and mainnet (same Anchor codebase)
+- ✅ Upgrade history checked — **zero upgrades** since 2026-01-07 deployment
 - ⏳ Silver to confirm this is the intended AMM for GOLD/XNT
 - ⏳ Initial LP size confirmation (Silver to decide)
-- ⏳ Verify instruction discriminators match mainnet AMM (audit issue #1 blocker)
-- ⏳ Fetch mainnet AMM Anchor IDL if available
+- ⏳ Dev to update `AMM_PROGRAM_ID` constant for mainnet builds (one-line change)
 
 ---
 
