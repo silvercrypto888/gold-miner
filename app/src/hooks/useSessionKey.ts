@@ -27,6 +27,9 @@ const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
 const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
+// Module-level guard so all useSessionKey instances share one "already loading" flag
+let isSessionLoading = false;
+
 export function useSessionKey() {
   const { publicKey, signTransaction, signMessage } = useWallet();
   const [sessionKeypair, setSessionKeypair] = useState<nacl.SignKeyPair | null>(null);
@@ -59,15 +62,14 @@ export function useSessionKey() {
 
   // Load existing session — requires wallet signMessage to decrypt
   const prevPubkeyRef = useRef<PublicKey | null>(null);
-  const initGuardRef = useRef(false);
   useEffect(() => {
-    if (initGuardRef.current) return;
     if (!publicKey) { prevPubkeyRef.current = null; return; }
     if (prevPubkeyRef.current?.equals(publicKey)) return;
-    initGuardRef.current = true;
+    if (isSessionLoading) return;
+    isSessionLoading = true;
+    const sign = signMessageRef.current;
+    if (!sign) { isSessionLoading = false; return; }
     const load = async () => {
-      const sign = signMessageRef.current;
-      if (!sign) { initGuardRef.current = false; return; }
       try {
         const loaded = await loadSessionKey(sign);
         if (loaded) {
@@ -81,7 +83,7 @@ export function useSessionKey() {
         setSessionKeypair(null);
         setSessionExpiry(null);
       } finally {
-        initGuardRef.current = false;
+        isSessionLoading = false;
       }
       prevPubkeyRef.current = publicKey;
     };
