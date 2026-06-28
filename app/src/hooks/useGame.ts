@@ -511,10 +511,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       const signerKp = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
       // Check session key balance (cached briefly to avoid RPC spam).
-      // After sweep, the key may hold ~890K lamports (rentExempt + 10K).
-      // Token-2022 move_and_mine TXs need a healthy fee buffer — require
-      // at least 1.5M lamports (0.0015 SOL) before attempting a move.
-      const SESSION_MIN_SAFE_BALANCE = 1_500_000;
+      // After sweep, the key may hold ~3.4M lamports (rentExempt + 2.5M).
+      // The move_and_mine program creates the player's Token-2022 ATA via CPI
+      // when it doesn't exist yet — that costs ~2.04M in rent, paid by the
+      // session key. The key must retain its own rent-exempt balance afterward.
+      // Minimum safe = rentExempt (~890K) + ATA rent (~2.04M) + buffer = 3.5M.
+      const SESSION_MIN_SAFE_BALANCE = 3_500_000;
       const balCache = sessionBalanceRef.current;
       let bal = balCache && (now - balCache.time < 5000) ? balCache.lamports : null;
       if (bal === null) {

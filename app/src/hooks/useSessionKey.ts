@@ -218,8 +218,10 @@ export function useSessionKey() {
   }, [publicKey, fundSessionKey]);
 
   // Sweep remaining XNT from session key back to user wallet.
-  // Leave behind rentExempt + 1.5M lamports so the session key remains
-  // usable for move_and_mine TXs after a sweep.
+  // Leave behind rentExempt + 2.5M so the session key can still afford
+  // the Token-2022 ATA creation rent (~2.04M) in move_and_mine CPI plus
+  // its own rent-exempt balance. Matches SESSION_MIN_SAFE_BALANCE in
+  // useGame (3.5M total including rentExempt).
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
     if (!publicKey || !connectionRef.current || !signMessageRef.current) return false;
     const loaded = await loadSessionKey(signMessageRef.current);
@@ -232,7 +234,7 @@ export function useSessionKey() {
       const kp = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
       const rentExempt = await connectionRef.current.getMinimumBalanceForRentExemption(0);
-      const LEAVE_BEHIND = rentExempt + 1_500_000; // matches SESSION_MIN_SAFE_BALANCE
+      const LEAVE_BEHIND = rentExempt + 2_500_000; // matches SESSION_MIN_SAFE_BALANCE
       const amount = balance - LEAVE_BEHIND;
       if (amount <= 0) return false;
       const tx = new Transaction({ feePayer: sk, blockhash, lastValidBlockHeight });
