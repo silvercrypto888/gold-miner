@@ -24,7 +24,6 @@ export interface GoldSpot {
   x: number;
   y: number;
   hasGold: boolean;
-  pending?: boolean;
   minedBy?: PublicKey | null;
 }
 

@@ -92,9 +92,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   // Pending confirmed move — prevents stale background confirmation from reverting a newer move
   const moveSeqRef = useRef(0);
 
-  // Pending mine TXs — cells we've sent mine TXs for but haven't confirmed yet
-  // Map of "x,y" → timestamp added (ms) so we can independently time out stale cells
-  const pendingMinesRef = useRef<Map<string, number>>(new Map());
+  // Pending mine tracking removed — with the move cooldown, gold
+  // immediately disappears optimistically and stays gone.
 
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
@@ -156,14 +155,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const forceRefreshGold = useCallback(async () => {
     const bits = await fetchBitmap(true);
     const { minX, maxX, minY, maxY } = getViewportRange(positionRef.current.x, positionRef.current.y);
-    const pendingSet = pendingMinesRef.current;
     const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
           const mined = bits ? isCellMined(bits, x, y) : false;
-          const pending = pendingSet.has(`${x},${y}`);
-          spots.push({ x, y, hasGold: !mined || pending, pending });
+          spots.push({ x, y, hasGold: !mined });
         }
       }
     }
@@ -174,14 +171,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const updateVisibleGold = useCallback(async () => {
     const bits = await fetchBitmap();
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
-    const pendingSet = pendingMinesRef.current;
     const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
           const mined = bits ? isCellMined(bits, x, y) : false;
-          const pending = pendingSet.has(`${x},${y}`);
-          spots.push({ x, y, hasGold: !mined || pending, pending });
+          spots.push({ x, y, hasGold: !mined });
         }
       }
     }
@@ -275,46 +270,8 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }
   const pendingMovesRef = useRef<PendingMove[]>([]);
 
-  // Periodically check the actual chain bitmap against our pending set.
-  // This is the SOLE exit path for successful mines — only the bitmap can
-  // confirm a mine. For stale cells where the TX was lost but we have an
-  // active sig (e.g. X1 testnet dropped it silently), reverts them after
-  // 30s regardless of sig presence — preventing stuck gray spots.
-  const reconcilePending = useCallback(async () => {
-    const pendingMap = pendingMinesRef.current;
-    if (pendingMap.size === 0) return;
-    const bits = await fetchBitmap(true);
-    if (!bits) return;
-    const moves = pendingMovesRef.current;
-    const now = Date.now();
-    let changed = false;
-    const keys = Array.from(pendingMap.keys());
-    for (const key of keys) {
-      const [x, y] = key.split(",").map(Number);
-      if (isCellMined(bits, x, y)) {
-        // Bitmap confirms the mine — resolved
-        pendingMap.delete(key);
-        changed = true;
-      } else {
-        // Bitmap still shows unmined. Three scenarios:
-        // 1. Active sig exists: wait up to 30s for bitmap propagation
-        // 2. No active sig (confirmer dropped it): revert immediately
-        // 3. Active sig but >30s elapsed: TX was lost, revert
-        const anyActive = moves.some(m => m.cellX === x && m.cellY === y && m.wasMineMove);
-        const pendingSince = pendingMap.get(key) || 0;
-        if (!anyActive || (now - pendingSince > 30000)) {
-          pendingMap.delete(key);
-          changed = true;
-        }
-      }
-    }
-    if (changed) forceRefreshGold();
-  }, [fetchBitmap, forceRefreshGold]);
-
-  useEffect(() => {
-    const iv = setInterval(reconcilePending, 10000);
-    return () => clearInterval(iv);
-  }, [reconcilePending]);
+  // Pending mine tracking removed — with the move cooldown, gold
+  // immediately disappears optimistically and stays gone.
 
   // Batch check all pending sigs every 1s
   // Policy:
@@ -351,14 +308,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
             if (status.confirmationStatus === "processed") { stillValid.push(pm); continue; }
 
             if (status.err) {
-              // Errored: revert immediately
-              if (pm.wasMineMove) {
-                pendingMinesRef.current.delete(`${pm.cellX},${pm.cellY}`);
-                forceRefreshGold();
-              }
+              // Errored: revert immediately — forceRefreshGold to resync
+              if (pm.wasMineMove) forceRefreshGold();
               syncPlayerPosition();
             } else if (pm.wasMineMove) {
-              // Successfully finalized mine: keep sig until bitmap confirms
+              // Successfully finalized mine
               stillValid.push(pm);
             }
             // Successfully finalized walk TX: don't sync position — we set
@@ -500,8 +454,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     const bitsBefore = bitmapRef.current;
     const goldFormula = hasGoldAt(newX, newY);
     const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
-    const isAlreadyPending = pendingMinesRef.current.has(`${newX},${newY}`);
-    const expectedNewMine = goldFormula && !alreadyMined && !isAlreadyPending;
+    const expectedNewMine = goldFormula && !alreadyMined;
 
     const programId = getProgramId();
     const walletPk = playerState.wallet;
@@ -617,13 +570,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       setIsMoving(false);
       setStatus(expectedNewMine ? "Mined! +" + GOLD_PER_MINE + " GOLD" : "Moved");
-      // Gray state: add to pending set instead of hiding gold immediately.
-      // The cell stays visible as a ghost until the TX confirms.
+      // Gold is immediately hidden on mine — no pending/gray state.
+      // The 600ms cooldown between moves prevents race conditions.
       if (expectedNewMine) {
-        pendingMinesRef.current.set(`${newX},${newY}`, Date.now());
-        setVisibleGold(prev => prev.map(g =>
-          g.x === newX && g.y === newY ? { ...g, hasGold: true, pending: true } : g
-        ));
+        setVisibleGold(prev => prev.filter(g => !(g.x === newX && g.y === newY)));
       }
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
 
