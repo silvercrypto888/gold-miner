@@ -142,11 +142,19 @@ export function useSessionKey() {
           escrowBalance: 0,
         };
         setPlayerState(p);
+        setSessionExpiry(p.sessionExpiresAt); // Sync from chain as source of truth
       } else {
         setPlayerState(null);
       }
     } catch { /* player may not exist yet */ }
   }, [publicKey]);
+
+  // Sync local sessionExpiry from chain truth whenever playerState refreshes
+  useEffect(() => {
+    if (playerState?.sessionExpiresAt) {
+      setSessionExpiry(playerState.sessionExpiresAt);
+    }
+  }, [playerState?.sessionExpiresAt]);
 
   // Listen for sessionkey-changed events from localStorage changes.
   useEffect(() => {
