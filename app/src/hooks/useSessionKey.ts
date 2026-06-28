@@ -27,8 +27,9 @@ const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
 const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
-// Module-level guard so all useSessionKey instances share one "already loading" flag
-let isSessionLoading = false;
+// Module-level shared promise so all useSessionKey instances await the same load
+let _sessionPromise: Promise<{ keypair: nacl.SignKeyPair; expiresAt: number } | null> | null = null;
+let _promiseForWallet: PublicKey | null = null;
 
 export function useSessionKey() {
   const { publicKey, signTransaction, signMessage } = useWallet();
@@ -63,31 +64,40 @@ export function useSessionKey() {
   // Load existing session — requires wallet signMessage to decrypt
   const prevPubkeyRef = useRef<PublicKey | null>(null);
   useEffect(() => {
-    if (!publicKey) { prevPubkeyRef.current = null; return; }
-    if (prevPubkeyRef.current?.equals(publicKey)) return;
-    if (isSessionLoading) return;
-    isSessionLoading = true;
+    if (!publicKey) {
+      prevPubkeyRef.current = null;
+      _sessionPromise = null;
+      _promiseForWallet = null;
+      return;
+    }
+    // Skip only if we've already kicked off a promise for this exact wallet.
+    // On first render signMessage may be null, so _sessionPromise won't exist yet;
+    // when signMessage arrives on the next render we must try again.
+    if (prevPubkeyRef.current?.equals(publicKey) && _sessionPromise) return;
+
     const sign = signMessageRef.current;
-    if (!sign) { isSessionLoading = false; return; }
-    const load = async () => {
-      try {
-        const loaded = await loadSessionKey(sign);
-        if (loaded) {
-          setSessionKeypair(loaded.keypair);
-          setSessionExpiry(loaded.expiresAt);
-        } else if (prevPubkeyRef.current === null) {
-          setSessionKeypair(null);
-          setSessionExpiry(null);
-        }
-      } catch {
+    if (!sign) return; // wait for signMessage to be ready; don't mark pubkey as tried
+
+    // Start a new shared promise if none exists or wallet changed
+    if (!_sessionPromise || !_promiseForWallet?.equals(publicKey)) {
+      _sessionPromise = loadSessionKey(sign);
+      _promiseForWallet = publicKey;
+    }
+
+    _sessionPromise.then(loaded => {
+      if (loaded) {
+        setSessionKeypair(loaded.keypair);
+        setSessionExpiry(loaded.expiresAt);
+      } else if (prevPubkeyRef.current === null) {
         setSessionKeypair(null);
         setSessionExpiry(null);
-      } finally {
-        isSessionLoading = false;
       }
       prevPubkeyRef.current = publicKey;
-    };
-    load();
+    }).catch(() => {
+      setSessionKeypair(null);
+      setSessionExpiry(null);
+      prevPubkeyRef.current = publicKey;
+    });
   }, [publicKey]);
 
   // Refresh on wallet connect
@@ -127,6 +137,10 @@ export function useSessionKey() {
   // Listen for sessionkey-changed events from localStorage changes.
   useEffect(() => {
     const handler = async (e: Event) => {
+      // Reset shared promise so next mount/reload fetches fresh data
+      _sessionPromise = null;
+      _promiseForWallet = null;
+
       // Skip if event came from storeSessionKey — caller already has keypair in memory
       const detail = (e as CustomEvent).detail;
       if (detail?.fromStore) return;
