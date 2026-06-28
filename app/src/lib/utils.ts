@@ -28,7 +28,7 @@ export async function storeSessionKey(
   };
 
   localStorage.setItem(SESSION_KEY_STORAGE, JSON.stringify(data));
-  window.dispatchEvent(new CustomEvent("sessionkey-changed"));
+  window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: true } }));
 }
 
 // Load session key from localStorage (decrypts with Web Crypto, requires wallet sign)
@@ -64,8 +64,9 @@ export async function loadSessionKey(
 
     return { keypair, expiresAt: data.expiresAt };
   } catch (e) {
-    // Decryption failed (wrong wallet?) — clear and start fresh
-    clearSessionKey();
+    // Decryption failed (user rejected sign prompt, or wrong wallet).
+    // Do NOT wipe localStorage — the on-chain session is still valid and paid for.
+    // The user can retry unlocking or manually clear session.
     return null;
   }
 }
@@ -74,7 +75,7 @@ export async function loadSessionKey(
 export function clearSessionKey(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SESSION_KEY_STORAGE);
-  window.dispatchEvent(new CustomEvent("sessionkey-changed"));
+  window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: false } }));
 }
 
 // Sign a message with session key

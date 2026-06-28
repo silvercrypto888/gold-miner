@@ -544,7 +544,8 @@ pub struct InitializeGame<'info> {
 pub struct InitTreasury<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump,
+              has_one = authority @ GoldMinerError::InvalidSessionKey)]
     pub game_config: Account<'info, GameConfig>,
     #[account(init, payer = authority, space = Treasury::SIZE, seeds = [b"treasury", game_config.key().as_ref()], bump)]
     pub treasury: Account<'info, Treasury>,
@@ -557,7 +558,9 @@ pub struct JoinGame<'info> {
     pub wallet: Signer<'info>,
     #[account(init, payer = wallet, space = Player::SIZE, seeds = [b"player", wallet.key().as_ref()], bump)]
     pub player: Account<'info, Player>,
-    #[account(mut)]
+    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
+    pub game_config: Account<'info, GameConfig>,
+    #[account(mut, address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(init_if_needed, payer = wallet, associated_token::mint = gold_mint, associated_token::authority = wallet, associated_token::token_program = token_program)]
     pub player_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -585,7 +588,7 @@ pub struct MoveAndMine<'info> {
     /// CHECK: raw bitmap bytes, owned by program
     #[account(mut, owner = crate::ID)]
     pub gold_bitmap: UncheckedAccount<'info>,
-    #[account(mut)]
+    #[account(mut, address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, associated_token::mint = gold_mint, associated_token::authority = player.wallet,
               associated_token::token_program = token_program)]
@@ -673,7 +676,7 @@ pub struct TreasuryAutoLp<'info> {
     #[account(mut, associated_token::mint = gold_mint, associated_token::authority = treasury,
               associated_token::token_program = gold_token_prog)]
     pub treasury_gold_ata: Box<InterfaceAccount<'info, TokenAccount>>,
-    /// Treasury's XNT ATA (Token2022 — TokenzQd)
+    /// Treasury's XNT ATA (regular SPL Token — Tokenkeg)
     #[account(mut, associated_token::mint = xnt_mint, associated_token::authority = treasury,
               associated_token::token_program = xnt_token_prog)]
     pub treasury_xnt_ata: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -686,7 +689,7 @@ pub struct TreasuryAutoLp<'info> {
     /// GOLD mint (Token2022 — validated at runtime via game_config.gold_mint)
     #[account(address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
-    /// XNT mint (wrapped SOL, Token2022)
+    /// XNT mint (wrapped SOL, regular SPL Token — Tokenkeg)
     #[account(address = XNT_MINT_ADDR.parse::<Pubkey>().unwrap())]
     pub xnt_mint: Box<InterfaceAccount<'info, Mint>>,
     /// LP mint (regular SPL Token)
@@ -694,10 +697,10 @@ pub struct TreasuryAutoLp<'info> {
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
 
     // ── Token programs ─────────────────────────────────────────────────────
-    /// Token program for GOLD (regular SPL Token — Tokenkeg)
+    /// Token program for GOLD (Token2022 — TokenzQd)
     #[account(address = GOLD_TOKEN_PROG.parse::<Pubkey>().unwrap())]
     pub gold_token_prog: Program<'info, Token2022>,
-    /// Token program for XNT (Token2022 — TokenzQd)
+    /// Token program for XNT (regular SPL Token — Tokenkeg)
     #[account(address = XNT_TOKEN_PROG.parse::<Pubkey>().unwrap())]
     pub xnt_token_prog: Program<'info, Token>,
     /// Token program for LP (regular SPL Token — Tokenkeg)

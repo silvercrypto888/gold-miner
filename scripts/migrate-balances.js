@@ -1,3 +1,10 @@
+// ============================================================
+// ⚠️  HISTORICAL SCRIPT — NOT FOR CURRENT DEPLOYMENT
+// This script references an older GOLD mint (v2/v3 era).
+// The current active mint is v4: EarL8NaAje3mx5UGC86CWByVnotKgibkGmuJh6bHcWdz
+// Keep for reference only. Do not run against current deployment.
+// ============================================================
+
 const { Connection, PublicKey, Keypair, Transaction, SystemProgram } = require("@solana/web3.js");
 const { createAssociatedTokenAccountInstruction, getAssociatedTokenAddressSync, createMintToInstruction, TOKEN_2022_PROGRAM_ID } = require("@solana/spl-token");
 const fs = require("fs");

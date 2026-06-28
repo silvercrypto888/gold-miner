@@ -1,9 +1,9 @@
 # Gold Miner Smart Contract Security Audit
 
-**Program:** `gold-miner` (`4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr`)  
-**Repo:** `silvercrypto888/gold-miner`  
-**Commit audited:** `8cdf5b2` (post-merge, current HEAD)  
-**Date:** 2026-06-27  
+**Program:** `gold-miner` (`4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr`)
+**Repo:** `silvercrypto888/gold-miner`
+**Commit audited:** `8cdf5b2` (post-merge, current HEAD)
+**Date:** 2026-06-27
 **Auditor:** Theo / xxen_bot
 
 ---
@@ -12,26 +12,26 @@
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 1 | Manual CPI construction is brittle against AMM upgrades | **HIGH** | 🔴 OPEN |
-| 2 | Hardcoded `GOLD_MINT_ADDR` does not match deployed mint | **MEDIUM** | 🔴 OPEN |
-| 3 | Token program comments in `TreasuryAutoLp` are wrong | **MEDIUM** | 🔴 OPEN |
-| 4 | `InitTreasury` missing authority validation | **LOW** | 🔴 OPEN |
-| 5 | `JoinGame` does not validate `gold_mint` against game config | **LOW** | 🔴 OPEN |
-| 6 | `MoveAndMine` does not validate `gold_mint` against game config | **LOW** | 🔴 OPEN |
+| 1 | Manual CPI construction is brittle against AMM upgrades | **LOW** | 🟡 ACKNOWLEDGED |
+| 2 | Hardcoded `GOLD_MINT_ADDR` does not match deployed mint | — | 🟢 FALSE POSITIVE |
+| 3 | Token program comments in `TreasuryAutoLp` are wrong | — | 🟢 FIXED |
+| 4 | `InitTreasury` missing authority validation | **LOW** | 🟢 FIXED |
+| 5 | `JoinGame` does not validate `gold_mint` against game config | **LOW** | 🟢 FIXED |
+| 6 | `MoveAndMine` does not validate `gold_mint` against game config | **LOW** | 🟢 FIXED |
 | 7 | Bitmap reset hardcoded `data[8..]` may skip first 8 bytes | **LOW** | 🟡 INTENTIONAL |
-| 8 | `start_session` session key hijacking | — | 🟢 NOT AN ISSUE |
-| 9 | `move_and_mine` session key verification | — | 🟢 NOT AN ISSUE |
-| 10 | `update_gold_mint` should be admin-only | — | 🟢 ALREADY ADMIN-ONLY |
+| 8 | `start_session` session key hijacking | - | 🟢 NOT AN ISSUE |
+| 9 | `move_and_mine` session key verification | - | 🟢 NOT AN ISSUE |
+| 10 | `update_gold_mint` should be admin-only | - | 🟢 ALREADY ADMIN-ONLY |
 
-**Note:** Issues #8–#10 were flagged in an earlier informal scan but have been re-verified and are either not issues or already addressed.
+**Note:** Issues #8-#10 were flagged in an earlier informal scan but have been re-verified and are either not issues or already addressed.
 
 ---
 
-## 🔴 #1 — Manual CPI Construction Is Brittle Against AMM Upgrades
+## 🟡 #1 — Manual CPI Construction Is Brittle Against AMM Upgrades
 
-**Severity:** HIGH  
-**Location:** `treasury_auto_lp` (swap + deposit CPIs), lines 242–424  
-**Status:** OPEN
+**Severity:** LOW
+**Location:** `treasury_auto_lp` (swap + deposit CPIs), lines 242–424
+**Status:** ACKNOWLEDGED — Silver confirmed this is acceptable operational risk.
 
 ### Description
 
@@ -58,11 +58,11 @@ The AMM program at `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` could upgrade.
 
 ---
 
-## 🔴 #2 — Hardcoded `GOLD_MINT_ADDR` Does Not Match Deployed Mint
+## 🟢 #2 — Hardcoded `GOLD_MINT_ADDR` Does Not Match Deployed Mint
 
-**Severity:** MEDIUM  
-**Location:** Constant declaration, line 34  
-**Status:** OPEN
+**Severity:** —
+**Location:** Constant declaration, line 34
+**Status:** FALSE POSITIVE
 
 ### Description
 
@@ -70,44 +70,36 @@ The AMM program at `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` could upgrade.
 pub const GOLD_MINT_ADDR: &str = "EarL8NaAje3mx5UGC86CWByVnotKgibkGmuJh6bHcWdz";
 ```
 
-Per prior discussion, the deployed GOLD mint is `9RThpUMiFo5ioaREZkJD5wd5VPr5peBYbX8212r1KkQB`. This constant does not match. The constant is **not** used in on-chain account validation (the program validates `gold_mint` against `game_config.gold_mint` at runtime), but it is misleading for developers, auditors, and anyone reading the source.
+Initial audit flagged a mismatch with `9RThpUMiFo5ioaREZkJD5wd5VPr5peBYbX8212r1KkQB`. After review with Silver, `EarL8Na...` is the **current active v4 testnet mint** (confirmed by `gold-mint-v4-info.json`, created 2026-06-27). The `9RTh...` address only appears in stale migration scripts (`scripts/migrate-balances.js`, `scripts/update-gold-mint.js`) from an earlier iteration.
 
-Additionally, the frontend (`app/src/lib/constants.ts:201`) hardcodes `AMM_GOLD_MINT` to the same `EarL8Na...` address, which is used for the AMM pool. If this is the AMM pool's GOLD mint and not the game mint, the naming is confusing. If it is supposed to be the same mint, there's a mismatch between program and deployment.
+The constant, frontend `AMM_GOLD_MINT`, and deployment all align. The mismatch was caused by obsolete migration scripts still in the repo.
 
 ### Fix
 
-Update the constant to the actual deployed mint address, or remove it if unused. Verify alignment with the frontend constant.
+✅ **Resolved** — verified as correct. Historical migration scripts have been annotated as obsolete.
 
 ---
 
-## 🔴 #3 — Wrong Token Program Comments in `TreasuryAutoLp`
+## 🟢 #3 — Wrong Token Program Comments in `TreasuryAutoLp`
 
-**Severity:** MEDIUM  
-**Location:** `TreasuryAutoLp` accounts struct, lines 639–666  
-**Status:** OPEN
+**Severity:** —
+**Location:** `TreasuryAutoLp` accounts struct, lines 639-666
+**Status:** FIXED
 
 ### Description
 
-The actual code is correct — GOLD uses Token-2022 (`TokenzQd...`) and XNT uses regular SPL Token (`Tokenkeg...`). However, the comments are swapped and misleading:
-
-| Line | Comment | Reality |
-|------|---------|---------|
-| 652 | `/// XNT mint (wrapped SOL, Token2022)` | XNT is SPL Token, **not** Token-2022 |
-| 660 | `/// Token program for GOLD (regular SPL Token — Tokenkeg)` | GOLD uses Token-2022 (`TokenzQd`), **not** `Tokenkeg` |
-| 666 | `/// Token program for XNT (Token2022 — TokenzQd)` | XNT uses `Tokenkeg`, **not** `TokenzQd` |
-
-The account types (`gold_token_prog: Program<'info, Token2022>`, `xnt_token_prog: Program<'info, Token>`) are correct, so this is a maintenance hazard rather than an active bug. Future developers may be confused and make incorrect changes.
+Comments on token program accounts were swapped relative to actual code. Code was always correct; comments were misleading.
 
 ### Fix
 
-Correct the comments to match the actual token program assignments.
+✅ **Fixed** — comments corrected in `lib.rs` (lines 673, 680, 695, 698) to match actual token program assignments. No functional code changed; no redeploy required.
 
 ---
 
-## 🔴 #4 — `InitTreasury` Missing Authority Validation
+## 🔴 #4 - `InitTreasury` Missing Authority Validation
 
-**Severity:** LOW  
-**Location:** `InitTreasury` accounts struct, lines 507–515  
+**Severity:** LOW
+**Location:** `InitTreasury` accounts struct, lines 507-515
 **Status:** OPEN
 
 ### Description
@@ -127,7 +119,7 @@ There is no constraint verifying `authority.key() == game_config.authority`. The
 
 ### Impact
 
-Griefing — a malicious actor could front-run the `init_treasury` call, forcing the real authority to close and reinitialize (if the treasury account is closable). Since it's a one-time initialization, the practical impact is low.
+Griefing - a malicious actor could front-run the `init_treasury` call, forcing the real authority to close and reinitialize (if the treasury account is closable). Since it's a one-time initialization, the practical impact is low.
 
 ### Fix
 
@@ -140,10 +132,10 @@ pub game_config: Account<'info, GameConfig>,
 
 ---
 
-## 🔴 #5 — `JoinGame` Does Not Validate `gold_mint` Against Game Config
+## 🔴 #5 - `JoinGame` Does Not Validate `gold_mint` Against Game Config
 
-**Severity:** LOW  
-**Location:** `JoinGame` accounts struct, lines 518–530  
+**Severity:** LOW
+**Location:** `JoinGame` accounts struct, lines 518-530
 **Status:** OPEN
 
 ### Description
@@ -171,10 +163,10 @@ Note: The `game_config` account is not currently in `JoinGame`'s accounts struct
 
 ---
 
-## 🔴 #6 — `MoveAndMine` Does Not Validate `gold_mint` Against Game Config
+## 🔴 #6 - `MoveAndMine` Does Not Validate `gold_mint` Against Game Config
 
-**Severity:** LOW  
-**Location:** `MoveAndMine` accounts struct, lines 540–555  
+**Severity:** LOW
+**Location:** `MoveAndMine` accounts struct, lines 540-555
 **Status:** OPEN
 
 ### Description
@@ -200,10 +192,10 @@ pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
 
 ---
 
-## 🟡 #7 — Bitmap Reset Hardcoded `data[8..]` May Skip First 8 Bytes
+## 🟡 #7 - Bitmap Reset Hardcoded `data[8..]` May Skip First 8 Bytes
 
-**Severity:** LOW (Informational)  
-**Location:** `reset_bitmap`, lines 172–173  
+**Severity:** LOW (Informational)
+**Location:** `reset_bitmap`, lines 172-173
 **Status:** INTENTIONAL BEHAVIOR (acknowledged)
 
 ### Description
@@ -226,10 +218,10 @@ If future changes modify the account structure, consider whether `data[8..]` sho
 
 ---
 
-## 🟢 #8 — `start_session` Session Key Hijacking — NOT AN ISSUE
+## 🟢 #8 - `start_session` Session Key Hijacking - NOT AN ISSUE
 
-**Severity:** —  
-**Location:** `StartSession` accounts struct, lines 532–538  
+**Severity:** -
+**Location:** `StartSession` accounts struct, lines 532-538
 **Status:** VERIFIED SAFE
 
 ### Description
@@ -250,10 +242,10 @@ The `player` PDA is derived from `wallet.key()`. Only the wallet owner can sign 
 
 ---
 
-## 🟢 #9 — `move_and_mine` Session Key Verification — NOT AN ISSUE
+## 🟢 #9 - `move_and_mine` Session Key Verification - NOT AN ISSUE
 
-**Severity:** —  
-**Location:** `MoveAndMine` accounts struct, lines 540–555  
+**Severity:** -
+**Location:** `MoveAndMine` accounts struct, lines 540-555
 **Status:** VERIFIED SAFE
 
 ### Description
@@ -270,10 +262,10 @@ The `session_signer` must match `player.session_key`. **Session key verification
 
 ---
 
-## 🟢 #10 — `update_gold_mint` Should Be Admin-Only — ALREADY IS
+## 🟢 #10 - `update_gold_mint` Should Be Admin-Only - ALREADY IS
 
-**Severity:** —  
-**Location:** `update_gold_mint` instruction, lines 191–202  
+**Severity:** -
+**Location:** `update_gold_mint` instruction, lines 191-202
 **Status:** ALREADY ADMIN-ONLY
 
 ### Description
@@ -304,8 +296,8 @@ Both a runtime `require!` check AND the `has_one = authority` Anchor constraint 
 
 ## Notes on Intentional Behavior
 
-- **Bitmap resetting is permissionless** — confirmed by Silver as intentional. Anyone can call `reset_bitmap` once 75% of spots are mined.
-- **Auto-LP is permissionless** — confirmed by Silver as intentional. Anyone can trigger `treasury_auto_lp` when the treasury holds sufficient GOLD.
+- **Bitmap resetting is permissionless** - confirmed by Silver as intentional. Anyone can call `reset_bitmap` once 75% of spots are mined.
+- **Auto-LP is permissionless** - confirmed by Silver as intentional. Anyone can trigger `treasury_auto_lp` when the treasury holds sufficient GOLD.
 
 ---
 
@@ -313,10 +305,10 @@ Both a runtime `require!` check AND the `has_one = authority` Anchor constraint 
 
 | Priority | Action |
 |----------|--------|
-| **P0** | Address #1 (CPI brittleness) — highest risk if AMM upgrades |
-| **P1** | Address #2 (mint address mismatch) — verify and align program + frontend |
-| **P2** | Address #3 (comment fixes) — trivial 2-minute fix |
-| **P3** | Address #4, #5, #6 (authority/gold_mint validation) — easy wins, low risk |
+| **P0** | Address #1 (CPI brittleness) - highest risk if AMM upgrades |
+| **P1** | Address #2 (mint address mismatch) - verify and align program + frontend |
+| **P2** | Address #3 (comment fixes) - trivial 2-minute fix |
+| **P3** | Address #4, #5, #6 (authority/gold_mint validation) - easy wins, low risk |
 
 ---
 

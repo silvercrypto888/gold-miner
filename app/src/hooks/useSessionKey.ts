@@ -38,6 +38,9 @@ export function useSessionKey() {
   const programRef = useRef<Program | null>(null);
   const playerStateRef = useRef<PlayerState | null>(playerState);
   playerStateRef.current = playerState;
+  const signMessageRef = useRef(signMessage);
+  signMessageRef.current = signMessage;
+  const loadingRef = useRef(false);
 
   // Initialize connection + program
   useEffect(() => {
@@ -56,27 +59,34 @@ export function useSessionKey() {
 
   // Load existing session — requires wallet signMessage to decrypt
   const prevPubkeyRef = useRef<PublicKey | null>(null);
+  const initGuardRef = useRef(false);
   useEffect(() => {
+    if (initGuardRef.current) return;
+    if (!publicKey) { prevPubkeyRef.current = null; return; }
+    if (prevPubkeyRef.current?.equals(publicKey)) return;
+    initGuardRef.current = true;
     const load = async () => {
-      if (!signMessage) return;
+      const sign = signMessageRef.current;
+      if (!sign) { initGuardRef.current = false; return; }
       try {
-        const loaded = await loadSessionKey(signMessage);
+        const loaded = await loadSessionKey(sign);
         if (loaded) {
           setSessionKeypair(loaded.keypair);
           setSessionExpiry(loaded.expiresAt);
-        } else if (publicKey && prevPubkeyRef.current === null) {
+        } else if (prevPubkeyRef.current === null) {
           setSessionKeypair(null);
           setSessionExpiry(null);
         }
       } catch {
-        // signMessage rejected or other error
         setSessionKeypair(null);
         setSessionExpiry(null);
+      } finally {
+        initGuardRef.current = false;
       }
       prevPubkeyRef.current = publicKey;
     };
     load();
-  }, [publicKey, signMessage]);
+  }, [publicKey]);
 
   // Refresh on wallet connect
   useEffect(() => {
@@ -114,10 +124,14 @@ export function useSessionKey() {
 
   // Listen for sessionkey-changed events from localStorage changes.
   useEffect(() => {
-    const handler = async () => {
-      if (!signMessage) return;
+    const handler = async (e: Event) => {
+      // Skip if event came from storeSessionKey — caller already has keypair in memory
+      const detail = (e as CustomEvent).detail;
+      if (detail?.fromStore) return;
+
+      if (!signMessageRef.current) return;
       try {
-        const loaded = await loadSessionKey(signMessage);
+        const loaded = await loadSessionKey(signMessageRef.current);
         if (loaded) {
           setSessionKeypair(loaded.keypair);
           setSessionExpiry(loaded.expiresAt);
@@ -133,7 +147,7 @@ export function useSessionKey() {
     };
     window.addEventListener("sessionkey-changed", handler);
     return () => window.removeEventListener("sessionkey-changed", handler);
-  }, [refreshPlayerState, signMessage]);
+  }, [refreshPlayerState]);
 
   // Fund the session key to SESSION_FUND_LAMPORTS (internal — requires blockhash)
   const fundSessionKey = useCallback(async (
@@ -166,8 +180,8 @@ export function useSessionKey() {
   const toppingUpRef = useRef(false);
   const topUpSession = useCallback(async (): Promise<boolean> => {
     if (toppingUpRef.current) return false;
-    if (!publicKey || !connectionRef.current || !signMessage) { setTopUpStatus("Wallet not connected"); return false; }
-    const loaded = await loadSessionKey(signMessage);
+    if (!publicKey || !connectionRef.current || !signMessageRef.current) { setTopUpStatus("Wallet not connected"); return false; }
+    const loaded = await loadSessionKey(signMessageRef.current);
     if (!loaded) { setTopUpStatus("No session key"); return false; }
     const spk = new PublicKey(loaded.keypair.publicKey);
     try {
@@ -185,12 +199,12 @@ export function useSessionKey() {
     } finally {
       toppingUpRef.current = false;
     }
-  }, [publicKey, signMessage, fundSessionKey]);
+  }, [publicKey, fundSessionKey]);
 
   // Sweep remaining XNT from session key back to user wallet
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !connectionRef.current || !signMessage) return false;
-    const loaded = await loadSessionKey(signMessage);
+    if (!publicKey || !connectionRef.current || !signMessageRef.current) return false;
+    const loaded = await loadSessionKey(signMessageRef.current);
     if (!loaded) return false;
     const naclKp = loaded.keypair;
     const sk = new PublicKey(naclKp.publicKey);
@@ -214,7 +228,7 @@ export function useSessionKey() {
   // Start a new session (used for renewal too)
   const startSession = useCallback(async () => {
     if (joiningRef.current) return;
-    if (!publicKey || !signTransaction || !signMessage || !programRef.current) { setError("Wallet not connected"); return; }
+    if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
@@ -236,7 +250,7 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-      await storeSessionKey(nkp, expires, signMessage);
+      await storeSessionKey(nkp, expires, signMessageRef.current);
       setSessionKeypair(nkp);
       setSessionExpiry(expires);
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expires } : {
@@ -244,7 +258,7 @@ export function useSessionKey() {
       });
       refreshPlayerState();
     } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); joiningRef.current = false; }
-  }, [publicKey, signTransaction, signMessage, sweepSessionKey]);
+  }, [publicKey, signTransaction, sweepSessionKey]);
 
   // Guard against double-join/double-start while a session creation TX is in flight
   const joiningRef = useRef(false);
@@ -252,7 +266,7 @@ export function useSessionKey() {
   // Join game — creates player + starts session in one TX
   const joinGame = useCallback(async () => {
     if (joiningRef.current) return;
-    if (!publicKey || !signTransaction || !signMessage || !programRef.current) { setError("Wallet not connected"); return; }
+    if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
@@ -286,7 +300,7 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-      await storeSessionKey(nkp, expires, signMessage);
+      await storeSessionKey(nkp, expires, signMessageRef.current);
       setSessionKeypair(nkp);
       setSessionExpiry(expires);
       setPlayerState({
@@ -294,19 +308,19 @@ export function useSessionKey() {
       });
       refreshPlayerState();
     } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); joiningRef.current = false; }
-  }, [publicKey, signTransaction, signMessage, sweepSessionKey]);
+  }, [publicKey, signTransaction, sweepSessionKey]);
 
   const checkSession = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !signMessage) return false;
+    if (!publicKey || !signMessageRef.current) return false;
     try {
-      const loaded = await loadSessionKey(signMessage);
+      const loaded = await loadSessionKey(signMessageRef.current);
       if (!loaded) return false;
       setSessionKeypair(loaded.keypair);
       setSessionExpiry(loaded.expiresAt);
       refreshPlayerState();
       return true;
     } catch { return false; }
-  }, [publicKey, signMessage, refreshPlayerState]);
+  }, [publicKey, refreshPlayerState]);
 
   const clearSession = useCallback(() => { clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);

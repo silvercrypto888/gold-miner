@@ -1,3 +1,10 @@
+// ============================================================
+// ⚠️  HISTORICAL SCRIPT — NOT FOR CURRENT DEPLOYMENT
+// This script references an older GOLD mint (v2/v3 era).
+// The current active mint is v4: EarL8NaAje3mx5UGC86CWByVnotKgibkGmuJh6bHcWdz
+// Keep for reference only. Do not run against current deployment.
+// ============================================================
+
 const { AnchorProvider, Program, Wallet, web3 } = require("@coral-xyz/anchor");
 const { Connection, PublicKey, Keypair } = require("@solana/web3.js");
 const fs = require("fs");
