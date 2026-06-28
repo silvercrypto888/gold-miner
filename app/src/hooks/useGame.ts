@@ -89,11 +89,13 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   // Immediate TX-in-flight guard (React state is too slow for rapid keypresses)
   const moveInProgressRef = useRef(false);
 
+  // Hidden mines — cells we've mined but haven't yet confirmed on-chain.
+  // We immediately hide them from the UI, and only remove from this set
+  // when the chain bitmap confirms they are mined (or on timeout).
+  const hiddenMinesRef = useRef<Set<string>>(new Set());
+
   // Pending confirmed move — prevents stale background confirmation from reverting a newer move
   const moveSeqRef = useRef(0);
-
-  // Pending mine tracking removed — with the move cooldown, gold
-  // immediately disappears optimistically and stays gone.
 
   useEffect(() => {
     if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
@@ -155,12 +157,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const forceRefreshGold = useCallback(async () => {
     const bits = await fetchBitmap(true);
     const { minX, maxX, minY, maxY } = getViewportRange(positionRef.current.x, positionRef.current.y);
+    const hidden = hiddenMinesRef.current;
     const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
           const mined = bits ? isCellMined(bits, x, y) : false;
-          spots.push({ x, y, hasGold: !mined });
+          const isHidden = hidden.has(`${x},${y}`);
+          spots.push({ x, y, hasGold: !mined && !isHidden });
         }
       }
     }
@@ -171,12 +175,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const updateVisibleGold = useCallback(async () => {
     const bits = await fetchBitmap();
     const { minX, maxX, minY, maxY } = getViewportRange(position.x, position.y);
+    const hidden = hiddenMinesRef.current;
     const spots: GoldSpot[] = [];
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (hasGoldAt(x, y)) {
           const mined = bits ? isCellMined(bits, x, y) : false;
-          spots.push({ x, y, hasGold: !mined });
+          const isHidden = hidden.has(`${x},${y}`);
+          spots.push({ x, y, hasGold: !mined && !isHidden });
         }
       }
     }
@@ -269,9 +275,41 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     txTime: number;
   }
   const pendingMovesRef = useRef<PendingMove[]>([]);
+  // Hidden mines reconciliation — checks if mined cells are confirmed
+  // on-chain and removes them from hiddenMinesRef. Re-adds them if TX
+  // failed and bitmap still shows unmined.
+  const reconcileHidden = useCallback(async () => {
+    const hiddenSet = hiddenMinesRef.current;
+    if (hiddenSet.size === 0) return;
+    const bits = await fetchBitmap(true);
+    if (!bits) return;
+    const moves = pendingMovesRef.current;
+    const now = Date.now();
+    let changed = false;
+    for (const key of Array.from(hiddenSet)) {
+      const [x, y] = key.split(",").map(Number);
+      if (isCellMined(bits, x, y)) {
+        // Bitmap confirms mine — remove from hidden set
+        hiddenSet.delete(key);
+        changed = true;
+      } else {
+        // Bitmap still shows unmined. If no active sig and >30s elapsed,
+        // the TX was lost — re-show the gold.
+        const anyActive = moves.some(m => m.cellX === x && m.cellY === y && m.wasMineMove);
+        const hiddenSince = (moves.find(m => m.cellX === x && m.cellY === y && m.wasMineMove)?.txTime) || 0;
+        if (!anyActive || (now - hiddenSince > 30000)) {
+          hiddenSet.delete(key);
+          changed = true;
+        }
+      }
+    }
+    if (changed) forceRefreshGold();
+  }, [fetchBitmap, forceRefreshGold]);
 
-  // Pending mine tracking removed — with the move cooldown, gold
-  // immediately disappears optimistically and stays gone.
+  useEffect(() => {
+    const iv = setInterval(reconcileHidden, 10000);
+    return () => clearInterval(iv);
+  }, [reconcileHidden]);
 
   // Batch check all pending sigs every 1s
   // Policy:
@@ -573,6 +611,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // Gold is immediately hidden on mine — no pending/gray state.
       // The 600ms cooldown between moves prevents race conditions.
       if (expectedNewMine) {
+        hiddenMinesRef.current.add(`${newX},${newY}`);
         setVisibleGold(prev => prev.filter(g => !(g.x === newX && g.y === newY)));
       }
       statusTimerRef.current = setTimeout(() => setStatus(""), 3000);
