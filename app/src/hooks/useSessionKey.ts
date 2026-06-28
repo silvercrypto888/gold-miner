@@ -370,11 +370,16 @@ export function useSessionKey() {
   const clearSession = useCallback(() => { clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
   const isSessionValid = useCallback((): boolean => {
-    if (!sessionKeypair || !sessionExpiry) return false;
+    if (!sessionKeypair) return false;
+    // If we haven't loaded playerState yet, be optimistic — don't flash expired
+    // while chain data is still fetching. Once playerState loads, use chain truth.
+    if (!playerState) return true;
+    const chainExpiry = playerState.sessionExpiresAt;
+    if (!chainExpiry) return false;
     // If we haven't polled a slot yet, be optimistic
     if (currentSlot === 0) return true;
-    return currentSlot < sessionExpiry;
-  }, [sessionKeypair, sessionExpiry, currentSlot]);
+    return currentSlot < chainExpiry;
+  }, [sessionKeypair, currentSlot, playerState]);
 
   return {
     sessionKeypair, sessionExpiry, sessionPubkey: getSessionPubkey(),
