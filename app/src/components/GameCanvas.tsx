@@ -47,7 +47,7 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
 
 export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind" | "bell" | "angelical_pad" | "cinematic_boom") => void }) {
   const { publicKey } = useWallet();
-  const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error, isSessionValid } =
+  const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error, isSessionValid, clearSession } =
     useSessionKey();
   const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined, getBitmap } = useGame({
     sessionKeypair,
@@ -584,6 +584,24 @@ const prevForesightRef = useRef(foresightMode);
           className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-white font-bold py-3 px-8 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? "Joining..." : "Join Game"}
+        </button>
+        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+      </div>
+    );
+  } else if (sessionPubkey && !isSessionValid()) {
+    overlay = (
+      <div className="absolute inset-0 z-10 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center p-8">
+        <div className="text-6xl mb-4">⏳</div>
+        <h2 className="text-2xl font-bold text-white mb-2">Session Expired</h2>
+        <p className="text-gray-400 mb-6 text-center">
+          Your session key has expired. Start a new session to keep mining.
+        </p>
+        <button
+          onClick={() => { clearSession(); startSession(); }}
+          disabled={isLoading}
+          className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold py-3 px-8 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLoading ? "Starting..." : "Start New Session"}
         </button>
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
