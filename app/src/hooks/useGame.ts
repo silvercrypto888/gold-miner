@@ -41,6 +41,7 @@ interface UseGameProps {
   playerState: PlayerState | null;
   fundSessionKey: (pk: PublicKey, bh: string, lvb: number) => Promise<void>;
   startSession: () => Promise<void>;
+  isSessionValid?: () => boolean;
 }
 
 interface UseGameReturn {
@@ -59,7 +60,7 @@ interface UseGameReturn {
 }
 
 export function useGame(props?: UseGameProps): UseGameReturn {
-  const { sessionKeypair, sessionPubkey, playerState, fundSessionKey, startSession } = props ?? {};
+  const { sessionKeypair, sessionPubkey, playerState, fundSessionKey, startSession, isSessionValid } = props ?? {};
   const [position, setPosition] = useState<Position>({ x: 1, y: 1 });
   const positionRef = useRef(position);
   positionRef.current = position;
@@ -445,6 +446,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   }, [sessionPubkey]);
 
   const move = useCallback(async (direction: Direction) => {
+    if (isSessionValid && !isSessionValid()) {
+      setStatus("Session expired. Reconnect.");
+      return;
+    }
     // Immediate ref check — prevents duplicate TXs from rapid keypresses
     if (moveInProgressRef.current) {
       console.log("move() RETURNING EARLY — TX already in flight");
@@ -725,7 +730,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     };
   }, []);
 
-  const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving);
+  const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving && (!isSessionValid || isSessionValid()));
   const getBitmap = useCallback(() => bitmapRef.current, []);
 
   return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status, getBitmap };

@@ -47,7 +47,7 @@ function buildTile(baseHex: string, accentHex: string): HTMLCanvasElement {
 
 export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind" | "bell" | "angelical_pad" | "cinematic_boom") => void }) {
   const { publicKey } = useWallet();
-  const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error } =
+  const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error, isSessionValid } =
     useSessionKey();
   const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined, getBitmap } = useGame({
     sessionKeypair,
@@ -55,6 +55,7 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
     playerState,
     fundSessionKey,
     startSession,
+    isSessionValid,
   });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rAFRef = useRef<number>(0);
