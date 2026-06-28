@@ -51,7 +51,9 @@ export enum Direction {
 
 export interface SessionKeyData {
   publicKey: string;
+  // Encrypted storage: secretKey is ciphertext, real key is inside AES-GCM
   secretKey: string;
+  iv: string;
   expiresAt: number;
 }
 

@@ -28,7 +28,7 @@ const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
 export function useSessionKey() {
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey, signTransaction, signMessage } = useWallet();
   const [sessionKeypair, setSessionKeypair] = useState<nacl.SignKeyPair | null>(null);
   const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,20 +54,29 @@ export function useSessionKey() {
     }
   }, [publicKey, signTransaction]);
 
-  // Load existing session — re-check on wallet reconnect too
+  // Load existing session — requires wallet signMessage to decrypt
   const prevPubkeyRef = useRef<PublicKey | null>(null);
   useEffect(() => {
-    const loaded = loadSessionKey();
-    if (loaded) {
-      setSessionKeypair(loaded.keypair);
-      setSessionExpiry(loaded.expiresAt);
-    } else if (publicKey && prevPubkeyRef.current === null) {
-      // Wallet reconnected but no stored session — ensure UI shows as clean
-      setSessionKeypair(null);
-      setSessionExpiry(null);
-    }
-    prevPubkeyRef.current = publicKey;
-  }, [publicKey]);
+    const load = async () => {
+      if (!signMessage) return;
+      try {
+        const loaded = await loadSessionKey(signMessage);
+        if (loaded) {
+          setSessionKeypair(loaded.keypair);
+          setSessionExpiry(loaded.expiresAt);
+        } else if (publicKey && prevPubkeyRef.current === null) {
+          setSessionKeypair(null);
+          setSessionExpiry(null);
+        }
+      } catch {
+        // signMessage rejected or other error
+        setSessionKeypair(null);
+        setSessionExpiry(null);
+      }
+      prevPubkeyRef.current = publicKey;
+    };
+    load();
+  }, [publicKey, signMessage]);
 
   // Refresh on wallet connect
   useEffect(() => {
@@ -104,23 +113,27 @@ export function useSessionKey() {
   }, [publicKey]);
 
   // Listen for sessionkey-changed events from localStorage changes.
-  // This keeps multiple useSessionKey instances in sync
-  // (e.g. PlayerHUD picks up a session created by GameCanvas).
   useEffect(() => {
-    const handler = () => {
-      const loaded = loadSessionKey();
-      if (loaded) {
-        setSessionKeypair(loaded.keypair);
-        setSessionExpiry(loaded.expiresAt);
-        refreshPlayerState();
-      } else {
+    const handler = async () => {
+      if (!signMessage) return;
+      try {
+        const loaded = await loadSessionKey(signMessage);
+        if (loaded) {
+          setSessionKeypair(loaded.keypair);
+          setSessionExpiry(loaded.expiresAt);
+          refreshPlayerState();
+        } else {
+          setSessionKeypair(null);
+          setSessionExpiry(null);
+        }
+      } catch {
         setSessionKeypair(null);
         setSessionExpiry(null);
       }
     };
     window.addEventListener("sessionkey-changed", handler);
     return () => window.removeEventListener("sessionkey-changed", handler);
-  }, [refreshPlayerState]);
+  }, [refreshPlayerState, signMessage]);
 
   // Fund the session key to SESSION_FUND_LAMPORTS (internal — requires blockhash)
   const fundSessionKey = useCallback(async (
@@ -153,8 +166,8 @@ export function useSessionKey() {
   const toppingUpRef = useRef(false);
   const topUpSession = useCallback(async (): Promise<boolean> => {
     if (toppingUpRef.current) return false;
-    if (!publicKey || !connectionRef.current) { setTopUpStatus("Wallet not connected"); return false; }
-    const loaded = loadSessionKey();
+    if (!publicKey || !connectionRef.current || !signMessage) { setTopUpStatus("Wallet not connected"); return false; }
+    const loaded = await loadSessionKey(signMessage);
     if (!loaded) { setTopUpStatus("No session key"); return false; }
     const spk = new PublicKey(loaded.keypair.publicKey);
     try {
@@ -172,12 +185,12 @@ export function useSessionKey() {
     } finally {
       toppingUpRef.current = false;
     }
-  }, [publicKey, fundSessionKey]);
+  }, [publicKey, signMessage, fundSessionKey]);
 
   // Sweep remaining XNT from session key back to user wallet
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !connectionRef.current) return false;
-    const loaded = loadSessionKey();
+    if (!publicKey || !connectionRef.current || !signMessage) return false;
+    const loaded = await loadSessionKey(signMessage);
     if (!loaded) return false;
     const naclKp = loaded.keypair;
     const sk = new PublicKey(naclKp.publicKey);
@@ -196,14 +209,13 @@ export function useSessionKey() {
       await connectionRef.current.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       return true;
     } catch { return false; }
-  }, [publicKey]);
+  }, [publicKey, signMessage]);
 
   // Start a new session (used for renewal too)
   const startSession = useCallback(async () => {
     if (joiningRef.current) return;
-    if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
+    if (!publicKey || !signTransaction || !signMessage || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
-    const hadSession = !!loadSessionKey();
     await sweepSessionKey();
     setIsLoading(true); setError(null);
     try {
@@ -218,13 +230,13 @@ export function useSessionKey() {
       );
       // Notify immediately before prompting wallet
       window.dispatchEvent(new CustomEvent("gas-deposit", {
-        detail: { amountLamports: SESSION_FUND_LAMPORTS, isRenewal: hadSession },
+        detail: { amountLamports: SESSION_FUND_LAMPORTS, isRenewal: true },
       }));
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-      storeSessionKey(nkp, expires);
+      await storeSessionKey(nkp, expires, signMessage);
       setSessionKeypair(nkp);
       setSessionExpiry(expires);
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expires } : {
@@ -232,7 +244,7 @@ export function useSessionKey() {
       });
       refreshPlayerState();
     } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); joiningRef.current = false; }
-  }, [publicKey, signTransaction, sweepSessionKey]);
+  }, [publicKey, signTransaction, signMessage, sweepSessionKey]);
 
   // Guard against double-join/double-start while a session creation TX is in flight
   const joiningRef = useRef(false);
@@ -240,7 +252,7 @@ export function useSessionKey() {
   // Join game — creates player + starts session in one TX
   const joinGame = useCallback(async () => {
     if (joiningRef.current) return;
-    if (!publicKey || !signTransaction || !programRef.current) { setError("Wallet not connected"); return; }
+    if (!publicKey || !signTransaction || !signMessage || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
@@ -274,7 +286,7 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-      storeSessionKey(nkp, expires);
+      await storeSessionKey(nkp, expires, signMessage);
       setSessionKeypair(nkp);
       setSessionExpiry(expires);
       setPlayerState({
@@ -282,17 +294,19 @@ export function useSessionKey() {
       });
       refreshPlayerState();
     } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); joiningRef.current = false; }
-  }, [publicKey, signTransaction, sweepSessionKey]);
+  }, [publicKey, signTransaction, signMessage, sweepSessionKey]);
 
-  const checkSession = useCallback(async () => {
-    if (!publicKey) return false;
-    const loaded = loadSessionKey();
-    if (!loaded) return false;
-    setSessionKeypair(loaded.keypair);
-    setSessionExpiry(loaded.expiresAt);
-    refreshPlayerState();
-    return true;
-  }, [publicKey, refreshPlayerState]);
+  const checkSession = useCallback(async (): Promise<boolean> => {
+    if (!publicKey || !signMessage) return false;
+    try {
+      const loaded = await loadSessionKey(signMessage);
+      if (!loaded) return false;
+      setSessionKeypair(loaded.keypair);
+      setSessionExpiry(loaded.expiresAt);
+      refreshPlayerState();
+      return true;
+    } catch { return false; }
+  }, [publicKey, signMessage, refreshPlayerState]);
 
   const clearSession = useCallback(() => { clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);

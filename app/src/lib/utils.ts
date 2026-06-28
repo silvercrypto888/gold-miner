@@ -3,49 +3,68 @@ import * as nacl from "tweetnacl";
 import bs58 from "bs58";
 import { SessionKeyData } from "@/types";
 import { SESSION_KEY_STORAGE, LAMPORTS_PER_SOL } from "./constants";
+import { encryptSessionKey, decryptSessionKey } from "./sessionCrypto";
 
 // Generate a new session keypair
 export function generateSessionKeypair(): nacl.SignKeyPair {
   return nacl.sign.keyPair();
 }
 
-// Store session key in localStorage
-export function storeSessionKey(keypair: nacl.SignKeyPair, expiresAt: number): void {
+// Store session key in localStorage (encrypted with Web Crypto)
+export async function storeSessionKey(
+  keypair: nacl.SignKeyPair,
+  expiresAt: number,
+  signMessage: (msg: Uint8Array) => Promise<Uint8Array>
+): Promise<void> {
   if (typeof window === "undefined") return;
-  
+
+  const { enc, iv } = await encryptSessionKey(keypair.secretKey, signMessage);
+
   const data: SessionKeyData = {
     publicKey: bs58.encode(keypair.publicKey),
-    secretKey: bs58.encode(keypair.secretKey),
+    secretKey: enc, // AES-GCM ciphertext
+    iv,
     expiresAt,
   };
-  
+
   localStorage.setItem(SESSION_KEY_STORAGE, JSON.stringify(data));
   window.dispatchEvent(new CustomEvent("sessionkey-changed"));
 }
 
-// Load session key from localStorage
-export function loadSessionKey(): { keypair: nacl.SignKeyPair; expiresAt: number } | null {
+// Load session key from localStorage (decrypts with Web Crypto, requires wallet sign)
+export async function loadSessionKey(
+  signMessage: (msg: Uint8Array) => Promise<Uint8Array>
+): Promise<{ keypair: nacl.SignKeyPair; expiresAt: number } | null> {
   if (typeof window === "undefined") return null;
-  
+
   const stored = localStorage.getItem(SESSION_KEY_STORAGE);
   if (!stored) return null;
-  
+
   try {
     const data: SessionKeyData = JSON.parse(stored);
-    
+
     // Check if expired
     if (Date.now() > data.expiresAt) {
       clearSessionKey();
       return null;
     }
-    
+
+    // Migrate old plaintext entries (no iv = old format, clear and require re-auth)
+    if (!data.iv) {
+      clearSessionKey();
+      return null;
+    }
+
+    const decrypted = await decryptSessionKey(data.secretKey, data.iv, signMessage);
+
     const keypair: nacl.SignKeyPair = {
       publicKey: bs58.decode(data.publicKey),
-      secretKey: bs58.decode(data.secretKey),
+      secretKey: decrypted,
     };
-    
+
     return { keypair, expiresAt: data.expiresAt };
   } catch (e) {
+    // Decryption failed (wrong wallet?) — clear and start fresh
     clearSessionKey();
     return null;
   }
