@@ -510,18 +510,20 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     try {
       const signerKp = Keypair.fromSecretKey(sessionKeypair.secretKey);
 
-      // Check session key balance (cached briefly to avoid RPC spam)
+      // Check session key balance (cached briefly to avoid RPC spam).
+      // After sweep, the key may hold ~890K lamports (rentExempt + 10K).
+      // Token-2022 move_and_mine TXs need a healthy fee buffer — require
+      // at least 1.5M lamports (0.0015 SOL) before attempting a move.
+      const SESSION_MIN_SAFE_BALANCE = 1_500_000;
       const balCache = sessionBalanceRef.current;
       let bal = balCache && (now - balCache.time < 5000) ? balCache.lamports : null;
       if (bal === null) {
         bal = await connRef.current.getBalance(sessionPubkey);
         sessionBalanceRef.current = { lamports: bal, time: now };
       }
-      if (bal < 500_000) {
-        // Show clear status immediately so user knows what's happening
+      if (bal < SESSION_MIN_SAFE_BALANCE) {
         setStatus("Topping up gas funds");
         if (now - lastFundTimeRef.current < 5000) {
-          // Still waiting for previous fund attempt — don't silently revert, keep status visible
           setIsMoving(false);
           moveInProgressRef.current = false;
           return;
@@ -530,7 +532,17 @@ export function useGame(props?: UseGameProps): UseGameReturn {
         const { blockhash: fbh, lastValidBlockHeight: flvb } = await connRef.current.getLatestBlockhash();
         try {
           await fundSessionKey(sessionPubkey, fbh, flvb);
-          await new Promise(r => setTimeout(r, 500));
+          // Wait briefly for RPC propagation, then re-check actual balance
+          await new Promise(r => setTimeout(r, 1000));
+          const newBal = await connRef.current.getBalance(sessionPubkey);
+          sessionBalanceRef.current = { lamports: newBal, time: Date.now() };
+          if (newBal < SESSION_MIN_SAFE_BALANCE) {
+            setStatus("Gas funds too low");
+            statusTimerRef.current = setTimeout(() => setStatus(""), 5000);
+            setIsMoving(false);
+            moveInProgressRef.current = false;
+            return;
+          }
         } catch {
           setStatus("Topping up gas funds");
           statusTimerRef.current = setTimeout(() => setStatus(""), 5000);
@@ -538,7 +550,6 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           moveInProgressRef.current = false;
           return;
         }
-        sessionBalanceRef.current = { lamports: 1_000_000, time: now };
       }
 
       if (!walletPk) {

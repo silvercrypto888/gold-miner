@@ -217,7 +217,9 @@ export function useSessionKey() {
     }
   }, [publicKey, fundSessionKey]);
 
-  // Sweep remaining XNT from session key back to user wallet
+  // Sweep remaining XNT from session key back to user wallet.
+  // Leave behind rentExempt + 1.5M lamports so the session key remains
+  // usable for move_and_mine TXs after a sweep.
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
     if (!publicKey || !connectionRef.current || !signMessageRef.current) return false;
     const loaded = await loadSessionKey(signMessageRef.current);
@@ -230,7 +232,8 @@ export function useSessionKey() {
       const kp = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
       const rentExempt = await connectionRef.current.getMinimumBalanceForRentExemption(0);
-      const amount = balance - rentExempt - 10_000;
+      const LEAVE_BEHIND = rentExempt + 1_500_000; // matches SESSION_MIN_SAFE_BALANCE
+      const amount = balance - LEAVE_BEHIND;
       if (amount <= 0) return false;
       const tx = new Transaction({ feePayer: sk, blockhash, lastValidBlockHeight });
       tx.add(SystemProgram.transfer({ fromPubkey: sk, toPubkey: publicKey, lamports: amount }));
