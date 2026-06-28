@@ -19,7 +19,6 @@ import {
   getToken2022ProgramId,
   RPC_URL,
   SESSION_DURATION_SLOTS,
-  BLOCK_TIME_MS,
 } from "@/lib/constants";
 import { PlayerState } from "@/types";
 
@@ -28,7 +27,7 @@ const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
 // Module-level shared promise so all useSessionKey instances await the same load
-let _sessionPromise: Promise<{ keypair: nacl.SignKeyPair; expiresAt: number } | null> | null = null;
+let _sessionPromise: Promise<{ keypair: nacl.SignKeyPair; expirySlot: number } | null> | null = null;
 let _promiseForWallet: PublicKey | null = null;
 
 export function useSessionKey() {
@@ -38,6 +37,7 @@ export function useSessionKey() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+  const [currentSlot, setCurrentSlot] = useState<number>(0);
   const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
   const playerStateRef = useRef<PlayerState | null>(playerState);
@@ -60,6 +60,20 @@ export function useSessionKey() {
       programRef.current = new Program(GoldMinerIDL as any, provider);
     }
   }, [publicKey, signTransaction]);
+
+  // Poll current slot every 5s for session validity checks
+  useEffect(() => {
+    if (!connectionRef.current) return;
+    const poll = async () => {
+      try {
+        const slot = await connectionRef.current!.getSlot();
+        setCurrentSlot(slot);
+      } catch { /* ignore */ }
+    };
+    poll();
+    const iv = setInterval(poll, 5000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Load existing session — requires wallet signMessage to decrypt
   const prevPubkeyRef = useRef<PublicKey | null>(null);
@@ -87,7 +101,7 @@ export function useSessionKey() {
     _sessionPromise.then(loaded => {
       if (loaded) {
         setSessionKeypair(loaded.keypair);
-        setSessionExpiry(loaded.expiresAt);
+        setSessionExpiry(loaded.expirySlot);
       } else if (prevPubkeyRef.current === null) {
         setSessionKeypair(null);
         setSessionExpiry(null);
@@ -150,7 +164,7 @@ export function useSessionKey() {
         const loaded = await loadSessionKey(signMessageRef.current);
         if (loaded) {
           setSessionKeypair(loaded.keypair);
-          setSessionExpiry(loaded.expiresAt);
+          setSessionExpiry(loaded.expirySlot);
           refreshPlayerState();
         } else {
           setSessionKeypair(null);
@@ -270,12 +284,13 @@ export function useSessionKey() {
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-      const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-      await storeSessionKey(nkp, expires, signMessageRef.current);
+      const currentSlot = await connectionRef.current!.getSlot();
+      const expirySlot = currentSlot + SESSION_DURATION_SLOTS;
+      await storeSessionKey(nkp, expirySlot, signMessageRef.current);
       setSessionKeypair(nkp);
-      setSessionExpiry(expires);
-      setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expires } : {
-        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expires, escrowBalance: 0,
+      setSessionExpiry(expirySlot);
+      setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expirySlot } : {
+        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot, escrowBalance: 0,
       });
       refreshPlayerState();
     } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); joiningRef.current = false; }
@@ -320,12 +335,13 @@ export function useSessionKey() {
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-      const expires = Date.now() + SESSION_DURATION_SLOTS * BLOCK_TIME_MS;
-      await storeSessionKey(nkp, expires, signMessageRef.current);
+      const currentSlot = await connectionRef.current!.getSlot();
+      const expirySlot = currentSlot + SESSION_DURATION_SLOTS;
+      await storeSessionKey(nkp, expirySlot, signMessageRef.current);
       setSessionKeypair(nkp);
-      setSessionExpiry(expires);
+      setSessionExpiry(expirySlot);
       setPlayerState({
-        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expires, escrowBalance: 0,
+        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot, escrowBalance: 0,
       });
       refreshPlayerState();
     } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); joiningRef.current = false; }
@@ -337,7 +353,7 @@ export function useSessionKey() {
       const loaded = await loadSessionKey(signMessageRef.current);
       if (!loaded) return false;
       setSessionKeypair(loaded.keypair);
-      setSessionExpiry(loaded.expiresAt);
+      setSessionExpiry(loaded.expirySlot);
       refreshPlayerState();
       return true;
     } catch { return false; }
@@ -345,7 +361,12 @@ export function useSessionKey() {
 
   const clearSession = useCallback(() => { clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
-  const isSessionValid = useCallback((): boolean => !!(sessionKeypair && sessionExpiry && Date.now() < sessionExpiry), [sessionKeypair, sessionExpiry]);
+  const isSessionValid = useCallback((): boolean => {
+    if (!sessionKeypair || !sessionExpiry) return false;
+    // If we haven't polled a slot yet, be optimistic
+    if (currentSlot === 0) return true;
+    return currentSlot < sessionExpiry;
+  }, [sessionKeypair, sessionExpiry, currentSlot]);
 
   return {
     sessionKeypair, sessionExpiry, sessionPubkey: getSessionPubkey(),

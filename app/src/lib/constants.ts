@@ -72,7 +72,7 @@ export const GRID_SIZE = 1024;
 export const BITMAP_BYTES = 131072; // 1024 * 1024 bits (not including discriminator)
 export const GOLD_PER_MINE = 100;
 export const SESSION_DURATION_SLOTS = 36000; // ~4 hours
-export const BLOCK_TIME_MS = 400;
+
 export const SESSION_KEY_STORAGE = "gold_miner_session_key";
 export const LAMPORTS_PER_SOL = 1_000_000_000;
 

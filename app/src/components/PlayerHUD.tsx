@@ -6,7 +6,7 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useSessionKey } from "@/hooks/useSessionKey";
 import { useGoldMiner } from "@/hooks/useGoldMiner";
 import { formatXNT, formatGoldium } from "@/lib/constants";
-import { shortenAddress, getTimeRemaining } from "@/lib/utils";
+import { shortenAddress } from "@/lib/utils";
 
 export function PlayerHUD() {
   const { publicKey, disconnect } = useWallet();

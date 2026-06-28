@@ -53,7 +53,7 @@ export interface SessionKeyData {
   // Encrypted storage: secretKey is ciphertext, real key is inside AES-GCM
   secretKey: string;
   iv: string;
-  expiresAt: number;
+  expirySlot: number;
 }
 
 // IDL Types (matching Anchor program)

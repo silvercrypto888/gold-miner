@@ -13,7 +13,7 @@ export function generateSessionKeypair(): nacl.SignKeyPair {
 // Store session key in localStorage (encrypted with Web Crypto)
 export async function storeSessionKey(
   keypair: nacl.SignKeyPair,
-  expiresAt: number,
+  expirySlot: number,
   signMessage: (msg: Uint8Array) => Promise<Uint8Array>
 ): Promise<void> {
   if (typeof window === "undefined") return;
@@ -24,7 +24,7 @@ export async function storeSessionKey(
     publicKey: bs58.encode(keypair.publicKey),
     secretKey: enc, // AES-GCM ciphertext
     iv,
-    expiresAt,
+    expirySlot,
   };
 
   localStorage.setItem(SESSION_KEY_STORAGE, JSON.stringify(data));
@@ -34,7 +34,7 @@ export async function storeSessionKey(
 // Load session key from localStorage (decrypts with Web Crypto, requires wallet sign)
 export async function loadSessionKey(
   signMessage: (msg: Uint8Array) => Promise<Uint8Array>
-): Promise<{ keypair: nacl.SignKeyPair; expiresAt: number } | null> {
+): Promise<{ keypair: nacl.SignKeyPair; expirySlot: number } | null> {
   if (typeof window === "undefined") return null;
 
   const stored = localStorage.getItem(SESSION_KEY_STORAGE);
@@ -42,12 +42,6 @@ export async function loadSessionKey(
 
   try {
     const data: SessionKeyData = JSON.parse(stored);
-
-    // Check if expired
-    if (Date.now() > data.expiresAt) {
-      clearSessionKey();
-      return null;
-    }
 
     // Migrate old plaintext entries (no iv = old format, clear and require re-auth)
     if (!data.iv) {
@@ -62,7 +56,7 @@ export async function loadSessionKey(
       secretKey: decrypted,
     };
 
-    return { keypair, expiresAt: data.expiresAt };
+    return { keypair, expirySlot: data.expirySlot };
   } catch (e) {
     // Decryption failed (user rejected sign prompt, or wrong wallet).
     // Do NOT wipe localStorage — the on-chain session is still valid and paid for.
