@@ -16,6 +16,7 @@ import {
   getProgramId,
   getGoldMint,
   getGoldAta,
+  getGameConfigPda,
   getToken2022ProgramId,
   RPC_URL,
   SESSION_DURATION_SLOTS,
@@ -398,7 +399,7 @@ export function useSessionKey() {
       const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
       if (!exists) {
         tx.add(await programRef.current.methods.joinGame().accounts({
-          wallet: publicKey, player: ppda, goldMint: gm, playerTokenAccount: ata,
+          wallet: publicKey, player: ppda, gameConfig: getGameConfigPda()[0], goldMint: gm, playerTokenAccount: ata,
           tokenProgram: getToken2022ProgramId(),
           associatedTokenProgram: new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"),
           systemProgram: SystemProgram.programId,

@@ -41,6 +41,7 @@ export const GoldMinerIDL: Idl = {
       accounts: [
         { name: "wallet", writable: true, signer: true },
         { name: "player", writable: true },
+        { name: "gameConfig", writable: true },
         { name: "goldMint", writable: true },
         { name: "playerTokenAccount", writable: true },
         { name: "tokenProgram", address: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" },
