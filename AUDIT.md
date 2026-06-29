@@ -96,11 +96,11 @@ Comments on token program accounts were swapped relative to actual code. Code wa
 
 ---
 
-## 🔴 #4 - `InitTreasury` Missing Authority Validation
+## 🟢 #4 - `InitTreasury` Missing Authority Validation
 
 **Severity:** LOW
 **Location:** `InitTreasury` accounts struct, lines 507-515
-**Status:** OPEN
+**Status:** FIXED
 
 ### Description
 
@@ -132,11 +132,11 @@ pub game_config: Account<'info, GameConfig>,
 
 ---
 
-## 🔴 #5 - `JoinGame` Does Not Validate `gold_mint` Against Game Config
+## 🟢 #5 - `JoinGame` Does Not Validate `gold_mint` Against Game Config
 
 **Severity:** LOW
 **Location:** `JoinGame` accounts struct, lines 518-530
-**Status:** OPEN
+**Status:** FIXED
 
 ### Description
 
@@ -163,11 +163,11 @@ Note: The `game_config` account is not currently in `JoinGame`'s accounts struct
 
 ---
 
-## 🔴 #6 - `MoveAndMine` Does Not Validate `gold_mint` Against Game Config
+## 🟢 #6 - `MoveAndMine` Does Not Validate `gold_mint` Against Game Config
 
 **Severity:** LOW
 **Location:** `MoveAndMine` accounts struct, lines 540-555
-**Status:** OPEN
+**Status:** FIXED
 
 ### Description
 

@@ -31,7 +31,6 @@ export function useGoldMiner() {
   const [error, setError] = useState<string | null>(null);
   const [playerAccount, setPlayerAccount] = useState<PlayerAccount | null>(null);
   const [gameConfig, setGameConfig] = useState<GameConfigAccount | null>(null);
-  const [escrowBalance, setEscrowBalance] = useState<number>(0);
   const [goldiumBalance, setGoldiumBalance] = useState<number>(0);
   const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
@@ -61,9 +60,6 @@ export function useGoldMiner() {
       const account = await (programRef.current.account as any).player.fetch(playerPda);
       if (account) {
         setPlayerAccount(account as PlayerAccount);
-        const balance = await connectionRef.current!.getBalance(playerPda);
-        const minRent = await connectionRef.current!.getMinimumBalanceForRentExemption(200);
-        setEscrowBalance(Math.max(0, balance - minRent));
       }
     } catch {
       setPlayerAccount(null);
@@ -78,55 +74,6 @@ export function useGoldMiner() {
       if (config) setGameConfig(config as GameConfigAccount);
     } catch {}
   }, []);
-
-  // Deposit XNT
-  const depositXnt = useCallback(async (amountXnt: number): Promise<TransactionResult> => {
-    if (!publicKey || !signTransaction || !programRef.current) return { signature: "", success: false, error: "Wallet not connected" };
-    setIsLoading(true); setError(null);
-    try {
-      const [playerPda] = getPlayerPda(publicKey, getProgramId());
-      const amountLamports = new BN(amountXnt * LAMPORTS_PER_SOL);
-      const tx = await programRef.current.methods
-        .depositXnt(amountLamports)
-        .accounts({ wallet: publicKey, player: playerPda, systemProgram: SystemProgram.programId })
-        .transaction();
-      tx.feePayer = publicKey;
-      tx.recentBlockhash = (await connectionRef.current!.getLatestBlockhash()).blockhash;
-      const signed = await signTransaction(tx);
-      const signature = await connectionRef.current!.sendRawTransaction(signed.serialize());
-      await connectionRef.current!.confirmTransaction(signature);
-      await fetchPlayerData();
-      return { signature, success: true };
-    } catch (err: any) {
-      const msg = err.message || "Deposit failed";
-      setError("Error (see console)");
-      return { signature: "", success: false, error: msg };
-    } finally { setIsLoading(false); }
-  }, [publicKey, signTransaction, fetchPlayerData]);
-
-  // Withdraw
-  const withdrawXnt = useCallback(async (): Promise<TransactionResult> => {
-    if (!publicKey || !signTransaction || !programRef.current) return { signature: "", success: false, error: "Wallet not connected" };
-    setIsLoading(true); setError(null);
-    try {
-      const [playerPda] = getPlayerPda(publicKey, getProgramId());
-      const tx = await programRef.current.methods
-        .withdrawXnt()
-        .accounts({ wallet: publicKey, player: playerPda, systemProgram: SystemProgram.programId })
-        .transaction();
-      tx.feePayer = publicKey;
-      tx.recentBlockhash = (await connectionRef.current!.getLatestBlockhash()).blockhash;
-      const signed = await signTransaction(tx);
-      const signature = await connectionRef.current!.sendRawTransaction(signed.serialize());
-      await connectionRef.current!.confirmTransaction(signature);
-      await fetchPlayerData();
-      return { signature, success: true };
-    } catch (err: any) {
-      const msg = err.message || "Withdrawal failed";
-      setError("Error (see console)");
-      return { signature: "", success: false, error: msg };
-    } finally { setIsLoading(false); }
-  }, [publicKey, signTransaction, fetchPlayerData]);
 
   // Fetch GOLD balance — read gold_mint from GameConfig PDA raw
   const fetchGoldiumBalance = useCallback(async () => {
@@ -144,8 +91,8 @@ export function useGoldMiner() {
   }, [publicKey]);
 
   return {
-    playerAccount, gameConfig, escrowBalance, goldiumBalance,
-    isLoading, error, depositXnt, withdrawXnt,
+    playerAccount, gameConfig, goldiumBalance,
+    isLoading, error,
     fetchPlayerData, fetchGameConfig, fetchGoldiumBalance,
     refresh: fetchPlayerData,
   };

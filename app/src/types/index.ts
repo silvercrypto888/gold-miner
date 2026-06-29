@@ -17,7 +17,6 @@ export interface PlayerState {
   position: Position;
   goldiumMinted: number;
   sessionExpiresAt: number;
-  escrowBalance: number;
 }
 
 export interface GoldSpot {

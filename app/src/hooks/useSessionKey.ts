@@ -158,7 +158,6 @@ export function useSessionKey() {
           position: { x: d.readUInt32LE(72), y: d.readUInt32LE(76) },
           goldiumMinted: Number(d.readBigUInt64LE(80)),
           sessionExpiresAt: Number(d.readBigUInt64LE(88)),
-          escrowBalance: 0,
         };
         setPlayerState(p);
         setSessionExpiry(p.sessionExpiresAt); // Sync from chain as source of truth
@@ -342,7 +341,7 @@ export function useSessionKey() {
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expirySlot } : {
-        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot, escrowBalance: 0,
+        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot,
       });
       refreshPlayerState();
     } catch (err: any) {
@@ -421,7 +420,7 @@ export function useSessionKey() {
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState({
-        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot, escrowBalance: 0,
+        wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot,
       });
       refreshPlayerState();
     } catch (err: any) {

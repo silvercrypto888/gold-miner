@@ -123,28 +123,10 @@ export const GoldMinerIDL: Idl = {
       ],
       args: [],
     },
-    {
-      name: "depositXnt",
-      discriminator: [174, 84, 153, 146, 93, 0, 115, 244],
-      accounts: [
-        { name: "wallet", writable: true, signer: true },
-        { name: "player", writable: true },
-        { name: "systemProgram", address: "11111111111111111111111111111111" },
-      ],
-      args: [
-        { name: "amountLamports", type: "u64" },
-      ],
-    },
-    {
-      name: "withdrawXnt",
-      discriminator: [129, 188, 47, 92, 90, 169, 6, 251],
-      accounts: [
-        { name: "wallet", writable: true, signer: true },
-        { name: "player", writable: true },
-        { name: "systemProgram", address: "11111111111111111111111111111111" },
-      ],
-      args: [],
-    },
+    // NOTE: depositXnt / withdrawXnt were an early escrow experiment.
+    // They were never implemented in the Rust program. Removed from IDL.
+    // See docs/ARCHIVED_ESCROW_CODE.md for the archived code.
+
   ],
   accounts: [
     {

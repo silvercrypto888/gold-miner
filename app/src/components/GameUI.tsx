@@ -74,11 +74,8 @@ export default function GameUI() {
                   <li>• Find gold squares (yellow glow)</li>
                   <li>• Step on gold to mine it</li>
                   <li>• Earn 100 GOLD per mine</li>
+                  <li>• Use Foresight to see ahead</li>
                 </ul>
-                <div className="mt-3 text-xs text-gray-500">
-                  <p>Gold formula: (x &amp; y) % 7 == 0</p>
-                  <p>~150,000 gold spots on 1024×1024 grid</p>
-                </div>
               </div>
               {/* Audio Controls */}
               <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">

@@ -25,6 +25,7 @@ The frontend layer is well-architected for a browser game but carries **critical
 ## CRITICAL: Session Key Stored Unencrypted in localStorage
 
 **Severity:** CRITICAL  
+**Status:** ✅ FIXED — encryption added via Web Crypto API (Option B implemented)  
 **File:** `app/src/lib/utils.ts:storeSessionKey()` / `loadSessionKey()`  
 **Line:** 15-43
 
@@ -70,6 +71,7 @@ localStorage.setItem("session_key_encrypted", bufferToBase64(encrypted));
 ## CRITICAL: Session Key Expiry Uses Client Clock, Not Chain Slot
 
 **Severity:** CRITICAL  
+**Status:** ✅ FIXED — expiry now computed from on-chain slot, not client wall-clock  
 **File:** `app/src/hooks/useSessionKey.ts`  
 **File:** `app/src/lib/utils.ts:loadSessionKey()`  
 **File:** `app/src/lib/constants.ts` (SESSION_DURATION_SLOTS)
@@ -358,32 +360,27 @@ The `fundSessionKey` is called with a fresh blockhash, but the parent wallet mus
 ## MEDIUM: Gas Griefing — Session Key Balance Can Be Drained by Spam
 
 **Severity:** MEDIUM  
+**Status:** ✅ MITIGATED — session key encryption (CRITICAL fix #1) eliminates the theft vector that enabled this attack  
 **File:** `app/src/hooks/useSessionKey.ts` / `useGame.ts`
 
 ### Finding
 
-The session key pays for `move_and_mine` TX fees. With 0.2 XNT (~200M lamports) funding and ~5,000 lamports per TX, a player gets ~40,000 moves. An attacker who knows a player's session pubkey can:
+The session key pays for `move_and_mine` TX fees. With 0.2 XNT (~200M lamports) funding and ~5,000 lamports per TX, a player gets ~40,000 moves.
 
-1. **Not** drain the escrow (that's wallet-protected).
-2. **But** spam empty `move_and_mine` TXs signed with a different key (doesn't matter — the fee is paid by the session key, not the signer).
+**Original attack vector (NOW CLOSED):** If an attacker stole the session key from plaintext localStorage (see CRITICAL: localStorage storage issue above), they could burn through the 0.2 XNT in seconds by spamming moves. The hard cap of `SESSION_MAX_LAMPORTS = 0.5` XNT limited damage to 0.5 XNT per session.
 
-Wait — actually, Solana fees are paid by the TX fee payer (`feePayer`), which is `sessionPubkey` in `buildMoveTx`. But the signer must be `sessionPubkey` for the program to accept it (the program checks `session_signer` against `player.session_key`).
+**Current state:** With session keys now encrypted via Web Crypto API, an attacker reading localStorage only obtains ciphertext. Without the wallet-derived decryption key, the session key cannot be recovered. The remaining surface — knowing the session pubkey alone — is insufficient: the program rejects any `move_and_mine` where `session_signer` does not match `player.session_key`.
 
-So an attacker CANNOT grief with a wrong signer — the program rejects it. However:
+### Why This Matters (Historical)
 
-- If the attacker steals the session key (see CRITICAL: localStorage), they can burn through the 0.2 XNT in seconds by spamming moves.
-- The hard cap of `SESSION_MAX_LAMPORTS = 0.5` XNT limits damage to 0.5 XNT per session.
+- 0.5 XNT is small, but if sessions were long-lived and keys leaked via XSS/extension, it was a griefing vector.
+- The `sweepSessionKey` on session start/renew recovers leftover funds, but there was no `sweepSessionKey` on page unload or session expiry.
 
-### Why This Matters
+### Fix Applied
 
-- 0.5 XNT is small, but if sessions are long-lived and keys leak, it's a griefing vector.
-- The `sweepSessionKey` on session start/renew recovers leftover funds, but there's no `sweepSessionKey` on page unload or session expiry.
-
-### Fix
-
-1. Reduce `SESSION_MAX_LAMPORTS` to 0.1 XNT (enough for ~20,000 moves).
-2. Add a `max_moves_per_session` counter to the Player account. After 10,000 moves, require wallet re-authorization.
-3. Implement automatic `sweepSessionKey` on `beforeunload` and `visibilitychange` events.
+1. ✅ **Session key encryption** — primary theft vector eliminated.
+2. `SESSION_MAX_LAMPORTS = 0.5` XNT still acts as a hard cap if other key leakage occurs.
+3. Consider adding `sweepSessionKey` on `beforeunload`/`visibilitychange` as defense in depth.
 
 ---
 

@@ -50,7 +50,19 @@ npm run dev
 
 ## Gas Costs
 
-- Each move costs ~0.002 XNT on X1
-- 0.02 XNT deposit ≈ 10 moves
-- 0.1 XNT deposit ≈ 50 moves
-- 1 XNT deposit ≈ 500 moves
+*Based on actual on-chain transactions for wallet `A9kbMEknBao8YdMyqMLiUPkkArsr8TghGFQAtyZ3U8ZB` (X1 mainnet, CU price ~30 μlamports/CU).*
+
+| Action | Fee (XNT) | Avg CU | Notes |
+|--------|-----------|--------|-------|
+| Move onto empty square | ~0.0012 | ~33,500 | Base movement only |
+| Mine gold (Token-2022 mint) | ~0.0015–0.0017 | ~53,000–57,000 | Two CPI calls to mint 100 GOLD |
+
+*Variation depends on Compute Unit Price (your wallet settings). Higher congestion = higher CU price = higher fees.*
+
+### Deposit estimates
+
+| Deposit | Approx. Moves |
+|---------|---------------|
+| 0.02 XNT | ~12–16 moves |
+| 0.1 XNT | ~60–80 moves |
+| 1 XNT | ~600–800 moves |
