@@ -154,10 +154,40 @@ export default function LitepaperPage() {
           </ul>
         </section>
 
+        {/* Game Theory */}
+        <section className="mb-10">
+          <h2 className="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
+            6. Game Theory
+          </h2>
+          <p className="text-gray-300 leading-relaxed mb-4">
+            Gold Miner is built around <strong>spatial competition</strong>: gold spots are consumable,
+            meaning the first player to mine a cell claims its 100 GOLD, and the spot yields nothing
+            thereafter. There are no artificial multipliers or airdrops. The early-adopter advantage is
+            <strong> endogenous</strong> — it emerges from the rules themselves, not from exogenous bonuses.
+          </p>
+          <p className="text-gray-300 leading-relaxed mb-4">
+            Because every player starts at the same coordinate, the Nash equilibrium is to <strong>scatter</strong>
+            across the map like particles diffusing through a medium. Clustering in a small area is
+            unsustainable: shared finite spots drive per-player yield toward zero. The incentive to explore
+            new territory arises naturally from the consumable-resource mechanic.
+          </p>
+          <p className="text-gray-300 leading-relaxed mb-4">
+            <strong>Foresight</strong> is an intentional feature, not an exploit. With deterministic world
+            generation, every player can see where gold lies ahead. But perfect information does not eliminate
+            competition — it shifts it from <em>guessing</em> to <em>racing</em>. The competitive equilibrium is
+            determined by execution speed and path optimization, not luck.
+          </p>
+          <p className="text-gray-300 leading-relaxed">
+            Already-mined spots return silent success rather than an error. This is a deliberate anti-griefing
+            design: if an error were thrown, a malicious actor could mine ahead of a player simply to make
+            their transaction fail. Silent success preserves the race while keeping the game fair.
+          </p>
+        </section>
+
         {/* Technology */}
         <section className="mb-10">
           <h2 className="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
-            6. Technology Stack
+            7. Technology Stack
           </h2>
           <ul className="list-disc list-inside text-gray-300 space-y-2 leading-relaxed">
             <li>
@@ -188,7 +218,7 @@ export default function LitepaperPage() {
         {/* Roadmap */}
         <section className="mb-10">
           <h2 className="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
-            7. Roadmap
+            8. Roadmap
           </h2>
           <ul className="list-disc list-inside text-gray-300 space-y-2 leading-relaxed">
             <li>
@@ -205,7 +235,7 @@ export default function LitepaperPage() {
         {/* Legal Disclaimers */}
         <section className="mb-10">
           <h2 className="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
-            8. Legal Disclaimers
+            9. Legal Disclaimers
           </h2>
           <div className="space-y-4 text-gray-400 text-sm leading-relaxed">
             <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-5">
