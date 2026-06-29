@@ -50,12 +50,12 @@
 \vspace*{4cm}
 
 {\Huge\bfseries\color{darkgray} Gold Miner}\\[0.6em]
-{\LARGE\color{medgray} A Spatial Resource Competition Game on X1}\\[2em]
+{\LARGE\color{medgray} A Fair Mining Spatial Competition Game on X1}\\[2em]
 
 \vfill
 
 {\large\color{medgray}
-On-chain multiplayer grid exploration with\par
+On-chain multiplayer grid mining with\par
 consumable gold spots and protocol-owned liquidity.
 }
 
@@ -70,7 +70,7 @@ consumable gold spots and protocol-owned liquidity.
 % ─── Abstract ────────────────────────────────────────────────────────────────
 \section*{Abstract}
 
-Gold Miner is an on-chain multiplayer grid game deployed on the X1 Network (Solana VM). Players navigate a 1,024 $\times$ 1,024 grid, discovering and mining gold spots that yield GOLD tokens (Token-2022). Gold spots are consumable --- once mined, they never respawn for that world epoch. This creates a spatial competition where players must balance exploration, path optimization, and speed against other participants. All mined GOLD is routed through protocol-owned liquidity and permanently burned, creating a deflationary token economy.
+Gold Miner is an on-chain multiplayer fair mine game deployed on the X1 Network (Solana VM). Players navigate a 1,024 $\times$ 1,024 grid, discovering and mining gold spots that yield GOLD tokens (Token-2022). Gold spots are consumable --- once mined, they never respawn for that world epoch. This creates a spatial competition where players must balance exploration, path optimization, and speed against other participants. All minted GOLD that is routed through the treasury goes to protocol-owned liquidity and permanently burned, creating a deflationary token economy.
 
 \vspace{1em}
 \noindent\textbf{Key properties:} permissionless entry, deterministic world generation, session-key gameplay, auto-LP burn treasury, and permissionless bitmap reset at 75\% exhaustion.
@@ -84,7 +84,7 @@ Gold Miner is an on-chain multiplayer grid game deployed on the X1 Network (Sola
 
 Most blockchain games fall into two categories: fully on-chain but mechanically simple (turn-based, deterministic), or visually rich but mostly off-chain ( centralized state, token-gated ). Gold Miner pursues a third path: a real-time spatial competition game where every move is recorded on-chain, yet the player experience is fluid and responsive.
 
-The game is played on a 1,024 $\times$ 1,024 grid. Each cell is either empty or contains gold, determined by a public formula: $(x \ \&\ \ y) \ \% \ 7 = 0$. This deterministic generation means every player sees the same world, and foresight --- knowing where gold lies ahead --- becomes a strategic tool rather than an exploit.
+The game is played on a 1,024 $\times$ 1,024 grid. Each cell is either empty or contains gold, determined by a public formula: $(x \ \&\ \ y) \ \% \ 7 = 0$. This deterministic generation means every player sees the same world, and foresight --- knowing where gold lies ahead --- becomes a strategic tool.
 
 Players begin at position $(1,1)$. From there, they move using arrow keys or WASD. Each move is an on-chain transaction signed by an ephemeral session key, eliminating the need for a wallet popup on every action. When a player steps on a gold spot, the contract automatically mints 100 GOLD tokens (Token-2022) to their wallet.
 
@@ -114,9 +114,9 @@ The bitwise-AND modulo formula produces a scattered but deterministic pattern. P
 
 \subsection{Consumable Resources}
 
-Gold spots are consumed on first mine. Once a cell has been mined, it yields no further GOLD for the remainder of the world epoch. This is not a bug or oversight --- it is the central competitive mechanism.
+Gold spots are consumed on first mine. Once a cell has been mined, it yields no further GOLD for the remainder of the world epoch. This is the central competitive mechanism.
 
-The consequence is immediate: multiple players converging on the same region compete for a finite resource. Early arrival is rewarded not by a multiplier but by \textit{access to unmined territory}. Late arrivals find only empty cells, silent and harmless.
+The consequence is immediate: multiple players converging on the same region compete for a finite resource. Early arrival is rewarded not by a multiplier but by \textit{access to unmined territory}. Late arrivals find only empty cells.
 
 \subsection{Spatial Diffusion Incentive}
 
@@ -174,7 +174,7 @@ All mined GOLD flows through the following pipeline:
 
 \begin{enumerate}[leftmargin=2em]
 \item Player mines gold $\rightarrow$ 100 GOLD minted to their wallet
-\item 10\% fee deducted and sent to protocol treasury
+\item Simulatneously, 100 GOLD minted to the protocol treasury
 \item Treasury automatically swaps GOLD for XNT via AMM
 \item LP tokens are deposited into protocol-owned liquidity
 \item LP tokens are permanently burned
@@ -306,7 +306,7 @@ Testnet Alpha & \textbf{Live} & Core gameplay, session keys, basic grid renderin
 Testnet Beta & In Progress & Treasury auto-LP, bitmap reset, stress testing \\
 Security Audit & In Progress & External review of contract and economic model \\
 Mainnet Launch & Planned & Fresh Token-2022 mint, new program keypair, initial LP seed \\
-Post-Launch & Planned & Leaderboards, guilds, seasonal resets, expanded grid \\
+Post-Launch & Planned & Leaderboards, seasonal resets, GOLD NFT utility \\
 \bottomrule
 \end{tabular}
 \end{table}
