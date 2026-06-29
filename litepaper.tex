@@ -1,0 +1,336 @@
+\documentclass[11pt,a4paper]{article}
+
+% ─── Packages ──────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+
+% ─── Colors ──────────────────────────────────────────────────────────────────
+\definecolor{darkgray}{HTML}{333333}
+\definecolor{medgray}{HTML}{666666}
+\definecolor{lightgray}{HTML}{999999}
+\definecolor{accent}{HTML}{2B579A}
+
+% ─── Typography ──────────────────────────────────────────────────────────────
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.8em}
+
+\titleformat{\section}{\Large\bfseries\color{darkgray}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{darkgray}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{medgray}}{\thesubsubsection}{1em}{}
+
+\titlespacing*{\section}{0pt}{2em}{0.8em}
+\titlespacing*{\subsection}{0pt}{1.5em}{0.6em}
+
+% ─── Header / Footer ─────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{lightgray}{Gold Miner Litepaper}}
+\fancyhead[R]{\small\textcolor{lightgray}{\today}}
+\fancyfoot[C]{\small\textcolor{lightgray}{Page \thepage\ of \pageref{LastPage}}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% ─── Document ────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ─── Title Page ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+\centering
+\vspace*{4cm}
+
+{\Huge\bfseries\color{darkgray} Gold Miner}\\[0.6em]
+{\LARGE\color{medgray} A Spatial Resource Competition Game on X1}\\[2em]
+
+\vfill
+
+{\large\color{medgray}
+On-chain multiplayer grid exploration with\par
+consumable gold spots and protocol-owned liquidity.
+}
+
+\vspace{2cm}
+
+{\normalsize\color{lightgray} Litepaper --- Draft \today}
+
+\vspace{1cm}
+
+\end{titlepage}
+
+% ─── Abstract ────────────────────────────────────────────────────────────────
+\section*{Abstract}
+
+Gold Miner is an on-chain multiplayer grid game deployed on the X1 Network (Solana VM). Players navigate a 1,024 $\times$ 1,024 grid, discovering and mining gold spots that yield GOLD tokens (Token-2022). Gold spots are consumable --- once mined, they never respawn for that world epoch. This creates a spatial competition where players must balance exploration, path optimization, and speed against other participants. All mined GOLD is routed through protocol-owned liquidity and permanently burned, creating a deflationary token economy.
+
+\vspace{1em}
+\noindent\textbf{Key properties:} permissionless entry, deterministic world generation, session-key gameplay, auto-LP burn treasury, and permissionless bitmap reset at 75\% exhaustion.
+
+% ─── Table of Contents ─────────────────────────────────────────────────────
+\tableofcontents
+\newpage
+
+% ─── 1. Introduction ───────────────────────────────────────────────────────────
+\section{Introduction}
+
+Most blockchain games fall into two categories: fully on-chain but mechanically simple (turn-based, deterministic), or visually rich but mostly off-chain ( centralized state, token-gated ). Gold Miner pursues a third path: a real-time spatial competition game where every move is recorded on-chain, yet the player experience is fluid and responsive.
+
+The game is played on a 1,024 $\times$ 1,024 grid. Each cell is either empty or contains gold, determined by a public formula: $(x \ \&\ \ y) \ \% \ 7 = 0$. This deterministic generation means every player sees the same world, and foresight --- knowing where gold lies ahead --- becomes a strategic tool rather than an exploit.
+
+Players begin at position $(1,1)$. From there, they move using arrow keys or WASD. Each move is an on-chain transaction signed by an ephemeral session key, eliminating the need for a wallet popup on every action. When a player steps on a gold spot, the contract automatically mints 100 GOLD tokens (Token-2022) to their wallet.
+
+% ─── 2. Core Mechanics ───────────────────────────────────────────────────────
+\section{Core Mechanics}
+
+\subsection{The Grid}
+
+The game world is a discrete grid with the following properties:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+Property & Value \\
+\midrule
+Dimensions & 1,024 $\times$ 1,024 cells \\
+Total cells & 1,048,576 \\
+Gold formula & $(x \ \&\ \ y) \ \% \ 7 = 0$ \\
+Gold per spot & 100 GOLD \\
+Total supply cap & $\sim$150 million GOLD (at 100\% grid exhaustion) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The bitwise-AND modulo formula produces a scattered but deterministic pattern. Players can compute gold locations locally, enabling strategic path planning without revealing information to others.
+
+\subsection{Consumable Resources}
+
+Gold spots are consumed on first mine. Once a cell has been mined, it yields no further GOLD for the remainder of the world epoch. This is not a bug or oversight --- it is the central competitive mechanism.
+
+The consequence is immediate: multiple players converging on the same region compete for a finite resource. Early arrival is rewarded not by a multiplier but by \textit{access to unmined territory}. Late arrivals find only empty cells, silent and harmless.
+
+\subsection{Spatial Diffusion Incentive}
+
+The Nash equilibrium of the game is for players to spread out across the map. Clustering is suboptimal because:
+
+\begin{itemize}[leftmargin=2em]
+\item Shared finite spots lower per-player yield
+\item Travel time to unmined areas increases with local density
+\item First-mover advantage in any region belongs to whoever arrived first
+\end{itemize}
+
+This mirrors real-world resource competition --- gold rushes, mining claims, territorial exploration --- where knowledge and speed compound.
+
+\subsection{Session Keys}
+
+To avoid requiring a wallet signature on every move, Gold Miner uses ephemeral session keys:
+
+\begin{enumerate}[leftmargin=2em]
+\item Player connects wallet and signs one transaction to join
+\item Contract generates an encrypted session keypair (AES-256-GCM via Web Crypto API)
+\item Session key signs all subsequent move transactions
+\item Session expires after $\sim$4 hours (36,000 slots)
+\item Player can start a new session at any time with one wallet signature
+\end{enumerate}
+
+This preserves non-custodial security while enabling fluid gameplay.
+
+% ─── 3. Token Economics ────────────────────────────────────────────────────────
+\section{Token Economics}
+
+\subsection{GOLD Token}
+
+GOLD is a Token-2022 (SPL Token-2022 program) mint with the following parameters:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+Parameter & Value \\
+\midrule
+Name & Goldium \\
+Symbol & GOLD \\
+Decimals & 9 \\
+Mint authority & Game program (mint-on-demand) \\
+Freeze authority & None \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Tokens are minted exclusively through gameplay. There is no pre-mine, no airdrop, no founder allocation. The only source of new GOLD is mining gold spots on the grid.
+
+\subsection{Protocol Treasury and Auto-LP Burn}
+
+All mined GOLD flows through the following pipeline:
+
+\begin{enumerate}[leftmargin=2em]
+\item Player mines gold $\rightarrow$ 100 GOLD minted to their wallet
+\item 10\% fee deducted and sent to protocol treasury
+\item Treasury automatically swaps GOLD for XNT via AMM
+\item LP tokens are deposited into protocol-owned liquidity
+\item LP tokens are permanently burned
+\end{enumerate}
+
+This creates a deflationary flywheel: more gameplay $\rightarrow$ more treasury volume $\rightarrow$ deeper liquidity $\rightarrow$ lower slippage $\rightarrow$ better player experience.
+
+\subsection{Bitmap Reset}
+
+When 75\% of gold spots have been mined, any player can call \texttt{reset\_mineable\_area()} to:
+
+\begin{itemize}[leftmargin=2em]
+\item Zero the on-chain bitmap tracking mined cells
+\item Reset the exhaustion counter
+\item Allow gold to respawn across the grid
+\end{itemize}
+
+This is permissionless and trustless. No admin key, no governance vote. The game self-resets when the world is sufficiently exhausted, preserving long-term playability.
+
+% ─── 4. Architecture ───────────────────────────────────────────────────────────
+\section{Architecture}
+
+\subsection{Smart Contract}
+
+The game is built with Anchor on Solana VM and deployed on X1. Key program instructions:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+Instruction & Description \\
+\midrule
+\texttt{initialize\_game} & One-time setup: grid size, gold formula parameters, token config \\
+\texttt{join\_game} & Player onboarding: creates player state, initializes session key \\
+\texttt{move\_and\_mine} & Core gameplay: validates move, checks gold spot, mints if eligible \\
+\texttt{deposit\_xnt} & Funds player gas account for movement fees \\
+\texttt{withdraw\_xnt} & Returns unused gas to player wallet \\
+\texttt{reset\_mineable\_area} & Permissionless bitmap reset at 75\% exhaustion \\
+\texttt{treasury\_auto\_lp} & Converts treasury GOLD to protocol-owned LP + burn \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{On-Chain State}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+Account & Purpose \\
+\midrule
+Game Config & Grid dimensions, gold formula, mint addresses, fee parameters \\
+Player State & Position, mining history, session key metadata \\
+Bitmap Account & Bitmask of mined cells (sparse, compressed) \\
+Treasury ATA & Holds accumulated 10\% fees before auto-LP conversion \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Frontend}
+
+The client is a Next.js application with TypeScript and TailwindCSS. It handles:
+
+\begin{itemize}[leftmargin=2em]
+\item Wallet connection (Backpack, Phantom, Solflare)
+\item Session key generation and encryption
+\item Grid rendering with WebGL-accelerated canvas
+\item Move batching and RPC optimization
+\item Real-time position and balance updates
+\end{itemize}
+
+% ─── 5. Security Model ─────────────────────────────────────────────────────────
+\section{Security Model}
+
+\subsection{Player Protections}
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Non-custodial:} Player retains full control of wallet and funds at all times
+\item \textbf{Session key expiry:} Ephemeral keys automatically expire, limiting scope of compromise
+\item \textbf{Encrypted storage:} Session keys are AES-256-GCM encrypted in browser localStorage
+\item \textbf{No admin drain:} No privileged instruction can transfer player funds
+\end{itemize}
+
+\subsection{Game Integrity}
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Deterministic world:} Gold locations are computed on-chain from public formula --- no oracle, no randomness, no manipulation
+\item \textbf{Consumable verification:} Bitmap account is updated atomically with mint --- double-mining is impossible
+\item \textbf{Permissionless reset:} No single party controls world state transitions
+\end{itemize}
+
+\subsection{Economic Safeguards}
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Mint-on-demand only:} No pre-mine, no hidden inflation
+\item \textbf{Protocol-owned liquidity:} Treasury funds are LP'd and burned, not held
+\item \textbf{Immutable config option:} Game parameters can be locked via \texttt{finalize\_game()} to prevent post-launch changes
+\end{itemize}
+
+% ─── 6. Gas Economics ──────────────────────────────────────────────────────────
+\section{Gas Economics}
+
+Movement and mining incur on-chain compute costs. Based on actual testnet transactions:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Action & Fee (XNT) & Compute Units \\
+\midrule
+Move (empty cell) & $\sim$0.0012 & $\sim$33,500 \\
+Mine gold (Token-2022 mint) & $\sim$0.0015--0.0017 & $\sim$53,000--57,000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Players pre-fund a gas account via \texttt{deposit\_xnt}. Unused gas can be withdrawn at any time. At typical prices, 1 XNT funds approximately 600--800 moves.
+
+% ─── 7. Roadmap ────────────────────────────────────────────────────────────────
+\section{Roadmap}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+Phase & Status & Description \\
+\midrule
+Testnet Alpha & \textbf{Live} & Core gameplay, session keys, basic grid rendering \\
+Testnet Beta & In Progress & Treasury auto-LP, bitmap reset, stress testing \\
+Security Audit & In Progress & External review of contract and economic model \\
+Mainnet Launch & Planned & Fresh Token-2022 mint, new program keypair, initial LP seed \\
+Post-Launch & Planned & Leaderboards, guilds, seasonal resets, expanded grid \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ─── 8. Conclusion ─────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+Gold Miner demonstrates that on-chain games need not sacrifice mechanical depth for trustlessness. By treating the blockchain as a deterministic, shared game server rather than a settlement layer, we achieve:
+
+\begin{itemize}[leftmargin=2em]
+\item True ownership of mined assets
+\item Verifiable scarcity and fair distribution
+\item Censorship-resistant gameplay
+\item Protocol-aligned incentives through auto-LP burn
+\end{itemize}
+
+The consumable-resource model ensures competition emerges endogenously from the rules rather than from artificial leaderboards or time-limited events. Every player starts at the same position with the same information. What separates them is speed, strategy, and execution.
+
+\vspace{2em}
+\begin{center}
+\textcolor{lightgray}{\rule{0.3\textwidth}{0.4pt}}
+\end{center}
+
+\vspace{1em}
+\noindent\textcolor{lightgray}{\small This litepaper is a living document. For the latest version, contract addresses, and frontend access, see the official repository or join the community channels.}
+
+\end{document}
