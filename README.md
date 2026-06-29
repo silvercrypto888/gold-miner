@@ -1,6 +1,6 @@
 # Gold Miner ⛏️
 
-On-chain multiplayer grid game on X1 Network. Explore a 1,024×1,024 grid, discover gold, and mine GOLD tokens.
+On-chain multiplayer fair mine game on X1 Network. Explore a 1,024×1,024 grid, discover gold, and mine GOLD tokens.
 
 ## How It Works
 
@@ -17,7 +17,7 @@ On-chain multiplayer grid game on X1 Network. Explore a 1,024×1,024 grid, disco
 - **Frontend**: Next.js + TypeScript + TailwindCSS
 - **Session Keys**: One wallet signature → ephemeral browser keypair → AES-256-GCM encrypted via Web Crypto API
 - **GOLD Token**: Token-2022, mint-on-demand through gameplay
-- **Treasury**: Auto-LP burn — all mined GOLD goes to the protocol treasury and is deployed into protocol-owned liquidity, then burned permanently
+- **Treasury**: Auto-LP burn — all mined GOLD that goes to the protocol treasury is deployed into protocol-owned liquidity, then burned permanently
 - **World State**: On-chain bitmap account tracking mined cells (resettable when sufficiently mined out)
 
 ## Program
@@ -50,7 +50,7 @@ npm run dev
 
 ## Gas Costs
 
-*Based on actual on-chain transactions for wallet `A9kbMEknBao8YdMyqMLiUPkkArsr8TghGFQAtyZ3U8ZB` (X1 mainnet, CU price ~30 μlamports/CU).*
+*Based on actual on-chain transactions (X1 mainnet, CU price ~30 μlamports/CU).*
 
 | Action | Fee (XNT) | Avg CU | Notes |
 |--------|-----------|--------|-------|
