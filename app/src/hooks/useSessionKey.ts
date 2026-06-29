@@ -121,6 +121,25 @@ export function useSessionKey() {
     return () => clearTimeout(timer);
   }, [publicKey]);
 
+  // ── Listen for cross-component session save events ──
+  // When another component (e.g. GameCanvas calling startSession) stores a new
+  // session key, this tells ALL useSessionKey instances to reload it.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const sign = signMessageRef.current;
+      if (!sign) return;
+      try {
+        const loaded = await loadSessionKey(sign);
+        if (loaded) {
+          setSessionKeypair(loaded.keypair);
+          setSessionExpiry(loaded.expirySlot);
+        }
+      } catch { /* ignore: user may cancel sign prompt */ }
+    };
+    window.addEventListener("sessionkey-changed", handler);
+    return () => window.removeEventListener("sessionkey-changed", handler);
+  }, []);
+
   // ── Shared helpers ──
 
   const refreshPlayerState = useCallback(async () => {
