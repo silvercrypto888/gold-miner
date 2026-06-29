@@ -204,7 +204,7 @@ export const GoldMinerIDL: Idl = {
     { code: 6002, name: "OutOfBounds", msg: "Move out of bounds" },
     { code: 6003, name: "NoFundsToWithdraw", msg: "No funds to withdraw" },
     { code: 6004, name: "ArithmeticError", msg: "Arithmetic error" },
-    { code: 6005, name: "AlreadyMined", msg: "Position already mined" },
+    { code: 6005, name: "ArithmeticError", msg: "Arithmetic error" },
     { code: 6006, name: "NoGoldHere", msg: "No gold at this position" },
     { code: 6007, name: "InsufficientGoldForLp", msg: "Insufficient GOLD in treasury for LP" },
     { code: 6008, name: "InsufficientLpMinted", msg: "Insufficient LP tokens minted" },

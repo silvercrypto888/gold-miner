@@ -177,6 +177,11 @@ pub mod gold_miner {
 
                 msg!("+{} GOLD at ({},{})", GOLD_PER_MINE, nx, ny);
             } else {
+                // Already mined — this is intentionally NOT an error.
+                // Players can walk over already-mined spots harmlessly.
+                // If you change this to return an error, make sure the
+                // frontend doesn't treat "stepping on a mined spot" as a
+                // terminal failure. It should just mean "no gold here."
                 msg!("Moved ({},{}) mined", nx, ny);
             }
         } else {
