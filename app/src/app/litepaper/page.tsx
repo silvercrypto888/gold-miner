@@ -60,7 +60,7 @@ export default function LitepaperPage() {
             <li>
               <strong>Session Keys:</strong> Players use session keys to cover gas for fast in-game
               movement and mining. Session keys expire after ~4 hours (36,000 slots) and can be topped
-              up with XNT gas.
+              up with XNT gas. Session secret keys are encrypted at rest using <strong>AES-256-GCM</strong> via the browser's native <strong>Web Crypto API</strong> (W3C standard). The encryption key is derived from a wallet signature, so only the same wallet can decrypt — the key never exists in plaintext outside the active session.
             </li>
             <li>
               <strong>Deposit &amp; Withdraw:</strong> Players deposit XNT to create a session. Unspent
@@ -175,6 +175,9 @@ export default function LitepaperPage() {
             </li>
             <li>
               <strong>Token Standard:</strong> SPL Token-2022
+            </li>
+            <li>
+              <strong>Session Key Encryption:</strong> Web Crypto API — AES-256-GCM with SHA-256 key derivation from wallet signatures
             </li>
             <li>
               <strong>World State:</strong> On-chain bitmap account (131,072 bytes) tracking mined cells
