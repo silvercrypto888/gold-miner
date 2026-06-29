@@ -15,8 +15,12 @@ On-chain multiplayer grid game on X1 Network. Explore a 100×100 grid, discover 
 
 - **Program**: Anchor (Solana VM), deployed on X1 Testnet
 - **Frontend**: Next.js + TypeScript + TailwindCSS
-- **Session Keys**: One wallet signature → browser keypair → frictionless moves
+- **Session Keys**: One wallet signature → browser keypair → frictionless moves. Secret keys encrypted with **AES-256-GCM** via the browser's native **Web Crypto API**.
 - **Goldium**: Token-2022, mint-on-demand, tradeable
+
+## Session Key Encryption
+
+Session secret keys are encrypted at rest using **AES-256-GCM** via the browser's native **Web Crypto API** (W3C standard). The key derivation uses a wallet signature as the entropy source — only the same wallet can decrypt. See `LITEPAPER.md` for full details.
 
 ## Program
 
