@@ -6,7 +6,7 @@ use anchor_spl::token::Token;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{Mint, TokenAccount, mint_to, MintTo};
 
-declare_id!("4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr");
+declare_id!("J5SrYjfRKinc7irrWJ1nVHfB3VvpQPidi5rPfEpBHSTu");
 
 pub const GRID_SIZE: u32 = 1024;
 pub const GOLD_PER_MINE: u64 = 100;
@@ -72,11 +72,14 @@ pub mod gold_miner {
         cfg.gold_bitmap = ctx.accounts.gold_bitmap.key();
         cfg.total_gold_mined = 0;
         cfg.bump = ctx.bumps.game_config;
+        cfg.immutable = false;
         msg!("Game init. Grid {}x{}", GRID_SIZE, GRID_SIZE);
         Ok(())
     }
 
     pub fn init_treasury(ctx: Context<InitTreasury>) -> Result<()> {
+        let cfg = &mut ctx.accounts.game_config;
+        require!(!cfg.immutable, GoldMinerError::GameIsImmutable);
         let treasury = &mut ctx.accounts.treasury;
         treasury.game_config = ctx.accounts.game_config.key();
         treasury.gold_accumulated = 0;
@@ -152,7 +155,7 @@ pub mod gold_miner {
                             to: ctx.accounts.player_token_account.to_account_info(),
                             authority: ctx.accounts.game_config.to_account_info(),
                         },
-                        &[&[b"silver_config", &[ctx.accounts.game_config.bump]]],
+                        &[&[b"silver_config_v2", &[ctx.accounts.game_config.bump]]],
                     ),
                     amount,
                 )?;
@@ -166,7 +169,7 @@ pub mod gold_miner {
                             to: ctx.accounts.treasury_token_account.to_account_info(),
                             authority: ctx.accounts.game_config.to_account_info(),
                         },
-                        &[&[b"silver_config", &[ctx.accounts.game_config.bump]]],
+                        &[&[b"silver_config_v2", &[ctx.accounts.game_config.bump]]],
                     ),
                     amount,
                 )?;
@@ -213,6 +216,7 @@ pub mod gold_miner {
 
     pub fn update_gold_mint(ctx: Context<UpdateGoldMint>) -> Result<()> {
         let cfg = &mut ctx.accounts.game_config;
+        require!(!cfg.immutable, GoldMinerError::GameIsImmutable);
         require!(
             ctx.accounts.authority.key() == cfg.authority,
             GoldMinerError::InvalidSessionKey
@@ -220,6 +224,21 @@ pub mod gold_miner {
         let old_mint = cfg.gold_mint;
         cfg.gold_mint = ctx.accounts.new_gold_mint.key();
         msg!("Gold mint updated: {} -> {}", old_mint, cfg.gold_mint);
+        Ok(())
+    }
+
+    /// Finalize the game — permanently locks gold_mint and prevents init_treasury re-init.
+    /// Call this once mainnet configuration is complete. The program remains upgradeable
+    /// via BPF loader, but the game state becomes admin-free.
+    pub fn finalize_game(ctx: Context<FinalizeGame>) -> Result<()> {
+        let cfg = &mut ctx.accounts.game_config;
+        require!(
+            ctx.accounts.authority.key() == cfg.authority,
+            GoldMinerError::InvalidSessionKey
+        );
+        require!(!cfg.immutable, GoldMinerError::GameIsImmutable);
+        cfg.immutable = true;
+        msg!("Game finalized — no further config changes possible");
         Ok(())
     }
 
@@ -501,8 +520,9 @@ pub struct GameConfig {
     pub gold_bitmap: Pubkey,
     pub total_gold_mined: u64,
     pub bump: u8,
+    pub immutable: bool,
 }
-impl GameConfig { pub const SIZE: usize = 8 + 32 + 4 + 32 + 32 + 8 + 1; }
+impl GameConfig { pub const SIZE: usize = 8 + 32 + 4 + 32 + 32 + 8 + 1 + 1; }
 
 #[account]
 #[derive(Default)]
@@ -534,7 +554,7 @@ impl Treasury { pub const SIZE: usize = 8 + 32 + 8 + 8 + 8 + 1; }
 pub struct InitializeGame<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(init, payer = authority, space = GameConfig::SIZE, seeds = [b"silver_config"], bump)]
+    #[account(init, payer = authority, space = GameConfig::SIZE, seeds = [b"silver_config_v2"], bump)]
     pub game_config: Account<'info, GameConfig>,
     /// CHECK: pre-created 128KB bitmap, program-owned
     #[account(mut, owner = crate::ID)]
@@ -549,7 +569,7 @@ pub struct InitializeGame<'info> {
 pub struct InitTreasury<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump,
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump,
               has_one = authority @ GoldMinerError::InvalidSessionKey)]
     pub game_config: Account<'info, GameConfig>,
     #[account(init, payer = authority, space = Treasury::SIZE, seeds = [b"treasury", game_config.key().as_ref()], bump)]
@@ -563,7 +583,7 @@ pub struct JoinGame<'info> {
     pub wallet: Signer<'info>,
     #[account(init, payer = wallet, space = Player::SIZE, seeds = [b"player", wallet.key().as_ref()], bump)]
     pub player: Account<'info, Player>,
-    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump)]
     pub game_config: Account<'info, GameConfig>,
     #[account(mut, address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
@@ -615,7 +635,7 @@ pub struct UpdateGoldMint<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump,
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump,
               has_one = authority @ GoldMinerError::InvalidSessionKey)]
     pub game_config: Account<'info, GameConfig>,
 
@@ -627,12 +647,24 @@ pub struct UpdateGoldMint<'info> {
 }
 
 #[derive(Accounts)]
+pub struct FinalizeGame<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump,
+              has_one = authority @ GoldMinerError::InvalidSessionKey)]
+    pub game_config: Account<'info, GameConfig>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct ResetBitmap<'info> {
     /// Anyone can call — no signer restriction
     pub caller: Signer<'info>,
 
     /// Game config — tracks total_gold_mined
-    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump)]
     pub game_config: Account<'info, GameConfig>,
 
     /// CHECK: raw bitmap bytes, owned by program
@@ -646,7 +678,7 @@ pub struct TreasuryAutoLp<'info> {
     pub authority: Signer<'info>,
 
     /// Game config — used for treasury PDA derivation
-    #[account(mut, seeds = [b"silver_config"], bump = game_config.bump)]
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump)]
     pub game_config: Box<Account<'info, GameConfig>>,
 
     /// Treasury PDA
@@ -744,4 +776,6 @@ pub enum GoldMinerError {
     NotEnoughMinedForReset,
     #[msg("AMM program binary does not match expected fingerprint — possible upgrade")]
     AmmProgramVersionMismatch,
+    #[msg("Game is immutable — no further config changes allowed")]
+    GameIsImmutable,
 }
