@@ -171,16 +171,11 @@ export default function LitepaperPage() {
             unsustainable: shared finite spots drive per-player yield toward zero. The incentive to explore
             new territory arises naturally from the consumable-resource mechanic.
           </p>
-          <p className="text-gray-300 leading-relaxed mb-4">
+          <p className="text-gray-300 leading-relaxed">
             <strong>Foresight</strong> is an intentional feature, not an exploit. With deterministic world
             generation, every player can see where gold lies ahead. But perfect information does not eliminate
             competition — it shifts it from <em>guessing</em> to <em>racing</em>. The competitive equilibrium is
             determined by execution speed and path optimization, not luck.
-          </p>
-          <p className="text-gray-300 leading-relaxed">
-            Already-mined spots return silent success rather than an error. This is a deliberate anti-griefing
-            design: if an error were thrown, a malicious actor could mine ahead of a player simply to make
-            their transaction fail. Silent success preserves the race while keeping the game fair.
           </p>
         </section>
 
