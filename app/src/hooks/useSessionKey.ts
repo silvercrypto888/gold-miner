@@ -9,6 +9,7 @@ import {
   storeSessionKey,
   loadSessionKey,
   clearSessionKey,
+  hasStoredSessionKey,
   getSessionPublicKey,
 } from "@/lib/utils";
 import { GoldMinerIDL } from "@/lib/idl";
@@ -265,6 +266,8 @@ export function useSessionKey() {
   // useGame (3.5M total including rentExempt).
   const sweepSessionKey = useCallback(async (): Promise<boolean> => {
     if (!publicKey || !connectionRef.current || !signMessageRef.current) return false;
+    // Skip wallet prompt if nothing is stored locally
+    if (!hasStoredSessionKey()) return false;
     const loaded = await loadSessionKey(signMessageRef.current);
     if (!loaded) return false;
     const naclKp = loaded.keypair;

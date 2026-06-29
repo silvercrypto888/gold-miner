@@ -72,6 +72,12 @@ export function clearSessionKey(): void {
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: false } }));
 }
 
+/** True if localStorage has a saved session key (does NOT prompt wallet). */
+export function hasStoredSessionKey(): boolean {
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem(SESSION_KEY_STORAGE);
+}
+
 // Sign a message with session key
 export function signWithSessionKey(keypair: nacl.SignKeyPair, message: Uint8Array): Uint8Array {
   return nacl.sign.detached(message, keypair.secretKey);
