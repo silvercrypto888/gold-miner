@@ -166,8 +166,8 @@ export default function LitepaperPage() {
             <strong> endogenous</strong> — it emerges from the rules themselves, not from exogenous bonuses.
           </p>
           <p className="text-gray-300 leading-relaxed mb-4">
-            Because every player starts at the same coordinate, the Nash equilibrium is to <strong>scatter</strong>
-            across the map like particles diffusing through a medium. Clustering in a small area is
+            Because every player starts at the same coordinate, the Nash equilibrium is to <strong>scatter</strong> across 
+            the map like particles diffusing through a medium. Clustering in a small area is
             unsustainable: shared finite spots drive per-player yield toward zero. The incentive to explore
             new territory arises naturally from the consumable-resource mechanic.
           </p>
