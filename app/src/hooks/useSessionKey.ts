@@ -269,15 +269,41 @@ export function useSessionKey() {
   }, [publicKey, signMessage]);
 
   // Start a new session (used for renewal too)
+  // STEP 1: Generate and save session key locally BEFORE spending XNT.
+  // If the signMessage prompt is cancelled, user hasn't paid yet.
   const startSession = useCallback(async () => {
     if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
+
+    // Generate the session keypair first
+    const nkp = nacl.sign.keyPair();
+    const spk = new PublicKey(nkp.publicKey);
+    let expirySlot: number;
+
     try {
-      const nkp = nacl.sign.keyPair();
-      const spk = new PublicKey(nkp.publicKey);
+      // STEP 1: Encrypt and save the session key locally FIRST.
+      // This requires the user to sign a message. If they cancel here,
+      // no XNT has been spent yet.
+      const currentSlot = await connectionRef.current!.getSlot();
+      expirySlot = currentSlot + SESSION_DURATION_SLOTS;
+      await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+    } catch (err: any) {
+      setIsLoading(false);
+      joiningRef.current = false;
+      // Distinguish user rejection from real errors
+      if (err?.message?.toLowerCase().includes("user rejected") || err?.message?.toLowerCase().includes("cancel")) {
+        setError("Session save cancelled. Your XNT was not spent. Please click Start Session again.");
+      } else {
+        setError("Failed to encrypt session key: " + (err.message || "Unknown error") + ". Your XNT was not spent.");
+      }
+      return;
+    }
+
+    // STEP 2: Now that the key is safely saved, send the on-chain TX.
+    try {
       const [ppda] = PublicKey.findProgramAddressSync([Buffer.from("player"), publicKey.toBuffer()], getProgramId());
       const { blockhash, lastValidBlockHeight } = await connectionRef.current!.getLatestBlockhash();
       const tx = new Transaction({ feePayer: publicKey, blockhash, lastValidBlockHeight });
@@ -292,34 +318,62 @@ export function useSessionKey() {
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-      const currentSlot = await connectionRef.current!.getSlot();
-      const expirySlot = currentSlot + SESSION_DURATION_SLOTS;
-      await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+
+      // STEP 3: Success — update local state
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expirySlot } : {
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot, escrowBalance: 0,
       });
       refreshPlayerState();
-    } catch (err: any) { setError(err.message || "Session start failed"); } finally { setIsLoading(false); joiningRef.current = false; }
+    } catch (err: any) {
+      // On-chain TX failed but we already saved the key.
+      // The user can retry — the key is already in localStorage.
+      setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
+    } finally {
+      setIsLoading(false);
+      joiningRef.current = false;
+    }
   }, [publicKey, signTransaction, sweepSessionKey]);
 
   // Guard against double-join/double-start while a session creation TX is in flight
   const joiningRef = useRef(false);
 
   // Join game — creates player + starts session in one TX
+  // STEP 1: Generate and save session key locally BEFORE spending XNT.
   const joinGame = useCallback(async () => {
     if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
     await sweepSessionKey();
     setIsLoading(true); setError(null);
+
+    // Generate the session keypair first
+    const nkp = nacl.sign.keyPair();
+    const spk = new PublicKey(nkp.publicKey);
+    let expirySlot: number;
+
+    try {
+      // STEP 1: Encrypt and save the session key locally FIRST.
+      const currentSlot = await connectionRef.current!.getSlot();
+      expirySlot = currentSlot + SESSION_DURATION_SLOTS;
+      await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+    } catch (err: any) {
+      setIsLoading(false);
+      joiningRef.current = false;
+      if (err?.message?.toLowerCase().includes("user rejected") || err?.message?.toLowerCase().includes("cancel")) {
+        setError("Session save cancelled. Your XNT was not spent. Please click Start Session again.");
+      } else {
+        setError("Failed to encrypt session key: " + (err.message || "Unknown error") + ". Your XNT was not spent.");
+      }
+      return;
+    }
+
+    // STEP 2: Now that the key is saved, send on-chain TX.
     try {
       const programId = getProgramId();
       const [ppda] = PublicKey.findProgramAddressSync([Buffer.from("player"), publicKey.toBuffer()], programId);
       const exists = !!(await connectionRef.current!.getAccountInfo(ppda));
-      const nkp = nacl.sign.keyPair();
-      const spk = new PublicKey(nkp.publicKey);
       const gm = getGoldMint();
       const ata = getGoldAta(publicKey, gm);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current!.getLatestBlockhash();
@@ -343,16 +397,20 @@ export function useSessionKey() {
       const signed = await signTransaction(tx);
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-      const currentSlot = await connectionRef.current!.getSlot();
-      const expirySlot = currentSlot + SESSION_DURATION_SLOTS;
-      await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+
+      // STEP 3: Success
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState({
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot, escrowBalance: 0,
       });
       refreshPlayerState();
-    } catch (err: any) { setError(err.message || "Join failed"); } finally { setIsLoading(false); joiningRef.current = false; }
+    } catch (err: any) {
+      setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
+    } finally {
+      setIsLoading(false);
+      joiningRef.current = false;
+    }
   }, [publicKey, signTransaction, sweepSessionKey]);
 
   const checkSession = useCallback(async (): Promise<boolean> => {
