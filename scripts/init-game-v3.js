@@ -17,8 +17,8 @@ async function main() {
   const dep = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(
     path.resolve(process.env.HOME, ".config/solana/id.json"), "utf-8"))));
 
-  // New game_config PDA with seed 'silver_config'
-  const [cfg] = PublicKey.findProgramAddressSync([Buffer.from("silver_config")], PROG);
+  // New game_config PDA with seed 'silver_config_v2'
+  const [cfg] = PublicKey.findProgramAddressSync([Buffer.from("silver_config_v2")], PROG);
 
   // Generate NEW bitmap keypair (old one owned by old program)
   const bmKp = Keypair.generate();
@@ -43,7 +43,7 @@ async function main() {
 
   // Check if already initialized
   const ex = await conn.getAccountInfo(cfg);
-  if (ex) { console.log("\n✅ silver_config already initialized!"); return; }
+  if (ex) { console.log("\n✅ silver_config_v2 already initialized!"); return; }
 
   // Create 128KB bitmap account (program-owned)
   const BM_SIZE = 131072;

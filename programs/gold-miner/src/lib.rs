@@ -6,7 +6,7 @@ use anchor_spl::token::Token;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{Mint, TokenAccount, mint_to, MintTo};
 
-declare_id!("J5SrYjfRKinc7irrWJ1nVHfB3VvpQPidi5rPfEpBHSTu");
+declare_id!("4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM");
 
 pub const GRID_SIZE: u32 = 1024;
 pub const GOLD_PER_MINE: u64 = 100;

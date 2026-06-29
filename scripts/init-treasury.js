@@ -3,7 +3,7 @@ const { Program, AnchorProvider, web3 } = require('@coral-xyz/anchor');
 const fs = require('fs');
 
 const RPC_URL = 'https://rpc.testnet.x1.xyz';
-const PROGRAM_ID = '4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr';
+const PROGRAM_ID = '4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM';
 
 // Load wallet from Solana CLI default keypair
 const walletPath = process.env.ANCHOR_WALLET || '/home/jack/.config/solana/id.json';
@@ -51,7 +51,7 @@ async function main() {
   console.log('Wallet:', walletKeypair.publicKey.toBase58());
   
   const [configPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('silver_config')],
+    [Buffer.from('silver_config_v2')],
     new PublicKey(PROGRAM_ID)
   );
   console.log('Config PDA:', configPda.toBase58());

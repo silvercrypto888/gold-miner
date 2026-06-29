@@ -9,7 +9,7 @@ const path = require("path");
 const RPC = "https://x1-testnet.xen.network";
 const T22 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 // NEW V4 program ID
-const PROG = new PublicKey("4GkZ3snMDedRn9BRvUtH1rx24AqzpDCZj7VP7WXGfZUr");
+const PROG = new PublicKey("4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM");
 // initialize_game discriminator (anchor)
 const DIS = Buffer.from([44, 62, 102, 247, 126, 208, 130, 215]);
 
@@ -17,8 +17,8 @@ async function main() {
   const dep = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(
     path.resolve(process.env.HOME, ".config/solana/id.json"), "utf-8"))));
 
-  // New game_config PDA with seed 'silver_config'
-  const [cfg] = PublicKey.findProgramAddressSync([Buffer.from("silver_config")], PROG);
+  // New game_config PDA with seed 'silver_config_v2'
+  const [cfg] = PublicKey.findProgramAddressSync([Buffer.from("silver_config_v2")], PROG);
 
   // Generate NEW bitmap keypair
   const bmKp = Keypair.generate();
@@ -30,9 +30,7 @@ async function main() {
   console.log("Saved to:", bmPath);
 
   // Load GOLD mint
-  const mintInfo = JSON.parse(fs.readFileSync(
-    path.resolve(__dirname, "gold-mint-v3-info.json"), "utf-8"));
-  const goldMint = new PublicKey(mintInfo.mint);
+  const goldMint = new PublicKey("FEksZivLhY8LFhuNrtgyke8hTGJV498iybFViapzSdAX");
 
   console.log("Deployer:", dep.publicKey.toBase58());
   console.log("New game_config PDA:", cfg.toBase58());
@@ -43,7 +41,7 @@ async function main() {
 
   // Check if already initialized
   const ex = await conn.getAccountInfo(cfg);
-  if (ex) { console.log("\n✅ silver_config already initialized!"); return; }
+  if (ex) { console.log("\n✅ silver_config_v2 already initialized!"); return; }
 
   // Create 128KB bitmap account (program-owned)
   const BM_SIZE = 131072;
