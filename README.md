@@ -1,13 +1,13 @@
 # Gold Miner ⛏️
 
-On-chain multiplayer grid game on X1 Network. Explore a 100×100 grid, discover gold, and mine Goldium tokens.
+On-chain multiplayer grid game on X1 Network. Explore a 1,024×1,024 grid, discover gold, and mine GOLD tokens.
 
 ## How It Works
 
 1. **Connect wallet** → sign one transaction to join
-2. **Start session** → generates a session key for frictionless movement
+2. **Start session** → generates an encrypted session key for frictionless movement
 3. **Move** with arrow keys or WASD → each move is on-chain, no wallet popup
-4. **Mine gold** → stepping on a gold square auto-mints 100 Goldium (Token-2022)
+4. **Mine gold** → stepping on a gold square auto-mints 100 GOLD (Token-2022)
 5. **Gold formula** → `(x & y) % 7 == 0` — figure out the pattern, navigate efficiently
 6. **Deposit/Withdraw XNT** → fund your movement gas, withdraw anytime
 
@@ -15,8 +15,10 @@ On-chain multiplayer grid game on X1 Network. Explore a 100×100 grid, discover 
 
 - **Program**: Anchor (Solana VM), deployed on X1 Testnet
 - **Frontend**: Next.js + TypeScript + TailwindCSS
-- **Session Keys**: One wallet signature → browser keypair → frictionless moves
-- **Goldium**: Token-2022, mint-on-demand, tradeable
+- **Session Keys**: One wallet signature → ephemeral browser keypair → AES-256-GCM encrypted via Web Crypto API
+- **GOLD Token**: Token-2022, mint-on-demand through gameplay
+- **Treasury**: Auto-LP burn — all mined GOLD goes to the protocol treasury and is deployed into protocol-owned liquidity, then burned permanently
+- **World State**: On-chain bitmap account tracking mined cells (resettable when sufficiently mined out)
 
 ## Program
 
@@ -25,6 +27,9 @@ On-chain multiplayer grid game on X1 Network. Explore a 100×100 grid, discover 
 | Program ID | `EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf` |
 | Network | X1 Testnet |
 | RPC | `https://rpc.testnet.x1.xyz` |
+| Grid Size | 1,024 × 1,024 |
+| Session Duration | ~4 hours (36,000 slots) |
+| Gold per Mine | 100 GOLD |
 
 ## Setup
 
