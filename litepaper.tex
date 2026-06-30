@@ -73,7 +73,7 @@ consumable gold spots and protocol-owned liquidity.
 % ─── Abstract ────────────────────────────────────────────────────────────────
 \section*{Abstract}
 
-Gold Miner is an on-chain multiplayer fair mine game deployed on the X1 Network (Solana VM). Players navigate a 1,024 $\times$ 1,024 grid, discovering and mining gold spots that yield GOLD tokens (Token-2022). Gold spots are consumable --- once mined, they never respawn for that world epoch. This creates a spatial competition where players must balance exploration, path optimization, and speed against other participants. All minted GOLD that is routed through the treasury goes to protocol-owned liquidity and permanently burned, creating a deflationary token economy.
+Gold Miner is an on-chain multiplayer fair mine game deployed on the X1 Network (Solana VM). Players navigate a 1,024 $\times$ 1,024 grid, discovering and mining gold spots that yield GOLD tokens (Token-2022). Gold spots are consumable --- once mined, they never respawn for that world epoch. This creates a spatial competition where players must balance exploration, path optimization, and speed against other participants. All minted GOLD that is routed through the treasury goes to protocol-owned liquidity and is permanently burned, creating a deflationary token economy.
 
 \vspace{1em}
 \noindent\textbf{Key properties:} permissionless entry, deterministic world generation, session-key gameplay, auto-LP burn treasury, and permissionless bitmap reset at 75\% exhaustion.
@@ -177,7 +177,7 @@ All mined GOLD flows through the following pipeline:
 
 \begin{enumerate}[leftmargin=2em]
 \item Player mines gold $\rightarrow$ 100 GOLD minted to their wallet
-\item Simulatneously, 100 GOLD minted to the protocol treasury
+\item Simultaneously, 100 GOLD minted to the protocol treasury
 \item Treasury automatically swaps GOLD for XNT via AMM
 \item LP tokens are deposited into protocol-owned liquidity
 \item LP tokens are permanently burned
