@@ -196,6 +196,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const lastPosSyncRef = useRef(0);
   const syncPlayerPosition = useCallback(async () => {
     if (!connRef.current || !playerState?.wallet) return;
+    // NEVER overwrite optimistic position while a move TX is in flight —
+    // RPC lags behind, causing rubberbanding (chain hasn't seen the TX yet).
+    if (moveInProgressRef.current) return;
     const now = Date.now();
     if (now - lastPosSyncRef.current < 2000) return; // max once per 2s
     lastPosSyncRef.current = now;
