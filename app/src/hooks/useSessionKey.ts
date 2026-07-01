@@ -128,6 +128,9 @@ export function useSessionKey() {
   // session key, this tells ALL useSessionKey instances to reload it.
   useEffect(() => {
     const handler = async (e: Event) => {
+      // Skip events from our own storeSessionKey — we already have the keypair in memory
+      if ((e as CustomEvent).detail?.fromStore) return;
+
       const sign = signMessageRef.current;
       if (!sign) return;
       try {
@@ -341,13 +344,14 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
 
-      // STEP 3: Success — update local state
+      // STEP 3: Success — update local state immediately (optimistic)
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expirySlot } : {
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot,
       });
-      refreshPlayerState();
+      // Delay chain refresh — RPC nodes lag behind, don't clobber our optimistic update
+      setTimeout(() => refreshPlayerState(), 3000);
     } catch (err: any) {
       // On-chain TX failed but we already saved the key.
       // The user can retry — the key is already in localStorage.
@@ -420,13 +424,14 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
 
-      // STEP 3: Success
+      // STEP 3: Success — update local state immediately (optimistic)
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState({
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot,
       });
-      refreshPlayerState();
+      // Delay chain refresh — RPC nodes lag behind, don't clobber our optimistic update
+      setTimeout(() => refreshPlayerState(), 3000);
     } catch (err: any) {
       setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
     } finally {
