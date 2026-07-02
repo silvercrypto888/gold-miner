@@ -6,6 +6,7 @@ import { GameCanvas } from "@/components/GameCanvas";
 import { PlayerHUD } from "@/components/PlayerHUD";
 import { Leaderboard } from "@/components/Leaderboard";
 import { ConsentModal } from "@/components/ConsentModal";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { TreasuryPanel } from "@/components/TreasuryPanel";
 import { useAudio } from "@/hooks/useAudio";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -135,6 +136,7 @@ export default function GameUI() {
         </div>
       </main>
       <ConsentModal />
+      <OnboardingModal />
     </WalletProvider>
   );
 }

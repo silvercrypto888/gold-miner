@@ -674,8 +674,8 @@ pub struct ResetBitmap<'info> {
 
 #[derive(Accounts)]
 pub struct TreasuryAutoLp<'info> {
-    /// Authority signer (game admin or designated operator)
-    pub authority: Signer<'info>,
+    /// Caller / transaction payer (permissionless — anyone can trigger auto-LP)
+    pub caller: Signer<'info>,
 
     /// Game config — used for treasury PDA derivation
     #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump)]
