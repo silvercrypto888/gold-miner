@@ -35,8 +35,16 @@ export function PlayerHUD() {
 
   const handleWithdraw = useCallback(async () => {
     setSweepStatus("Sweeping...");
-    const swept = await sweepSessionKey();
-    setSweepStatus(swept ? "Withdrawn ✓" : "Nothing to withdraw");
+    const result = await sweepSessionKey();
+    if (result.ok) {
+      setSweepStatus("Withdrawn ✓");
+    } else if (result.ok === false) {
+      if (result.reason === "no_key" || result.reason === "no_funds") {
+        setSweepStatus("Nothing to withdraw");
+      } else {
+        setSweepStatus("Error: " + (result.detail || result.reason));
+      }
+    }
     setTimeout(() => setSweepStatus(null), 3000);
   }, [sweepSessionKey]);
 

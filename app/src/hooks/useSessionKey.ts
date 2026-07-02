@@ -11,6 +11,9 @@ import {
   clearSessionKey,
   hasStoredSessionKey,
   getSessionPublicKey,
+  backupSessionKey,
+  restoreSessionKey,
+  clearBackupSessionKey,
 } from "@/lib/utils";
 import { GoldMinerIDL } from "@/lib/idl";
 import {
@@ -23,6 +26,10 @@ import {
   SESSION_DURATION_SLOTS,
 } from "@/lib/constants";
 import { PlayerState } from "@/types";
+
+// ── Sweep result types (used by sweepSessionKey + callers) ──
+type SweepOk = { ok: true };
+type SweepErr = { ok: false; reason: string; detail?: string };
 
 const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
 const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
@@ -267,40 +274,77 @@ export function useSessionKey() {
   // the Token-2022 ATA creation rent (~2.04M) in move_and_mine CPI plus
   // its own rent-exempt balance. Matches SESSION_MIN_SAFE_BALANCE in
   // useGame (3.5M total including rentExempt).
-  const sweepSessionKey = useCallback(async (): Promise<boolean> => {
-    if (!publicKey || !connectionRef.current || !signMessageRef.current) return false;
-    // Skip wallet prompt if nothing is stored locally
-    if (!hasStoredSessionKey()) return false;
-    const loaded = await loadSessionKey(signMessageRef.current);
-    if (!loaded) return false;
+  //
+  // Returns { ok: true } on success, { ok: false, reason: "..." } on failure.
+  // "no_key" / "no_funds" = harmless skip conditions.
+  // "user_rejected" / "rpc_error" / "sweep_failed" = real errors the caller should abort on.
+  const sweepSessionKey = useCallback(async (): Promise<SweepOk | SweepErr> => {
+    if (!publicKey || !connectionRef.current || !signMessageRef.current) {
+      return { ok: false, reason: "no_wallet" };
+    }
+    // Skip if nothing is stored locally
+    if (!hasStoredSessionKey()) return { ok: false, reason: "no_key" };
+
+    let loaded: { keypair: nacl.SignKeyPair; expirySlot: number } | null = null;
+    try {
+      loaded = await loadSessionKey(signMessageRef.current);
+    } catch (err: any) {
+      const msg = err?.message?.toLowerCase() || "";
+      if (msg.includes("user rejected") || msg.includes("cancel")) {
+        return { ok: false, reason: "user_rejected", detail: "User cancelled the wallet prompt to decrypt the old session key" };
+      }
+      return { ok: false, reason: "decrypt_failed", detail: err?.message || "Unknown error" };
+    }
+    if (!loaded) return { ok: false, reason: "no_key" };
+
     const naclKp = loaded.keypair;
     const sk = new PublicKey(naclKp.publicKey);
     try {
       const balance = await connectionRef.current.getBalance(sk);
-      if (balance <= SWEEP_DUST_THRESHOLD) return false;
+      if (balance <= SWEEP_DUST_THRESHOLD) return { ok: false, reason: "no_funds" };
       const kp = Keypair.fromSecretKey(naclKp.secretKey);
       const { blockhash, lastValidBlockHeight } = await connectionRef.current.getLatestBlockhash();
       const rentExempt = await connectionRef.current.getMinimumBalanceForRentExemption(0);
       const LEAVE_BEHIND = rentExempt + 2_500_000; // matches SESSION_MIN_SAFE_BALANCE
       const amount = balance - LEAVE_BEHIND;
-      if (amount <= 0) return false;
+      if (amount <= 0) return { ok: false, reason: "no_funds" };
       const tx = new Transaction({ feePayer: sk, blockhash, lastValidBlockHeight });
       tx.add(SystemProgram.transfer({ fromPubkey: sk, toPubkey: publicKey, lamports: amount }));
       tx.sign(kp);
       const sig = await connectionRef.current.sendRawTransaction(tx.serialize());
       await connectionRef.current.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
-      return true;
-    } catch { return false; }
+      return { ok: true };
+    } catch (err: any) {
+      console.error("Sweep failed:", err);
+      return { ok: false, reason: "sweep_failed", detail: err?.message || "Unknown error" };
+    }
   }, [publicKey, signMessage]);
 
   // Start a new session (used for renewal too)
-  // STEP 1: Generate and save session key locally BEFORE spending XNT.
-  // If the signMessage prompt is cancelled, user hasn't paid yet.
+  // STEP 1: Sweep old session key first. If sweep fails for a real reason
+  // (user rejected, RPC error), abort before overwriting localStorage.
+  // STEP 2: Backup old session key before overwriting.
+  // STEP 3: Save new key locally.
+  // STEP 4: Send on-chain TX.
+  // STEP 5: On chain failure, restore old key from backup so user can retry.
   const startSession = useCallback(async () => {
     if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
-    await sweepSessionKey();
+
+    // ── STEP 1: Sweep old session key ──
+    const sweepResult = await sweepSessionKey();
+    if (!sweepResult.ok) {
+      // Harmless skips (no key, no funds) — continue normally.
+      // Real errors — abort before touching localStorage.
+      if (sweepResult.ok === false && (sweepResult.reason === "user_rejected" || sweepResult.reason === "decrypt_failed" || sweepResult.reason === "sweep_failed")) {
+        joiningRef.current = false;
+        setError("Session renewal paused: " + (sweepResult.detail || sweepResult.reason) + ". Please fix the issue and try again.");
+        return;
+      }
+      // else: no_key, no_funds, no_wallet — keep going
+    }
+
     setIsLoading(true); setError(null);
 
     // Generate the session keypair first
@@ -308,8 +352,11 @@ export function useSessionKey() {
     const spk = new PublicKey(nkp.publicKey);
     let expirySlot: number;
 
+    // ── STEP 2: Backup old key before overwriting ──
+    backupSessionKey();
+
     try {
-      // STEP 1: Encrypt and save the session key locally FIRST.
+      // ── STEP 3: Encrypt and save the new session key locally FIRST ──
       // This requires the user to sign a message. If they cancel here,
       // no XNT has been spent yet.
       const currentSlot = await connectionRef.current!.getSlot();
@@ -318,6 +365,8 @@ export function useSessionKey() {
     } catch (err: any) {
       setIsLoading(false);
       joiningRef.current = false;
+      // Restore old key since we haven't spent anything yet
+      restoreSessionKey();
       // Distinguish user rejection from real errors
       if (err?.message?.toLowerCase().includes("user rejected") || err?.message?.toLowerCase().includes("cancel")) {
         setError("Session save cancelled. Your XNT was not spent. Please click Start Session again.");
@@ -327,7 +376,7 @@ export function useSessionKey() {
       return;
     }
 
-    // STEP 2: Now that the key is safely saved, send the on-chain TX.
+    // ── STEP 4: Now that the key is safely saved, send the on-chain TX ──
     try {
       const [ppda] = PublicKey.findProgramAddressSync([Buffer.from("player"), publicKey.toBuffer()], getProgramId());
       const { blockhash, lastValidBlockHeight } = await connectionRef.current!.getLatestBlockhash();
@@ -344,7 +393,8 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
 
-      // STEP 3: Success — update local state immediately (optimistic)
+      // ── STEP 5: Success — clean up backup and update local state ──
+      clearBackupSessionKey();
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expirySlot } : {
@@ -353,9 +403,15 @@ export function useSessionKey() {
       // Delay chain refresh — RPC nodes lag behind, don't clobber our optimistic update
       setTimeout(() => refreshPlayerState(), 3000);
     } catch (err: any) {
-      // On-chain TX failed but we already saved the key.
-      // The user can retry — the key is already in localStorage.
-      setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
+      // On-chain TX failed but we already saved the new key (and lost the old one).
+      // Restore the old key from backup so the user isn't stranded.
+      const restored = restoreSessionKey();
+      if (restored) {
+        setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your previous session key has been restored — try again or clear session to start fresh.");
+      } else {
+        // No backup existed (first session?) — still leave the new key saved
+        setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
+      }
     } finally {
       setIsLoading(false);
       joiningRef.current = false;
@@ -366,12 +422,26 @@ export function useSessionKey() {
   const joiningRef = useRef(false);
 
   // Join game — creates player + starts session in one TX
-  // STEP 1: Generate and save session key locally BEFORE spending XNT.
+  // STEP 1: Sweep old session key first. If sweep fails for a real reason, abort.
+  // STEP 2: Backup old key, then save new key locally before on-chain TX.
+  // STEP 3: Send on-chain TX.
+  // STEP 4: On failure, restore backup.
   const joinGame = useCallback(async () => {
     if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
-    await sweepSessionKey();
+
+    // ── STEP 1: Sweep old session key ──
+    const sweepResult = await sweepSessionKey();
+    if (!sweepResult.ok) {
+      if (sweepResult.ok === false && (sweepResult.reason === "user_rejected" || sweepResult.reason === "decrypt_failed" || sweepResult.reason === "sweep_failed")) {
+        joiningRef.current = false;
+        setError("Join paused: " + (sweepResult.detail || sweepResult.reason) + ". Please fix the issue and try again.");
+        return;
+      }
+      // no_key, no_funds, no_wallet — keep going
+    }
+
     setIsLoading(true); setError(null);
 
     // Generate the session keypair first
@@ -379,14 +449,17 @@ export function useSessionKey() {
     const spk = new PublicKey(nkp.publicKey);
     let expirySlot: number;
 
+    // ── STEP 2: Backup old key, then save new key locally FIRST ──
+    backupSessionKey();
+
     try {
-      // STEP 1: Encrypt and save the session key locally FIRST.
       const currentSlot = await connectionRef.current!.getSlot();
       expirySlot = currentSlot + SESSION_DURATION_SLOTS;
       await storeSessionKey(nkp, expirySlot, signMessageRef.current);
     } catch (err: any) {
       setIsLoading(false);
       joiningRef.current = false;
+      restoreSessionKey();
       if (err?.message?.toLowerCase().includes("user rejected") || err?.message?.toLowerCase().includes("cancel")) {
         setError("Session save cancelled. Your XNT was not spent. Please click Start Session again.");
       } else {
@@ -395,7 +468,7 @@ export function useSessionKey() {
       return;
     }
 
-    // STEP 2: Now that the key is saved, send on-chain TX.
+    // ── STEP 3: Send on-chain TX ──
     try {
       const programId = getProgramId();
       const [ppda] = PublicKey.findProgramAddressSync([Buffer.from("player"), publicKey.toBuffer()], programId);
@@ -424,7 +497,8 @@ export function useSessionKey() {
       const sig = await connectionRef.current!.sendRawTransaction(signed.serialize());
       await connectionRef.current!.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
 
-      // STEP 3: Success — update local state immediately (optimistic)
+      // ── STEP 4: Success — clean up backup and update local state ──
+      clearBackupSessionKey();
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       setPlayerState({
@@ -433,7 +507,12 @@ export function useSessionKey() {
       // Delay chain refresh — RPC nodes lag behind, don't clobber our optimistic update
       setTimeout(() => refreshPlayerState(), 3000);
     } catch (err: any) {
-      setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
+      const restored = restoreSessionKey();
+      if (restored) {
+        setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your previous session key has been restored — try again or clear session to start fresh.");
+      } else {
+        setError("On-chain transaction failed: " + (err.message || "Unknown error") + ". Your session key is saved locally — try again.");
+      }
     } finally {
       setIsLoading(false);
       joiningRef.current = false;

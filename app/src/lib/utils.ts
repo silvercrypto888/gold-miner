@@ -5,6 +5,8 @@ import { SessionKeyData } from "@/types";
 import { SESSION_KEY_STORAGE, LAMPORTS_PER_SOL } from "./constants";
 import { encryptSessionKey, decryptSessionKey } from "./sessionCrypto";
 
+const SESSION_KEY_BACKUP = SESSION_KEY_STORAGE + "_backup";
+
 // Generate a new session keypair
 export function generateSessionKeypair(): nacl.SignKeyPair {
   return nacl.sign.keyPair();
@@ -70,6 +72,45 @@ export function clearSessionKey(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SESSION_KEY_STORAGE);
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: false } }));
+}
+
+// Read the stored session public key WITHOUT decrypting (safe to call without wallet prompt)
+export function getStoredSessionPublicKey(): string | null {
+  if (typeof window === "undefined") return null;
+  const stored = localStorage.getItem(SESSION_KEY_STORAGE);
+  if (!stored) return null;
+  try {
+    const data: SessionKeyData = JSON.parse(stored);
+    return data.publicKey || null;
+  } catch {
+    return null;
+  }
+}
+
+// Backup current session key before overwriting it
+export function backupSessionKey(): void {
+  if (typeof window === "undefined") return;
+  const stored = localStorage.getItem(SESSION_KEY_STORAGE);
+  if (stored) {
+    localStorage.setItem(SESSION_KEY_BACKUP, stored);
+  }
+}
+
+// Restore session key from backup (used when on-chain TX fails after localStorage was overwritten)
+export function restoreSessionKey(): boolean {
+  if (typeof window === "undefined") return false;
+  const backed = localStorage.getItem(SESSION_KEY_BACKUP);
+  if (!backed) return false;
+  localStorage.setItem(SESSION_KEY_STORAGE, backed);
+  localStorage.removeItem(SESSION_KEY_BACKUP);
+  window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: true } }));
+  return true;
+}
+
+// Clear backup after successful operation
+export function clearBackupSessionKey(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(SESSION_KEY_BACKUP);
 }
 
 /** True if localStorage has a saved session key (does NOT prompt wallet). */
