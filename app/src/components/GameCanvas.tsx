@@ -261,6 +261,45 @@ const prevForesightRef = useRef(foresightMode);
   useEffect(() => { playersRef.current = visiblePlayers; }, [visiblePlayers]);
   useEffect(() => { showPlayersRef.current = showPlayers; }, [showPlayers]);
 
+  // ── Nearby sparks: gentle particles from gold spots adjacent to player ──
+  interface NearbySpark {
+    ox: number; oy: number;
+    angle: number; speed: number;
+    startTime: number;
+  }
+  const nearbySparksRef = useRef<NearbySpark[]>([]);
+  const lastSparkSpawnRef = useRef(0);
+
+  useEffect(() => {
+    const now = performance.now();
+    // Throttle: only spawn every 400ms while adjacent
+    if (now - lastSparkSpawnRef.current < 400) return;
+    lastSparkSpawnRef.current = now;
+
+    const px = Math.round(position.x);
+    const py = Math.round(position.y);
+    const neighbors = [
+      { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+      { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+    ];
+    for (const { dx, dy } of neighbors) {
+      const nx = px + dx;
+      const ny = py + dy;
+      if (nx < 1 || nx > GRID_SIZE || ny < 1 || ny > GRID_SIZE) continue;
+      if (hasGoldAt(nx, ny) && visibleGold.some(g => g.x === nx && g.y === ny && g.hasGold)) {
+        // Spawn 2–3 tiny sparks from this adjacent gold spot
+        for (let i = 0; i < 3; i++) {
+          nearbySparksRef.current.push({
+            ox: nx, oy: ny,
+            angle: Math.random() * Math.PI * 2,
+            speed: 0.04 + Math.random() * 0.08,
+            startTime: now + Math.random() * 200, // stagger slightly
+          });
+        }
+      }
+    }
+  }, [position, visibleGold]);
+
   // Smooth position interpolation — triggered when position changes
   useEffect(() => {
     posSmoothRef.current = {
@@ -498,20 +537,41 @@ const prevForesightRef = useRef(foresightMode);
 
           ctx.fillStyle = particleColor;
           // 8-pixel spark pattern: corners + 2x2 center (no edge pixels)
-          // G . . G
-          // . G G .
-          // . G G .
-          // G . . G
           const bx = Math.round(psx) - 2;
           const by = Math.round(psy) - 2;
-          ctx.fillRect(bx,     by,     1, 1); // top-left corner
-          ctx.fillRect(bx + 3, by,     1, 1); // top-right corner
-          ctx.fillRect(bx + 1, by + 1, 1, 1); // center row 1, col 1
-          ctx.fillRect(bx + 2, by + 1, 1, 1); // center row 1, col 2
-          ctx.fillRect(bx + 1, by + 2, 1, 1); // center row 2, col 1
-          ctx.fillRect(bx + 2, by + 2, 1, 1); // center row 2, col 2
-          ctx.fillRect(bx,     by + 3, 1, 1); // bottom-left corner
-          ctx.fillRect(bx + 3, by + 3, 1, 1); // bottom-right corner
+          ctx.fillRect(bx,     by,     1, 1);
+          ctx.fillRect(bx + 3, by,     1, 1);
+          ctx.fillRect(bx + 1, by + 1, 1, 1);
+          ctx.fillRect(bx + 2, by + 1, 1, 1);
+          ctx.fillRect(bx + 1, by + 2, 1, 1);
+          ctx.fillRect(bx + 2, by + 2, 1, 1);
+          ctx.fillRect(bx,     by + 3, 1, 1);
+          ctx.fillRect(bx + 3, by + 3, 1, 1);
+        }
+      }
+
+      // ── Nearby gold sparks: smaller, shorter-lived ──
+      if (nearbySparksRef.current.length > 0) {
+        const sparks = nearbySparksRef.current;
+        for (let i = sparks.length - 1; i >= 0; i--) {
+          const s = sparks[i];
+          const elapsed = now - s.startTime;
+          if (elapsed > 1500) { sparks.splice(i, 1); continue; } // shorter lifetime: 1.5s
+          const t = elapsed / 1000;
+          const twistAngle = s.angle + t * 1.5; // gentler twist
+          const gx = s.ox + Math.cos(twistAngle) * s.speed * t;
+          const gy = s.oy + Math.sin(twistAngle) * s.speed * t;
+
+          const ssx = (gx - minX) * CELL_SIZE + CELL_SIZE / 2 - offX;
+          const ssy = (maxY - gy) * CELL_SIZE + CELL_SIZE / 2 + offY;
+
+          // Warm golden fade: start bright, fade to amber
+          const fade = 1 - (elapsed / 1500);
+          const r = Math.round(255 * fade + 180 * (1 - fade));
+          const g = Math.round(220 * fade + 150 * (1 - fade));
+          ctx.fillStyle = `rgba(${r},${g},0,${fade})`;
+          // 2x2 pixel (subtle sparkle)
+          ctx.fillRect(Math.round(ssx) - 1, Math.round(ssy) - 1, 2, 2);
         }
       }
 
