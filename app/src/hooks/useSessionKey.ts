@@ -186,6 +186,33 @@ export function useSessionKey() {
     }
   }, [playerState?.sessionExpiresAt]);
 
+  // ── Key-mismatch guard: if chain says a different session key than localStorage,
+  // try to restore from backup, else wipe localStorage so the user starts fresh.
+  useEffect(() => {
+    if (!playerState?.sessionKey || !sessionKeypair) return;
+    const localPk = new PublicKey(sessionKeypair.publicKey);
+    if (playerState.sessionKey.equals(localPk)) return;
+    // Mismatch detected: loaded key doesn't match on-chain session key
+    const restored = restoreSessionKey();
+    if (restored) {
+      // Backup was restored to localStorage; reload it into state
+      if (!signMessageRef.current) return;
+      loadSessionKey(signMessageRef.current).then(loaded => {
+        if (loaded) {
+          setSessionKeypair(loaded.keypair);
+          setSessionExpiry(loaded.expirySlot);
+          setError("Session key restored from backup (chain mismatch detected).");
+        }
+      });
+    } else {
+      // No backup — localStorage key is orphaned
+      clearSessionKey();
+      setSessionKeypair(null);
+      setSessionExpiry(null);
+      setError("Session key mismatch detected (localStorage key doesn't match chain). Starting fresh...");
+    }
+  }, [playerState?.sessionKey?.toBase58(), sessionKeypair]);
+
   // Listen for sessionkey-changed events from localStorage changes.
   useEffect(() => {
     const handler = async (e: Event) => {
@@ -531,7 +558,7 @@ export function useSessionKey() {
     } catch { return false; }
   }, [publicKey, refreshPlayerState]);
 
-  const clearSession = useCallback(() => { clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
+  const clearSession = useCallback(() => { clearBackupSessionKey(); clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
   const isSessionValid = useCallback((): boolean => {
     if (!sessionKeypair) return false;

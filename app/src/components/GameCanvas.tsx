@@ -597,7 +597,7 @@ const prevForesightRef = useRef(foresightMode);
           Your session key has expired. Start a new session to keep mining.
         </p>
         <button
-          onClick={() => { clearSession(); startSession(); }}
+          onClick={startSession}
           disabled={isLoading}
           className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold py-3 px-8 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
