@@ -4,7 +4,7 @@ Sounds
 
 "gold_mine", "walk", "enter_foresight", "exit_foresight" are all in the public domain (taken and/or barely modified from CC0-licensed sounds at https://opengameart.org/content/library-of-game-sounds).
 
-"angelical-pad", "bell", "cinematic-boom", "winter-wind", "choir", "shine" are all from Pixiv (royalty-free site).
+"angelical-pad", "bell", "cinematic-boom", "winter-wind", "choir", "shine" are all from Pixabay (royalty-free site).
 
 https://pixabay.com/sound-effects/musical-angelical-pad-143276/
 https://pixabay.com/sound-effects/film-special-effects-bell-222490/
