@@ -284,7 +284,7 @@ const prevForesightRef = useRef(foresightMode);
         if (nx < 1 || nx > GRID_SIZE || ny < 1 || ny > GRID_SIZE) continue;
         if (hasGoldAt(nx, ny) && visibleGold.some(g => g.x === nx && g.y === ny && g.hasGold)) {
           // Spawn 5 tiny sparks from each adjacent gold spot
-          for (let i = 0; i < 5; i++) {
+          for (let i = 0; i < 9; i++) {
             nearbySparksRef.current.push({
               ox: nx, oy: ny,
               angle: Math.random() * Math.PI * 2,
