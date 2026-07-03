@@ -19,6 +19,7 @@ const SOUND_CANDIDATES: Record<string, string> = {
   bell: "/assets/sounds/bell.opus",
   angelical_pad: "/assets/sounds/angelical-pad.opus",
   cinematic_boom: "/assets/sounds/cinematic-boom.opus",
+  shine: "/assets/sounds/shine.opus",
 };
 
 export function useAudio() {
@@ -110,6 +111,16 @@ export function useAudio() {
       const audio = getSound(url);
       audio.currentTime = 0;
       audio.play().catch(() => {});
+
+      // When mining gold, also play the shine sparkle simultaneously
+      if (name === "mine") {
+        const shineUrl = SOUND_CANDIDATES["shine"];
+        if (shineUrl) {
+          const shineAudio = getSound(shineUrl);
+          shineAudio.currentTime = 0;
+          shineAudio.play().catch(() => {});
+        }
+      }
     },
     [soundEnabled, getSound]
   );
