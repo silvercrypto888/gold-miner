@@ -288,7 +288,7 @@ const prevForesightRef = useRef(foresightMode);
             nearbySparksRef.current.push({
               ox: nx, oy: ny,
               angle: Math.random() * Math.PI * 2,
-              speed: 0.03 + Math.random() * 0.07,
+              speed: 0.08 + Math.random() * 0.12,
               startTime: now + Math.random() * 200, // stagger slightly
             });
           }
