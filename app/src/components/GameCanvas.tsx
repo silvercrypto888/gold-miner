@@ -395,7 +395,7 @@ const prevForesightRef = useRef(foresightMode);
             const cy = sy + CELL_SIZE / 2;
             const r = CELL_SIZE / 2;
             const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-            grd.addColorStop(0, "rgba(255, 215, 0, 0.06)");
+            grd.addColorStop(0, "rgba(255, 215, 0, 0.10)");
             grd.addColorStop(1, "rgba(255, 215, 0, 0)");
             ctx.fillStyle = grd;
             ctx.fillRect(sx, sy, CELL_SIZE, CELL_SIZE);
