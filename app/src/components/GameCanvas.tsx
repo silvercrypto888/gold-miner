@@ -366,6 +366,16 @@ const prevForesightRef = useRef(foresightMode);
       for (const g of goldSpots) {
         if (g.hasGold) goldKeySet.add(`${g.x},${g.y}`);
       }
+      // Build adjacent-gold gleam set (empty tiles 1 tile away from gold)
+      const gleamKeySet = new Set<string>();
+      goldKeySet.forEach((key) => {
+        const [gx, gy] = key.split(',').map(Number);
+        for (const [dx, dy] of [[1,0], [-1,0], [0,1], [0,-1]]) {
+          const nx = gx + dx, ny = gy + dy;
+          const nKey = `${nx},${ny}`;
+          if (!goldKeySet.has(nKey)) gleamKeySet.add(nKey);
+        }
+      });
       const goldScreenPositions: { x: number; y: number; screenX: number; screenY: number }[] = [];
 
       // Lazily init tile textures once
@@ -379,6 +389,17 @@ const prevForesightRef = useRef(foresightMode);
           const isDark = (x + y) % 2 === 0;
           ctx.drawImage(isDark ? _darkTile : _lightTile, sx, sy);
 
+          // ── Gold Gleam: subtle radial golden glow on empty tiles adjacent to gold ──
+          if (!isForesight && gleamKeySet.has(`${x},${y}`)) {
+            const cx = sx + CELL_SIZE / 2;
+            const cy = sy + CELL_SIZE / 2;
+            const r = CELL_SIZE / 2;
+            const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+            grd.addColorStop(0, "rgba(255, 215, 0, 0.06)");
+            grd.addColorStop(1, "rgba(255, 215, 0, 0)");
+            ctx.fillStyle = grd;
+            ctx.fillRect(sx, sy, CELL_SIZE, CELL_SIZE);
+          }
 
           // Edge labels
           if (x === minX || y === maxY) {
