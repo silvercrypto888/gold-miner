@@ -268,36 +268,34 @@ const prevForesightRef = useRef(foresightMode);
     startTime: number;
   }
   const nearbySparksRef = useRef<NearbySpark[]>([]);
-  const lastSparkSpawnRef = useRef(0);
 
   useEffect(() => {
-    const now = performance.now();
-    // Throttle: only spawn every 400ms while adjacent
-    if (now - lastSparkSpawnRef.current < 400) return;
-    lastSparkSpawnRef.current = now;
-
-    const px = Math.round(position.x);
-    const py = Math.round(position.y);
-    const neighbors = [
-      { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
-      { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
-    ];
-    for (const { dx, dy } of neighbors) {
-      const nx = px + dx;
-      const ny = py + dy;
-      if (nx < 1 || nx > GRID_SIZE || ny < 1 || ny > GRID_SIZE) continue;
-      if (hasGoldAt(nx, ny) && visibleGold.some(g => g.x === nx && g.y === ny && g.hasGold)) {
-        // Spawn 2–3 tiny sparks from this adjacent gold spot
-        for (let i = 0; i < 3; i++) {
-          nearbySparksRef.current.push({
-            ox: nx, oy: ny,
-            angle: Math.random() * Math.PI * 2,
-            speed: 0.04 + Math.random() * 0.08,
-            startTime: now + Math.random() * 200, // stagger slightly
-          });
+    const interval = setInterval(() => {
+      const now = performance.now();
+      const px = Math.round(position.x);
+      const py = Math.round(position.y);
+      const neighbors = [
+        { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+        { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+      ];
+      for (const { dx, dy } of neighbors) {
+        const nx = px + dx;
+        const ny = py + dy;
+        if (nx < 1 || nx > GRID_SIZE || ny < 1 || ny > GRID_SIZE) continue;
+        if (hasGoldAt(nx, ny) && visibleGold.some(g => g.x === nx && g.y === ny && g.hasGold)) {
+          // Spawn 5 tiny sparks from each adjacent gold spot
+          for (let i = 0; i < 5; i++) {
+            nearbySparksRef.current.push({
+              ox: nx, oy: ny,
+              angle: Math.random() * Math.PI * 2,
+              speed: 0.03 + Math.random() * 0.07,
+              startTime: now + Math.random() * 200, // stagger slightly
+            });
+          }
         }
       }
-    }
+    }, 400); // every 400ms while adjacent
+    return () => clearInterval(interval);
   }, [position, visibleGold]);
 
   // Smooth position interpolation — triggered when position changes
@@ -556,7 +554,7 @@ const prevForesightRef = useRef(foresightMode);
         for (let i = sparks.length - 1; i >= 0; i--) {
           const s = sparks[i];
           const elapsed = now - s.startTime;
-          if (elapsed > 1500) { sparks.splice(i, 1); continue; } // shorter lifetime: 1.5s
+          if (elapsed > 2200) { sparks.splice(i, 1); continue; } // modest lifetime: 2.2s
           const t = elapsed / 1000;
           const twistAngle = s.angle + t * 1.5; // gentler twist
           const gx = s.ox + Math.cos(twistAngle) * s.speed * t;
@@ -566,7 +564,7 @@ const prevForesightRef = useRef(foresightMode);
           const ssy = (maxY - gy) * CELL_SIZE + CELL_SIZE / 2 + offY;
 
           // Warm golden fade: start bright, fade to amber
-          const fade = 1 - (elapsed / 1500);
+          const fade = 1 - (elapsed / 2200);
           const r = Math.round(255 * fade + 180 * (1 - fade));
           const g = Math.round(220 * fade + 150 * (1 - fade));
           ctx.fillStyle = `rgba(${r},${g},0,${fade})`;
