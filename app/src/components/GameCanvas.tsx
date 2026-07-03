@@ -390,7 +390,7 @@ const prevForesightRef = useRef(foresightMode);
           ctx.drawImage(isDark ? _darkTile : _lightTile, sx, sy);
 
           // ── Gold Gleam: subtle radial golden glow on empty tiles adjacent to gold ──
-          if (!isForesight && gleamKeySet.has(`${x},${y}`)) {
+          if (gleamKeySet.has(`${x},${y}`)) {
             const cx = sx + CELL_SIZE / 2;
             const cy = sy + CELL_SIZE / 2;
             const r = CELL_SIZE / 2;
