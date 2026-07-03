@@ -395,8 +395,13 @@ const prevForesightRef = useRef(foresightMode);
             const cy = sy + CELL_SIZE / 2;
             const r = CELL_SIZE / 2;
             const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-            grd.addColorStop(0, "rgba(255, 215, 0, 0.10)");
-            grd.addColorStop(1, "rgba(255, 215, 0, 0)");
+            // Time-synced warm pulse: matches spark gold → amber cycle
+            const cycle = (Math.sin(now / 800) + 1) / 2; // 0..1, ~2.5s period
+            const rr = Math.round(180 + 75 * cycle);
+            const gg = Math.round(150 + 70 * cycle);
+            const aa = (0.08 + 0.05 * cycle).toFixed(3);
+            grd.addColorStop(0, `rgba(${rr},${gg},0,${aa})`);
+            grd.addColorStop(1, `rgba(${rr},${gg},0,0)`);
             ctx.fillStyle = grd;
             ctx.fillRect(sx, sy, CELL_SIZE, CELL_SIZE);
           }
