@@ -46,6 +46,11 @@ export function useSessionKey() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+  // Grace period after optimistic session renewal — ignore stale RPC data + mismatch guard
+  const renewedAtRef = useRef<number>(0);
+  // Mutable ref for the current expected expiry — used by refreshPlayerState to defend
+  // against stale RPC closures. Unlike sessionExpiry state, this updates immediately.
+  const expectedExpiryRef = useRef<number | null>(null);
   const [currentSlot, setCurrentSlot] = useState<number>(0);
   const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
@@ -171,8 +176,17 @@ export function useSessionKey() {
           goldiumMinted: Number(d.readBigUInt64LE(80)),
           sessionExpiresAt: Number(d.readBigUInt64LE(88)),
         };
+        // Defensive: don't let stale RPC data clobber a fresh optimistic renewal.
+        // Compare against the mutable ref (updated synchronously on renewal) rather
+        // than the sessionExpiry state (which may be stale in a setTimeout closure).
+        const expected = expectedExpiryRef.current;
+        if (expected && p.sessionExpiresAt < expected) {
+          // RPC returned older data — ignore it, chain will catch up on next poll.
+          return;
+        }
         setPlayerState(p);
         setSessionExpiry(p.sessionExpiresAt); // Sync from chain as source of truth
+        expectedExpiryRef.current = p.sessionExpiresAt;
       } else {
         setPlayerState(null);
       }
@@ -188,10 +202,13 @@ export function useSessionKey() {
 
   // ── Key-mismatch guard: if chain says a different session key than localStorage,
   // try to restore from backup, else wipe localStorage so the user starts fresh.
+  // Guarded by a grace period after renewal so RPC lag doesn't nuke fresh sessions.
   useEffect(() => {
     if (!playerState?.sessionKey || !sessionKeypair) return;
     const localPk = new PublicKey(sessionKeypair.publicKey);
     if (playerState.sessionKey.equals(localPk)) return;
+    // Skip during grace period after an optimistic renewal — RPC may still lag
+    if (Date.now() - renewedAtRef.current < 15000) return;
     // Mismatch detected: loaded key doesn't match on-chain session key
     const restored = restoreSessionKey();
     if (restored) {
@@ -424,6 +441,7 @@ export function useSessionKey() {
       clearBackupSessionKey();
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
+      expectedExpiryRef.current = expirySlot; // sync ref for stale-RPC defense
       setPlayerState(prev => prev ? { ...prev, sessionKey: spk, sessionExpiresAt: expirySlot } : {
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot,
       });
@@ -526,8 +544,10 @@ export function useSessionKey() {
 
       // ── STEP 4: Success — clean up backup and update local state ──
       clearBackupSessionKey();
+      renewedAtRef.current = Date.now(); // start grace period for RPC lag
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
+      expectedExpiryRef.current = expirySlot; // sync ref for stale-RPC defense
       setPlayerState({
         wallet: publicKey, sessionKey: spk, position: { x: 1, y: 1 }, goldiumMinted: 0, sessionExpiresAt: expirySlot,
       });
@@ -558,7 +578,7 @@ export function useSessionKey() {
     } catch { return false; }
   }, [publicKey, refreshPlayerState]);
 
-  const clearSession = useCallback(() => { clearBackupSessionKey(); clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); }, []);
+  const clearSession = useCallback(() => { clearBackupSessionKey(); clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); expectedExpiryRef.current = null; }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
   const isSessionValid = useCallback((): boolean => {
     if (!sessionKeypair) return false;
