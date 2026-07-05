@@ -496,11 +496,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     setPosition({ x: newX, y: newY }); // optimistic
     setStatus("Moving...");
 
-    // Pre-compute gold check from cached bitmap (fast, no RPC)
+    // Pre-compute gold check from cached bitmap + hidden mines (fast, no RPC)
     const bitsBefore = bitmapRef.current;
     const goldFormula = hasGoldAt(newX, newY);
     const alreadyMined = bitsBefore ? isCellMined(bitsBefore, newX, newY) : false;
-    const expectedNewMine = goldFormula && !alreadyMined;
+    const alreadyHidden = hiddenMinesRef.current.has(`${newX},${newY}`);
+    const expectedNewMine = goldFormula && !alreadyMined && !alreadyHidden;
 
     const programId = getProgramId();
     const walletPk = playerState.wallet;
