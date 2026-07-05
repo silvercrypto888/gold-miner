@@ -4,18 +4,29 @@
 const SESSION_MESSAGE_TEXT = "Unlock Gold Miner session";
 const SESSION_MESSAGE = new TextEncoder().encode(SESSION_MESSAGE_TEXT);
 
-/** Module-level cache: once the user signs once, we reuse the derived AES key
- *  for the rest of the page session (never persisted to storage). */
-let _cachedCryptoKey: CryptoKey | null = null;
+const GLOBAL_KEY = "__gm_cachedCryptoKey__";
+
+function getCache(): CryptoKey | null {
+  if (typeof globalThis !== "undefined" && (globalThis as any)[GLOBAL_KEY]) {
+    return (globalThis as any)[GLOBAL_KEY] as CryptoKey;
+  }
+  return null;
+}
+
+function setCache(key: CryptoKey | null): void {
+  if (typeof globalThis !== "undefined") {
+    (globalThis as any)[GLOBAL_KEY] = key;
+  }
+}
 
 /** Expose so callers can check if a cached key exists. */
 export function hasCachedCryptoKey(): boolean {
-  return _cachedCryptoKey !== null;
+  return getCache() !== null;
 }
 
 /** Clear the in-memory cached key (e.g. on wallet disconnect). */
 export function clearCachedCryptoKey(): void {
-  _cachedCryptoKey = null;
+  setCache(null);
 }
 
 /**
@@ -24,7 +35,8 @@ export function clearCachedCryptoKey(): void {
  * Caches the result so the user is only prompted once per page session.
  */
 export async function deriveKeyFromSignature(signature: Uint8Array): Promise<CryptoKey> {
-  if (_cachedCryptoKey) return _cachedCryptoKey;
+  const cached = getCache();
+  if (cached) return cached;
   const hashBuffer = await crypto.subtle.digest("SHA-256", signature as any);
   const key = await crypto.subtle.importKey(
     "raw",
@@ -33,7 +45,7 @@ export async function deriveKeyFromSignature(signature: Uint8Array): Promise<Cry
     false,
     ["encrypt", "decrypt"]
   );
-  _cachedCryptoKey = key;
+  setCache(key);
   return key;
 }
 
@@ -46,7 +58,7 @@ export async function encryptSessionKey(
   secretKey: Uint8Array,
   walletSignMessage: (message: Uint8Array) => Promise<Uint8Array>
 ): Promise<{ enc: string; iv: string }> {
-  let key = _cachedCryptoKey;
+  let key = getCache();
   if (!key) {
     const signature = await walletSignMessage(SESSION_MESSAGE);
     key = await deriveKeyFromSignature(signature);
@@ -74,7 +86,7 @@ export async function decryptSessionKey(
   iv: string,
   walletSignMessage: (message: Uint8Array) => Promise<Uint8Array>
 ): Promise<Uint8Array> {
-  let key = _cachedCryptoKey;
+  let key = getCache();
   if (!key) {
     const signature = await walletSignMessage(SESSION_MESSAGE);
     key = await deriveKeyFromSignature(signature);
