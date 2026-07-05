@@ -91,23 +91,40 @@ export function useSessionKey() {
 
   // Load existing session — requires wallet signMessage to decrypt
   const prevPubkeyRef = useRef<PublicKey | null>(null);
+  const signReadyRef = useRef(false);
   useEffect(() => {
     if (!publicKey) {
       prevPubkeyRef.current = null;
       _sessionPromise = null;
       _promiseForWallet = null;
+      signReadyRef.current = false;
       return;
     }
-    // Skip only if we've already kicked off a promise for this exact wallet.
-    // On first render signMessage may be null, so _sessionPromise won't exist yet;
-    // when signMessage arrives on the next render we must try again.
-    if (prevPubkeyRef.current?.equals(publicKey) && _sessionPromise) return;
 
     const sign = signMessageRef.current;
-    if (!sign) return; // wait for signMessage to be ready; don't mark pubkey as tried
+    const justBecameReady = sign && !signReadyRef.current;
+    if (justBecameReady) {
+      signReadyRef.current = true;
+      // signMessage transitioned null→available: invalidate any promise
+      // that was created while sign was missing so we can retry with the
+      // real signer.
+      if (!prevPubkeyRef.current?.equals(publicKey)) {
+        _sessionPromise = null;
+      }
+    }
 
-    // Start a new shared promise if none exists or wallet changed
-    if (!_sessionPromise || !_promiseForWallet?.equals(publicKey)) {
+    if (!sign) return; // wallet adapter still booting — wait
+
+    // Skip only if we've successfully loaded for this exact wallet.
+    // NOTE: we intentionally retry (don't skip) when _sessionPromise was
+    // rejected/failed so a transient decryption error doesn't permanently
+    // lock the user out until page reload.
+    const promiseReady = _sessionPromise && _promiseForWallet?.equals(publicKey);
+    const alreadyLoaded = prevPubkeyRef.current?.equals(publicKey);
+    if (alreadyLoaded && promiseReady) return;
+
+    // Start a new shared promise if none exists, wallet changed, or prior failed
+    if (!promiseReady) {
       _sessionPromise = loadSessionKey(sign);
       _promiseForWallet = publicKey;
     }
@@ -116,15 +133,15 @@ export function useSessionKey() {
       if (loaded) {
         setSessionKeypair(loaded.keypair);
         setSessionExpiry(loaded.expirySlot);
-      } else if (prevPubkeyRef.current === null) {
-        setSessionKeypair(null);
-        setSessionExpiry(null);
+        prevPubkeyRef.current = publicKey;
       }
-      prevPubkeyRef.current = publicKey;
+      // If loaded is null, localStorage simply has no key. Don't overwrite
+      // a valid in-memory session, and don't mark prevPubkey so the effect
+      // can retry on next render if the user later saves a session.
     }).catch(() => {
-      setSessionKeypair(null);
-      setSessionExpiry(null);
-      prevPubkeyRef.current = publicKey;
+      // Decryption/signing failed — DON'T mark pubkey as done so we retry.
+      // Also DON'T clear an existing valid session from React state.
+      console.warn("Session key load failed — will retry");
     });
   }, [publicKey]);
 
@@ -582,14 +599,16 @@ export function useSessionKey() {
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
   const isSessionValid = useCallback((): boolean => {
     if (!sessionKeypair) return false;
-    // If we haven't loaded playerState yet, be optimistic — don't flash expired
-    // while chain data is still fetching. Once playerState loads, use chain truth.
-    if (!playerState) return true;
+    // Require chain data before declaring validity.  When the page first
+    // reloads playerState is briefly null; returning true here would let
+    // the user mine with a "forgotten" key that hasn't been restored yet.
+    if (!playerState) return false;
     const chainExpiry = playerState.sessionExpiresAt;
     if (!chainExpiry) return false;
-    // If we haven't polled a slot yet, be optimistic
-    if (currentSlot === 0) return true;
-    return currentSlot < chainExpiry;
+    // Grace margin for RPC lag (~5 min / 300 slots)
+    const margin = 300;
+    if (currentSlot === 0) return false; // haven't polled yet — don't guess
+    return currentSlot < (chainExpiry + margin);
   }, [sessionKeypair, currentSlot, playerState]);
 
   return {
