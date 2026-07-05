@@ -7,15 +7,15 @@ const SESSION_MESSAGE = new TextEncoder().encode(SESSION_MESSAGE_TEXT);
 const GLOBAL_KEY = "__gm_cachedCryptoKey__";
 
 function getCache(): CryptoKey | null {
-  if (typeof globalThis !== "undefined" && (globalThis as any)[GLOBAL_KEY]) {
-    return (globalThis as any)[GLOBAL_KEY] as CryptoKey;
-  }
-  return null;
+  const val = (typeof globalThis !== "undefined" ? (globalThis as any)[GLOBAL_KEY] : null) || null;
+  console.log("[sessionCrypto] getCache:", val ? "HIT" : "MISS");
+  return val;
 }
 
 function setCache(key: CryptoKey | null): void {
   if (typeof globalThis !== "undefined") {
     (globalThis as any)[GLOBAL_KEY] = key;
+    console.log("[sessionCrypto] setCache:", key ? "SET" : "CLEARED");
   }
 }
 
@@ -86,10 +86,14 @@ export async function decryptSessionKey(
   iv: string,
   walletSignMessage: (message: Uint8Array) => Promise<Uint8Array>
 ): Promise<Uint8Array> {
+  console.log("[sessionCrypto] decryptSessionKey called");
   let key = getCache();
   if (!key) {
+    console.log("[sessionCrypto] cache miss — calling walletSignMessage");
     const signature = await walletSignMessage(SESSION_MESSAGE);
     key = await deriveKeyFromSignature(signature);
+  } else {
+    console.log("[sessionCrypto] cache hit — skipping wallet prompt");
   }
 
   const ciphertext = base64ToBytes(enc);
