@@ -419,30 +419,15 @@ const prevForesightRef = useRef(foresightMode);
           const goldFormula = hasGoldAt(x, y);
 
           let hasGold = false;
-          let minedOut = false;
           if (goldFormula) {
             if (isForesight && cachedBitmap) {
               // In foresight: check bitmap + hidden mines (recently mined, not yet on-chain)
-              minedOut = isCellMined(cachedBitmap, x, y) || hiddenMines.has(`${x},${y}`);
+              const minedOut = isCellMined(cachedBitmap, x, y) || hiddenMines.has(`${x},${y}`);
               hasGold = !minedOut;
             } else {
               // Normal mode: use useGame's gold spots which are already filtered
               hasGold = goldKeySet.has(`${x},${y}`);
             }
-          }
-
-          // In foresight: mark mined-out gold cells with a subtle indicator
-          if (isForesight && goldFormula && minedOut) {
-            ctx.fillStyle = "rgba(100, 100, 50, 0.15)";
-            ctx.fillRect(sx + 2, sy + 2, CELL_SIZE - 4, CELL_SIZE - 4);
-            ctx.strokeStyle = "rgba(100, 100, 50, 0.4)";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(sx + 4, sy + 4);
-            ctx.lineTo(sx + CELL_SIZE - 4, sy + CELL_SIZE - 4);
-            ctx.moveTo(sx + CELL_SIZE - 4, sy + 4);
-            ctx.lineTo(sx + 4, sy + CELL_SIZE - 4);
-            ctx.stroke();
           }
 
           if (hasGold) {
