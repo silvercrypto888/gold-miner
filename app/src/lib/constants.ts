@@ -15,7 +15,7 @@ let _GOLD_MINT: PublicKey | null = null;
 export function getGoldMint(): PublicKey {
   if (!_GOLD_MINT) {
     _GOLD_MINT = new PublicKey(
-      process.env.NEXT_PUBLIC_GOLD_MINT || "FEksZivLhY8LFhuNrtgyke8hTGJV498iybFViapzSdAX"
+      process.env.NEXT_PUBLIC_GOLD_MINT || "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6"
     );
   }
   return _GOLD_MINT;
