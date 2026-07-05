@@ -3,7 +3,7 @@ import * as nacl from "tweetnacl";
 import bs58 from "bs58";
 import { SessionKeyData } from "@/types";
 import { SESSION_KEY_STORAGE, LAMPORTS_PER_SOL } from "./constants";
-import { encryptSessionKey, decryptSessionKey } from "./sessionCrypto";
+import { encryptSessionKey, decryptSessionKey, clearCachedCryptoKey } from "./sessionCrypto";
 
 const SESSION_KEY_BACKUP = SESSION_KEY_STORAGE + "_backup";
 
@@ -67,10 +67,11 @@ export async function loadSessionKey(
   }
 }
 
-// Clear session key from localStorage
+// Clear session key from localStorage + wipe in-memory cached AES key
 export function clearSessionKey(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SESSION_KEY_STORAGE);
+  clearCachedCryptoKey();
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: false } }));
 }
 

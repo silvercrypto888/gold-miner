@@ -1,0 +1,21 @@
+\contentsline {section}{\numberline {1}Introduction}{3}{}%
+\contentsline {section}{\numberline {2}Core Mechanics}{3}{}%
+\contentsline {subsection}{\numberline {2.1}The Grid}{3}{}%
+\contentsline {subsection}{\numberline {2.2}Consumable Resources}{3}{}%
+\contentsline {subsection}{\numberline {2.3}Spatial Diffusion Incentive}{3}{}%
+\contentsline {subsection}{\numberline {2.4}Session Keys}{4}{}%
+\contentsline {section}{\numberline {3}Token Economics}{4}{}%
+\contentsline {subsection}{\numberline {3.1}GOLD Token}{4}{}%
+\contentsline {subsection}{\numberline {3.2}Protocol Treasury and Auto-LP Burn}{4}{}%
+\contentsline {subsection}{\numberline {3.3}Bitmap Reset}{5}{}%
+\contentsline {section}{\numberline {4}Architecture}{5}{}%
+\contentsline {subsection}{\numberline {4.1}Smart Contract}{5}{}%
+\contentsline {subsection}{\numberline {4.2}On-Chain State}{5}{}%
+\contentsline {subsection}{\numberline {4.3}Frontend}{5}{}%
+\contentsline {section}{\numberline {5}Security Model}{6}{}%
+\contentsline {subsection}{\numberline {5.1}Player Protections}{6}{}%
+\contentsline {subsection}{\numberline {5.2}Game Integrity}{6}{}%
+\contentsline {subsection}{\numberline {5.3}Economic Safeguards}{6}{}%
+\contentsline {section}{\numberline {6}Gas Economics}{7}{}%
+\contentsline {section}{\numberline {7}Roadmap}{7}{}%
+\contentsline {section}{\numberline {8}Conclusion}{7}{}%

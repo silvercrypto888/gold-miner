@@ -15,6 +15,7 @@ import {
   restoreSessionKey,
   clearBackupSessionKey,
 } from "@/lib/utils";
+import { clearCachedCryptoKey } from "@/lib/sessionCrypto";
 import { GoldMinerIDL } from "@/lib/idl";
 import {
   getProgramId,
@@ -147,7 +148,11 @@ export function useSessionKey() {
 
   // Refresh on wallet connect
   useEffect(() => {
-    if (!publicKey) { setPlayerState(null); return; }
+    if (!publicKey) {
+      setPlayerState(null);
+      clearCachedCryptoKey(); // wallet disconnected — wipe cached AES key
+      return;
+    }
     const timer = setTimeout(() => refreshPlayerState(), 200);
     return () => clearTimeout(timer);
   }, [publicKey]);
