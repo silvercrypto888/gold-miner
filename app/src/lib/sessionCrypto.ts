@@ -5,17 +5,31 @@ const SESSION_MESSAGE_TEXT = "Unlock Gold Miner session";
 const SESSION_MESSAGE = new TextEncoder().encode(SESSION_MESSAGE_TEXT);
 
 const GLOBAL_KEY = "__gm_cachedCryptoKey__";
+const GLOBAL_SIGN_PROMISE = "__gm_signPromise__";
 
 function getCache(): CryptoKey | null {
-  const val = (typeof globalThis !== "undefined" ? (globalThis as any)[GLOBAL_KEY] : null) || null;
-  console.log("[sessionCrypto] getCache:", val ? "HIT" : "MISS");
-  return val;
+  if (typeof globalThis !== "undefined" && (globalThis as any)[GLOBAL_KEY]) {
+    return (globalThis as any)[GLOBAL_KEY] as CryptoKey;
+  }
+  return null;
 }
 
 function setCache(key: CryptoKey | null): void {
   if (typeof globalThis !== "undefined") {
     (globalThis as any)[GLOBAL_KEY] = key;
-    console.log("[sessionCrypto] setCache:", key ? "SET" : "CLEARED");
+  }
+}
+
+function getSignPromise(): Promise<Uint8Array> | null {
+  if (typeof globalThis !== "undefined" && (globalThis as any)[GLOBAL_SIGN_PROMISE]) {
+    return (globalThis as any)[GLOBAL_SIGN_PROMISE] as Promise<Uint8Array>;
+  }
+  return null;
+}
+
+function setSignPromise(p: Promise<Uint8Array> | null): void {
+  if (typeof globalThis !== "undefined") {
+    (globalThis as any)[GLOBAL_SIGN_PROMISE] = p;
   }
 }
 
@@ -27,6 +41,7 @@ export function hasCachedCryptoKey(): boolean {
 /** Clear the in-memory cached key (e.g. on wallet disconnect). */
 export function clearCachedCryptoKey(): void {
   setCache(null);
+  setSignPromise(null);
 }
 
 /**
@@ -60,8 +75,14 @@ export async function encryptSessionKey(
 ): Promise<{ enc: string; iv: string }> {
   let key = getCache();
   if (!key) {
-    const signature = await walletSignMessage(SESSION_MESSAGE);
+    let signPromise = getSignPromise();
+    if (!signPromise) {
+      signPromise = walletSignMessage(SESSION_MESSAGE);
+      setSignPromise(signPromise);
+    }
+    const signature = await signPromise;
     key = await deriveKeyFromSignature(signature);
+    setSignPromise(null);
   }
 
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -86,14 +107,16 @@ export async function decryptSessionKey(
   iv: string,
   walletSignMessage: (message: Uint8Array) => Promise<Uint8Array>
 ): Promise<Uint8Array> {
-  console.log("[sessionCrypto] decryptSessionKey called");
   let key = getCache();
   if (!key) {
-    console.log("[sessionCrypto] cache miss — calling walletSignMessage");
-    const signature = await walletSignMessage(SESSION_MESSAGE);
+    let signPromise = getSignPromise();
+    if (!signPromise) {
+      signPromise = walletSignMessage(SESSION_MESSAGE);
+      setSignPromise(signPromise);
+    }
+    const signature = await signPromise;
     key = await deriveKeyFromSignature(signature);
-  } else {
-    console.log("[sessionCrypto] cache hit — skipping wallet prompt");
+    setSignPromise(null);
   }
 
   const ciphertext = base64ToBytes(enc);

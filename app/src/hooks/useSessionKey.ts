@@ -116,7 +116,6 @@ export function useSessionKey() {
     }
 
     const sign = signMessageRef.current;
-    console.log("[useSessionKey] effect. publicKey:", publicKey.toBase58().slice(0,8), "signReady:", !!sign, "justBecameReady:", !!sign);
     const justBecameReady = sign && !signReadyRef.current;
     if (justBecameReady) {
       signReadyRef.current = true;
@@ -138,15 +137,10 @@ export function useSessionKey() {
     const promiseWallet = getPromiseWallet();
     const promiseReady = sessionPromise && promiseWallet?.equals(publicKey);
     const alreadyLoaded = prevPubkeyRef.current?.equals(publicKey);
-    console.log("[useSessionKey] promiseReady:", !!promiseReady, "alreadyLoaded:", !!alreadyLoaded);
-    if (alreadyLoaded && promiseReady) {
-      console.log("[useSessionKey] SKIPPING — already loaded");
-      return;
-    }
+    if (alreadyLoaded && promiseReady) return;
 
     // Start a new shared promise if none exists, wallet changed, or prior failed
     if (!promiseReady) {
-      console.log("[useSessionKey] creating new loadSessionKey promise");
       const p = loadSessionKey(sign);
       setSessionPromise(p);
       setPromiseWallet(publicKey);
