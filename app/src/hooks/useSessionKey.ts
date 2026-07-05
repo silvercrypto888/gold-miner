@@ -36,9 +36,22 @@ const SESSION_FUND_LAMPORTS = 0.2 * LAMPORTS_PER_SOL;
 const SESSION_MAX_LAMPORTS = 0.5 * LAMPORTS_PER_SOL;
 const SWEEP_DUST_THRESHOLD = 0.01 * LAMPORTS_PER_SOL;
 
-// Module-level shared promise so all useSessionKey instances await the same load
-let _sessionPromise: Promise<{ keypair: nacl.SignKeyPair; expirySlot: number } | null> | null = null;
-let _promiseForWallet: PublicKey | null = null;
+// Global shared promise so all useSessionKey instances (even across chunks) await the same load.
+// Next.js code-splits this file, so module-level variables get duplicated.
+const G_PROMISE = "__gm_sessionPromise__";
+const G_WALLET = "__gm_promiseWallet__";
+function getSessionPromise(): Promise<{ keypair: nacl.SignKeyPair; expirySlot: number } | null> | null {
+  return (typeof globalThis !== "undefined" ? (globalThis as any)[G_PROMISE] : null) || null;
+}
+function setSessionPromise(p: Promise<{ keypair: nacl.SignKeyPair; expirySlot: number } | null> | null): void {
+  if (typeof globalThis !== "undefined") (globalThis as any)[G_PROMISE] = p;
+}
+function getPromiseWallet(): PublicKey | null {
+  return (typeof globalThis !== "undefined" ? (globalThis as any)[G_WALLET] : null) || null;
+}
+function setPromiseWallet(pk: PublicKey | null): void {
+  if (typeof globalThis !== "undefined") (globalThis as any)[G_WALLET] = pk;
+}
 
 export function useSessionKey() {
   const { publicKey, signTransaction, signMessage } = useWallet();
@@ -96,8 +109,8 @@ export function useSessionKey() {
   useEffect(() => {
     if (!publicKey) {
       prevPubkeyRef.current = null;
-      _sessionPromise = null;
-      _promiseForWallet = null;
+      setSessionPromise(null);
+      setPromiseWallet(null);
       signReadyRef.current = false;
       return;
     }
@@ -110,27 +123,31 @@ export function useSessionKey() {
       // that was created while sign was missing so we can retry with the
       // real signer.
       if (!prevPubkeyRef.current?.equals(publicKey)) {
-        _sessionPromise = null;
+        setSessionPromise(null);
       }
     }
 
     if (!sign) return; // wallet adapter still booting — wait
 
     // Skip only if we've successfully loaded for this exact wallet.
-    // NOTE: we intentionally retry (don't skip) when _sessionPromise was
+    // NOTE: we intentionally retry (don't skip) when the shared promise was
     // rejected/failed so a transient decryption error doesn't permanently
     // lock the user out until page reload.
-    const promiseReady = _sessionPromise && _promiseForWallet?.equals(publicKey);
+    const sessionPromise = getSessionPromise();
+    const promiseWallet = getPromiseWallet();
+    const promiseReady = sessionPromise && promiseWallet?.equals(publicKey);
     const alreadyLoaded = prevPubkeyRef.current?.equals(publicKey);
     if (alreadyLoaded && promiseReady) return;
 
     // Start a new shared promise if none exists, wallet changed, or prior failed
     if (!promiseReady) {
-      _sessionPromise = loadSessionKey(sign);
-      _promiseForWallet = publicKey;
+      const p = loadSessionKey(sign);
+      setSessionPromise(p);
+      setPromiseWallet(publicKey);
     }
 
-    _sessionPromise.then(loaded => {
+    const sp = getSessionPromise()!;
+    sp.then(loaded => {
       if (loaded) {
         setSessionKeypair(loaded.keypair);
         setSessionExpiry(loaded.expirySlot);
@@ -256,8 +273,8 @@ export function useSessionKey() {
   useEffect(() => {
     const handler = async (e: Event) => {
       // Reset shared promise so next mount/reload fetches fresh data
-      _sessionPromise = null;
-      _promiseForWallet = null;
+      setSessionPromise(null);
+      setPromiseWallet(null);
 
       // Skip if event came from storeSessionKey — caller already has keypair in memory
       const detail = (e as CustomEvent).detail;
