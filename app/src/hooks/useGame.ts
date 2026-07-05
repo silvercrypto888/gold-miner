@@ -57,6 +57,7 @@ interface UseGameReturn {
   goldMined: number;
   status: string;
   getBitmap: () => Uint8Array | null;
+  getHiddenMines: () => Set<string>;
 }
 
 export function useGame(props?: UseGameProps): UseGameReturn {
@@ -737,5 +738,9 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const canMove = Boolean(sessionKeypair && sessionPubkey && playerState && !isMoving && (!isSessionValid || isSessionValid()));
   const getBitmap = useCallback(() => bitmapRef.current, []);
 
-  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status, getBitmap };
+  const getHiddenMines = useCallback(() => {
+    return hiddenMinesRef.current;
+  }, []);
+
+  return { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, lastMoveTime, move, canMove, goldMined, status, getBitmap, getHiddenMines };
 }

@@ -49,7 +49,7 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const { publicKey } = useWallet();
   const { sessionKeypair, sessionPubkey, playerState, joinGame, startSession, fundSessionKey, isLoading, error, isSessionValid, clearSession } =
     useSessionKey();
-  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined, getBitmap } = useGame({
+  const { position, visibleGold, visiblePlayers, showPlayers, toggleShowPlayers, isMoving, move, status, goldMined, getBitmap, getHiddenMines } = useGame({
     sessionKeypair,
     sessionPubkey,
     playerState,
@@ -352,6 +352,7 @@ const prevForesightRef = useRef(foresightMode);
 
       // Bitmap for live mined-status in foresight mode
       const cachedBitmap = getBitmap ? getBitmap() : null;
+      const hiddenMines = getHiddenMines ? getHiddenMines() : new Set<string>();
 
       const { minX, maxX, minY, maxY } = getViewportRange(Math.round(viewX), Math.round(viewY));
       const offX = (viewX - Math.floor(viewX)) * CELL_SIZE;
@@ -418,16 +419,20 @@ const prevForesightRef = useRef(foresightMode);
           const goldFormula = hasGoldAt(x, y);
 
           let hasGold = false;
+          let minedOut = false;
           if (goldFormula) {
             if (isForesight && cachedBitmap) {
-              // In foresight: use cached bitmap for actual mined status
-              hasGold = !isCellMined(cachedBitmap, x, y);
+              // In foresight: check bitmap + hidden mines (recently mined, not yet on-chain)
+              minedOut = isCellMined(cachedBitmap, x, y) || hiddenMines.has(`${x},${y}`);
+              hasGold = !minedOut;
             } else {
               // Normal mode: use useGame's gold spots which are already filtered
               hasGold = goldKeySet.has(`${x},${y}`);
             }
-          } else if (isForesight && goldFormula && cachedBitmap && isCellMined(cachedBitmap, x, y)) {
-            // In foresight: mark mined-out gold cells with a subtle indicator
+          }
+
+          // In foresight: mark mined-out gold cells with a subtle indicator
+          if (isForesight && goldFormula && minedOut) {
             ctx.fillStyle = "rgba(100, 100, 50, 0.15)";
             ctx.fillRect(sx + 2, sy + 2, CELL_SIZE - 4, CELL_SIZE - 4);
             ctx.strokeStyle = "rgba(100, 100, 50, 0.4)";
