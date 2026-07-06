@@ -179,9 +179,6 @@ export function useSessionKey() {
   // session key, this tells ALL useSessionKey instances to reload it.
   useEffect(() => {
     const handler = async (e: Event) => {
-      // Skip events from our own storeSessionKey — we already have the keypair in memory
-      if ((e as CustomEvent).detail?.fromStore) return;
-
       const sign = signMessageRef.current;
       if (!sign) return;
       try {
@@ -275,10 +272,6 @@ export function useSessionKey() {
       // Reset shared promise so next mount/reload fetches fresh data
       setSessionPromise(null);
       setPromiseWallet(null);
-
-      // Skip if event came from storeSessionKey — caller already has keypair in memory
-      const detail = (e as CustomEvent).detail;
-      if (detail?.fromStore) return;
 
       if (!signMessageRef.current) return;
       try {
