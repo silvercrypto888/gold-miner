@@ -154,6 +154,7 @@ export function useSessionKey() {
       if (loaded) {
         setSessionKeypair(loaded.keypair);
         setSessionExpiry(loaded.expirySlot);
+        expectedExpiryRef.current = loaded.expirySlot; // persist across refreshes
         prevPubkeyRef.current = publicKey;
       }
       // If loaded is null, localStorage simply has no key. Don't overwrite
@@ -232,10 +233,18 @@ export function useSessionKey() {
     } catch { /* player may not exist yet */ }
   }, [publicKey]);
 
-  // Sync local sessionExpiry from chain truth whenever playerState refreshes
+  // Sync local sessionExpiry from chain truth whenever playerState refreshes —
+  // BUT only if chain data is fresher or equal. After a refresh, RPC may lag
+  // behind our optimistic renewal; we must NOT let stale chain data overwrite
+  // the newer localStorage expiry.
   useEffect(() => {
     if (playerState?.sessionExpiresAt) {
-      setSessionExpiry(playerState.sessionExpiresAt);
+      const chain = playerState.sessionExpiresAt;
+      const local = sessionExpiry || 0;
+      if (chain >= local) {
+        setSessionExpiry(chain);
+        expectedExpiryRef.current = chain;
+      }
     }
   }, [playerState?.sessionExpiresAt]);
 
