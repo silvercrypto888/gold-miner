@@ -450,8 +450,6 @@ export function useSessionKey() {
     // Suppress key-mismatch guard while creating — local key will differ from chain until TX confirms
     creatingSessionRef.current = true;
 
-    try {
-
     // ── STEP 1: Sweep old session key ──
     console.log("[startSession] Step 1: sweep old key");
     const sweepResult = await sweepSessionKey();
@@ -461,6 +459,7 @@ export function useSessionKey() {
       // Real errors — abort before touching localStorage.
       if (sweepResult.ok === false && (sweepResult.reason === "user_rejected" || sweepResult.reason === "decrypt_failed" || sweepResult.reason === "sweep_failed")) {
         joiningRef.current = false;
+        creatingSessionRef.current = false;
         setError("Session renewal paused: " + (sweepResult.detail || sweepResult.reason) + ". Please fix the issue and try again.");
         return;
       }
@@ -489,6 +488,7 @@ export function useSessionKey() {
       console.error("[startSession] storeSessionKey FAILED:", err);
       setIsLoading(false);
       joiningRef.current = false;
+      creatingSessionRef.current = false;
       // Restore old key since we haven't spent anything yet
       restoreSessionKey();
       // Distinguish user rejection from real errors
