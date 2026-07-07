@@ -68,6 +68,10 @@ export function useSessionKey() {
   // Mutable ref for the current expected expiry — used by refreshPlayerState to defend
   // against stale RPC closures. Unlike sessionExpiry state, this updates immediately.
   const expectedExpiryRef = useRef<number | null>(null);
+  // Suppress key-mismatch guard while creating a new session (local write before
+  // chain confirms). Without this the guard sees the old chain key vs new local key
+  // and immediately wipes the new key.
+  const creatingSessionRef = useRef<boolean>(false);
   const [currentSlot, setCurrentSlot] = useState<number>(0);
   const connectionRef = useRef<Connection | null>(null);
   const programRef = useRef<Program | null>(null);
@@ -255,6 +259,11 @@ export function useSessionKey() {
   // and we must NOT nuke the fresh key.
   useEffect(() => {
     if (!playerState?.sessionKey || !sessionKeypair) return;
+    // If we're currently creating a session, local key won't match chain yet — skip guard
+    if (creatingSessionRef.current) {
+      console.log("[key-mismatch guard] session creation in progress, skipping");
+      return;
+    }
     const localPk = new PublicKey(sessionKeypair.publicKey);
     if (playerState.sessionKey.equals(localPk)) {
       console.log("[key-mismatch guard] keys match, no action");
@@ -438,6 +447,10 @@ export function useSessionKey() {
     if (joiningRef.current) return;
     if (!publicKey || !signTransaction || !signMessageRef.current || !programRef.current) { setError("Wallet not connected"); return; }
     joiningRef.current = true;
+    // Suppress key-mismatch guard while creating — local key will differ from chain until TX confirms
+    creatingSessionRef.current = true;
+
+    try {
 
     // ── STEP 1: Sweep old session key ──
     console.log("[startSession] Step 1: sweep old key");
@@ -485,6 +498,9 @@ export function useSessionKey() {
         setError("Failed to encrypt session key: " + (err.message || "Unknown error") + ". Your XNT was not spent.");
       }
       return;
+    } finally {
+      // Always clear creation flag — regardless of success or failure, the local write is done
+      creatingSessionRef.current = false;
     }
 
     // ── STEP 4: Now that the key is safely saved, send the on-chain TX ──
