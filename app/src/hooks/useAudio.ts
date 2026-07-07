@@ -102,6 +102,11 @@ export function useAudio() {
     });
   }, [discoverTracks, playNextTrack]);
 
+  // Per-sound volume levels (0-1). Defaults to 1 if not listed.
+  const SOUND_VOLUMES: Record<string, number> = {
+    mine: 0.55,
+  };
+
   const playSound = useCallback(
     (name: "mine" | "walk" | "enter_foresight" | "exit_foresight" | "winter_wind" | "bell" | "angelical_pad" | "cinematic_boom") => {
       if (!soundEnabled) return;
@@ -110,6 +115,7 @@ export function useAudio() {
 
       const audio = getSound(url);
       audio.currentTime = 0;
+      audio.volume = SOUND_VOLUMES[name] ?? 1;
       audio.play().catch(() => {});
 
       // When mining gold, also play the shine sparkle simultaneously
@@ -118,6 +124,7 @@ export function useAudio() {
         if (shineUrl) {
           const shineAudio = getSound(shineUrl);
           shineAudio.currentTime = 0;
+          shineAudio.volume = SOUND_VOLUMES["shine"] ?? 1;
           shineAudio.play().catch(() => {});
         }
       }
