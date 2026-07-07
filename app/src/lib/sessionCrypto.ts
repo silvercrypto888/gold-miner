@@ -80,9 +80,12 @@ export async function encryptSessionKey(
       signPromise = walletSignMessage(SESSION_MESSAGE);
       setSignPromise(signPromise);
     }
-    const signature = await signPromise;
-    key = await deriveKeyFromSignature(signature);
-    setSignPromise(null);
+    try {
+      const signature = await signPromise;
+      key = await deriveKeyFromSignature(signature);
+    } finally {
+      setSignPromise(null);
+    }
   }
 
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -114,9 +117,12 @@ export async function decryptSessionKey(
       signPromise = walletSignMessage(SESSION_MESSAGE);
       setSignPromise(signPromise);
     }
-    const signature = await signPromise;
-    key = await deriveKeyFromSignature(signature);
-    setSignPromise(null);
+    try {
+      const signature = await signPromise;
+      key = await deriveKeyFromSignature(signature);
+    } finally {
+      setSignPromise(null);
+    }
   }
 
   const ciphertext = base64ToBytes(enc);
