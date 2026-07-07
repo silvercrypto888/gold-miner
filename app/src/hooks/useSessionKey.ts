@@ -309,6 +309,11 @@ export function useSessionKey() {
   // Listen for sessionkey-changed events from localStorage changes.
   useEffect(() => {
     const handler = async (e: Event) => {
+      // When a component just stored a brand-new session key, the chain
+      // hasn't caught up yet — skip refreshPlayerState() to avoid stale
+      // RPC data clobbering our optimistic expiry.
+      const fromStore = (e as CustomEvent)?.detail?.fromStore;
+
       // Reset shared promise so next mount/reload fetches fresh data
       setSessionPromise(null);
       setPromiseWallet(null);
@@ -319,7 +324,12 @@ export function useSessionKey() {
         if (loaded) {
           setSessionKeypair(loaded.keypair);
           setSessionExpiry(loaded.expirySlot);
-          refreshPlayerState();
+          // Only refresh from chain when the event came from clearSessionKey()
+          // (fromStore === false). When fromStore === true, the on-chain TX
+          // hasn't landed yet; refreshPlayerState would see stale data.
+          if (!fromStore) {
+            refreshPlayerState();
+          }
         } else {
           setSessionKeypair(null);
           setSessionExpiry(null);
