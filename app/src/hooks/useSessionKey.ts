@@ -14,6 +14,9 @@ import {
   backupSessionKey,
   restoreSessionKey,
   clearBackupSessionKey,
+  getRenewedAt,
+  setRenewedAt,
+  clearRenewedAt,
 } from "@/lib/utils";
 import { clearCachedCryptoKey } from "@/lib/sessionCrypto";
 import { GoldMinerIDL } from "@/lib/idl";
@@ -61,7 +64,7 @@ export function useSessionKey() {
   const [error, setError] = useState<string | null>(null);
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
   // Grace period after optimistic session renewal — ignore stale RPC data + mismatch guard
-  const renewedAtRef = useRef<number>(0);
+  const renewedAtRef = useRef<number>(getRenewedAt());
   // Mutable ref for the current expected expiry — used by refreshPlayerState to defend
   // against stale RPC closures. Unlike sessionExpiry state, this updates immediately.
   const expectedExpiryRef = useRef<number | null>(null);
@@ -238,13 +241,20 @@ export function useSessionKey() {
 
   // ── Key-mismatch guard: if chain says a different session key than localStorage,
   // try to restore from backup, else wipe localStorage so the user starts fresh.
-  // Guarded by a grace period after renewal so RPC lag doesn't nuke fresh sessions.
+  // Guarded by: (a) a grace period after renewal, and (b) a stale-RPC check —
+  // if chain expiry is OLDER than our local expiry, the RPC node is lagging
+  // and we must NOT nuke the fresh key.
   useEffect(() => {
     if (!playerState?.sessionKey || !sessionKeypair) return;
     const localPk = new PublicKey(sessionKeypair.publicKey);
     if (playerState.sessionKey.equals(localPk)) return;
     // Skip during grace period after an optimistic renewal — RPC may still lag
     if (Date.now() - renewedAtRef.current < 15000) return;
+    // Stale-RPC defence: if chain expiry < local expiry, RPC hasn't caught up
+    // to our renewal yet.  Don't wipe the new key.
+    const localExpiry = sessionExpiry || 0;
+    const chainExpiry = playerState.sessionExpiresAt || 0;
+    if (chainExpiry < localExpiry) return;
     // Mismatch detected: loaded key doesn't match on-chain session key
     const restored = restoreSessionKey();
     if (restored) {
@@ -264,7 +274,7 @@ export function useSessionKey() {
       setSessionExpiry(null);
       setError("Session key mismatch detected (localStorage key doesn't match chain). Starting fresh...");
     }
-  }, [playerState?.sessionKey?.toBase58(), sessionKeypair]);
+  }, [playerState?.sessionKey?.toBase58(), sessionKeypair, sessionExpiry]);
 
   // Listen for sessionkey-changed events from localStorage changes.
   useEffect(() => {
@@ -471,6 +481,9 @@ export function useSessionKey() {
 
       // ── STEP 5: Success — clean up backup and update local state ──
       clearBackupSessionKey();
+      const now = Date.now();
+      renewedAtRef.current = now;
+      setRenewedAt(now);
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       expectedExpiryRef.current = expirySlot; // sync ref for stale-RPC defense
@@ -576,7 +589,9 @@ export function useSessionKey() {
 
       // ── STEP 4: Success — clean up backup and update local state ──
       clearBackupSessionKey();
-      renewedAtRef.current = Date.now(); // start grace period for RPC lag
+      const now = Date.now();
+      renewedAtRef.current = now; // start grace period for RPC lag
+      setRenewedAt(now);
       setSessionKeypair(nkp);
       setSessionExpiry(expirySlot);
       expectedExpiryRef.current = expirySlot; // sync ref for stale-RPC defense
@@ -610,21 +625,22 @@ export function useSessionKey() {
     } catch { return false; }
   }, [publicKey, refreshPlayerState]);
 
-  const clearSession = useCallback(() => { clearBackupSessionKey(); clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); expectedExpiryRef.current = null; }, []);
+  const clearSession = useCallback(() => { clearBackupSessionKey(); clearRenewedAt(); clearSessionKey(); setSessionKeypair(null); setSessionExpiry(null); setPlayerState(null); expectedExpiryRef.current = null; }, []);
   const getSessionPubkey = useCallback((): PublicKey | null => sessionKeypair ? getSessionPublicKey(sessionKeypair) : null, [sessionKeypair]);
   const isSessionValid = useCallback((): boolean => {
     if (!sessionKeypair) return false;
-    // Require chain data before declaring validity.  When the page first
-    // reloads playerState is briefly null; returning true here would let
-    // the user mine with a "forgotten" key that hasn't been restored yet.
-    if (!playerState) return false;
-    const chainExpiry = playerState.sessionExpiresAt;
-    if (!chainExpiry) return false;
+    // Use the freshest expiry we know about — localStorage is updated
+    // optimistically at the same moment the on-chain TX is signed, so
+    // it can be ahead of lagging RPC nodes.  Fall back to chain data.
+    const localExpiry = sessionExpiry || 0;
+    const chainExpiry = playerState?.sessionExpiresAt || 0;
+    const expiry = Math.max(localExpiry, chainExpiry);
+    if (!expiry) return false;
     // Grace margin for RPC lag (~5 min / 300 slots)
     const margin = 300;
     if (currentSlot === 0) return false; // haven't polled yet — don't guess
-    return currentSlot < (chainExpiry + margin);
-  }, [sessionKeypair, currentSlot, playerState]);
+    return currentSlot < (expiry + margin);
+  }, [sessionKeypair, currentSlot, playerState, sessionExpiry]);
 
   return {
     sessionKeypair, sessionExpiry, sessionPubkey: getSessionPubkey(),

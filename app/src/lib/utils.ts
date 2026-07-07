@@ -159,6 +159,21 @@ export function throttle<T extends (...args: any[]) => any>(
   };
 }
 
+// Persist / fetch renewal timestamp so grace period survives hard refresh
+export function getRenewedAt(): number {
+  if (typeof window === "undefined") return 0;
+  const v = localStorage.getItem("__gm_renewedAt__");
+  return v ? parseInt(v, 10) : 0;
+}
+export function setRenewedAt(ts: number): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("__gm_renewedAt__", String(ts));
+}
+export function clearRenewedAt(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("__gm_renewedAt__");
+}
+
 // Calculate distance between two positions
 export function getDistance(x1: number, y1: number, x2: number, y2: number): number {
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
