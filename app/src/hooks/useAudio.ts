@@ -105,6 +105,7 @@ export function useAudio() {
   // Per-sound volume levels (0-1). Defaults to 1 if not listed.
   const SOUND_VOLUMES: Record<string, number> = {
     mine: 0.55,
+    enter_foresight: 0.55,
   };
 
   const playSound = useCallback(
