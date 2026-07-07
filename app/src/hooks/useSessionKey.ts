@@ -482,7 +482,14 @@ export function useSessionKey() {
       console.log("[startSession] Step 3: storeSessionKey");
       const currentSlot = await connectionRef.current!.getSlot();
       expirySlot = currentSlot + SESSION_DURATION_SLOTS;
+      // Defensive: set expected expiry BEFORE storeSessionKey dispatches
+      // "sessionkey-changed", so concurrent refreshPlayerState calls will
+      // correctly skip stale RPC data instead of clobbering our new expiry.
+      expectedExpiryRef.current = expirySlot;
       await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+      // Optimistically update React state so key-mismatch guard sees the
+      // new expiry immediately, not stale chain data from a lagging RPC.
+      setSessionExpiry(expirySlot);
       console.log("[startSession] storeSessionKey completed");
     } catch (err: any) {
       console.error("[startSession] storeSessionKey FAILED:", err);
@@ -586,7 +593,14 @@ export function useSessionKey() {
     try {
       const currentSlot = await connectionRef.current!.getSlot();
       expirySlot = currentSlot + SESSION_DURATION_SLOTS;
+      // Defensive: set expected expiry BEFORE storeSessionKey dispatches
+      // "sessionkey-changed", so concurrent refreshPlayerState calls will
+      // correctly skip stale RPC data instead of clobbering our new expiry.
+      expectedExpiryRef.current = expirySlot;
       await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+      // Optimistically update React state so key-mismatch guard sees the
+      // new expiry immediately, not stale chain data from a lagging RPC.
+      setSessionExpiry(expirySlot);
     } catch (err: any) {
       setIsLoading(false);
       joiningRef.current = false;
