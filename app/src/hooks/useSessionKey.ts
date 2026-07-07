@@ -256,15 +256,26 @@ export function useSessionKey() {
   useEffect(() => {
     if (!playerState?.sessionKey || !sessionKeypair) return;
     const localPk = new PublicKey(sessionKeypair.publicKey);
-    if (playerState.sessionKey.equals(localPk)) return;
+    if (playerState.sessionKey.equals(localPk)) {
+      console.log("[key-mismatch guard] keys match, no action");
+      return;
+    }
     // Skip during grace period after an optimistic renewal — RPC may still lag
-    if (Date.now() - renewedAtRef.current < 15000) return;
+    if (Date.now() - renewedAtRef.current < 15000) {
+      console.log("[key-mismatch guard] in grace period, skipping");
+      return;
+    }
     // Stale-RPC defence: if chain expiry < local expiry, RPC hasn't caught up
     // to our renewal yet.  Don't wipe the new key.
     const localExpiry = sessionExpiry || 0;
     const chainExpiry = playerState.sessionExpiresAt || 0;
-    if (chainExpiry < localExpiry) return;
+    console.log("[key-mismatch guard] chainExpiry:", chainExpiry, "localExpiry:", localExpiry);
+    if (chainExpiry < localExpiry) {
+      console.log("[key-mismatch guard] RPC lagging, skipping");
+      return;
+    }
     // Mismatch detected: loaded key doesn't match on-chain session key
+    console.warn("[key-mismatch guard] MISMATCH DETECTED! chain key != local key");
     const restored = restoreSessionKey();
     if (restored) {
       // Backup was restored to localStorage; reload it into state
@@ -278,6 +289,7 @@ export function useSessionKey() {
       });
     } else {
       // No backup — localStorage key is orphaned
+      console.warn("[key-mismatch guard] No backup found — calling clearSessionKey!");
       clearSessionKey();
       setSessionKeypair(null);
       setSessionExpiry(null);

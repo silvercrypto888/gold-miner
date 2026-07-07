@@ -38,6 +38,9 @@ export async function storeSessionKey(
   console.log("[storeSessionKey] writing to localStorage, key:", SESSION_KEY_STORAGE);
   localStorage.setItem(SESSION_KEY_STORAGE, JSON.stringify(data));
   console.log("[storeSessionKey] localStorage write complete");
+  // IMMEDIATE VERIFICATION: read it back right now
+  const readback = localStorage.getItem(SESSION_KEY_STORAGE);
+  console.log("[storeSessionKey] immediate readback present:", !!readback, "length:", readback?.length || 0);
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: true } }));
 }
 
@@ -78,6 +81,8 @@ export async function loadSessionKey(
 // Clear session key from localStorage + wipe in-memory cached AES key
 export function clearSessionKey(): void {
   if (typeof window === "undefined") return;
+  console.warn("[clearSessionKey] CALLED — removing", SESSION_KEY_STORAGE);
+  console.trace("[clearSessionKey] trace");
   localStorage.removeItem(SESSION_KEY_STORAGE);
   clearCachedCryptoKey();
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: false } }));
@@ -100,8 +105,10 @@ export function getStoredSessionPublicKey(): string | null {
 export function backupSessionKey(): void {
   if (typeof window === "undefined") return;
   const stored = localStorage.getItem(SESSION_KEY_STORAGE);
+  console.log("[backupSessionKey] existing key present:", !!stored);
   if (stored) {
     localStorage.setItem(SESSION_KEY_BACKUP, stored);
+    console.log("[backupSessionKey] backed up to", SESSION_KEY_BACKUP);
   }
 }
 
@@ -109,10 +116,12 @@ export function backupSessionKey(): void {
 export function restoreSessionKey(): boolean {
   if (typeof window === "undefined") return false;
   const backed = localStorage.getItem(SESSION_KEY_BACKUP);
+  console.log("[restoreSessionKey] backup found:", !!backed);
   if (!backed) return false;
   localStorage.setItem(SESSION_KEY_STORAGE, backed);
   localStorage.removeItem(SESSION_KEY_BACKUP);
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: true } }));
+  console.log("[restoreSessionKey] restored from backup");
   return true;
 }
 
