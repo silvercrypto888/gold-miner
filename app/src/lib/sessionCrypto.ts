@@ -73,27 +73,38 @@ export async function encryptSessionKey(
   secretKey: Uint8Array,
   walletSignMessage: (message: Uint8Array) => Promise<Uint8Array>
 ): Promise<{ enc: string; iv: string }> {
+  console.log("[encryptSessionKey] start");
   let key = getCache();
+  console.log("[encryptSessionKey] cached key:", key ? "yes" : "no");
   if (!key) {
     let signPromise = getSignPromise();
+    console.log("[encryptSessionKey] cached signPromise:", signPromise ? "yes" : "no");
     if (!signPromise) {
+      console.log("[encryptSessionKey] calling walletSignMessage...");
       signPromise = walletSignMessage(SESSION_MESSAGE);
       setSignPromise(signPromise);
     }
     try {
       const signature = await signPromise;
+      console.log("[encryptSessionKey] got signature, deriving key...");
       key = await deriveKeyFromSignature(signature);
+      console.log("[encryptSessionKey] key derived");
+    } catch (err) {
+      console.error("[encryptSessionKey] sign/derive failed:", err);
+      throw err;
     } finally {
       setSignPromise(null);
     }
   }
 
+  console.log("[encryptSessionKey] encrypting with AES-GCM...");
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
     secretKey as any
   );
+  console.log("[encryptSessionKey] encryption done");
 
   return {
     enc: bytesToBase64(new Uint8Array(encrypted)),
@@ -110,21 +121,31 @@ export async function decryptSessionKey(
   iv: string,
   walletSignMessage: (message: Uint8Array) => Promise<Uint8Array>
 ): Promise<Uint8Array> {
+  console.log("[decryptSessionKey] start");
   let key = getCache();
+  console.log("[decryptSessionKey] cached key:", key ? "yes" : "no");
   if (!key) {
     let signPromise = getSignPromise();
+    console.log("[decryptSessionKey] cached signPromise:", signPromise ? "yes" : "no");
     if (!signPromise) {
+      console.log("[decryptSessionKey] calling walletSignMessage...");
       signPromise = walletSignMessage(SESSION_MESSAGE);
       setSignPromise(signPromise);
     }
     try {
       const signature = await signPromise;
+      console.log("[decryptSessionKey] got signature, deriving key...");
       key = await deriveKeyFromSignature(signature);
+      console.log("[decryptSessionKey] key derived");
+    } catch (err) {
+      console.error("[decryptSessionKey] sign/derive failed:", err);
+      throw err;
     } finally {
       setSignPromise(null);
     }
   }
 
+  console.log("[decryptSessionKey] decrypting with AES-GCM...");
   const ciphertext = base64ToBytes(enc);
   const ivBytes = base64ToBytes(iv);
 
@@ -133,6 +154,7 @@ export async function decryptSessionKey(
     key,
     ciphertext as any
   );
+  console.log("[decryptSessionKey] decryption done");
 
   return new Uint8Array(decrypted);
 }

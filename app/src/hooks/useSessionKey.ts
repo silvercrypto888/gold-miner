@@ -428,7 +428,9 @@ export function useSessionKey() {
     joiningRef.current = true;
 
     // ── STEP 1: Sweep old session key ──
+    console.log("[startSession] Step 1: sweep old key");
     const sweepResult = await sweepSessionKey();
+    console.log("[startSession] sweep result:", sweepResult);
     if (!sweepResult.ok) {
       // Harmless skips (no key, no funds) — continue normally.
       // Real errors — abort before touching localStorage.
@@ -443,6 +445,7 @@ export function useSessionKey() {
     setIsLoading(true); setError(null);
 
     // Generate the session keypair first
+    console.log("[startSession] generating new keypair");
     const nkp = nacl.sign.keyPair();
     const spk = new PublicKey(nkp.publicKey);
     let expirySlot: number;
@@ -452,12 +455,13 @@ export function useSessionKey() {
 
     try {
       // ── STEP 3: Encrypt and save the new session key locally FIRST ──
-      // This requires the user to sign a message. If they cancel here,
-      // no XNT has been spent yet.
+      console.log("[startSession] Step 3: storeSessionKey");
       const currentSlot = await connectionRef.current!.getSlot();
       expirySlot = currentSlot + SESSION_DURATION_SLOTS;
       await storeSessionKey(nkp, expirySlot, signMessageRef.current);
+      console.log("[startSession] storeSessionKey completed");
     } catch (err: any) {
+      console.error("[startSession] storeSessionKey FAILED:", err);
       setIsLoading(false);
       joiningRef.current = false;
       // Restore old key since we haven't spent anything yet

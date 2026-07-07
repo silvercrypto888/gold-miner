@@ -18,9 +18,15 @@ export async function storeSessionKey(
   expirySlot: number,
   signMessage: (msg: Uint8Array) => Promise<Uint8Array>
 ): Promise<void> {
-  if (typeof window === "undefined") return;
+  console.log("[storeSessionKey] start");
+  if (typeof window === "undefined") {
+    console.warn("[storeSessionKey] typeof window === undefined, skipping");
+    return;
+  }
 
+  console.log("[storeSessionKey] calling encryptSessionKey...");
   const { enc, iv } = await encryptSessionKey(keypair.secretKey, signMessage);
+  console.log("[storeSessionKey] encrypted ok");
 
   const data: SessionKeyData = {
     publicKey: bs58.encode(keypair.publicKey),
@@ -29,7 +35,9 @@ export async function storeSessionKey(
     expirySlot,
   };
 
+  console.log("[storeSessionKey] writing to localStorage, key:", SESSION_KEY_STORAGE);
   localStorage.setItem(SESSION_KEY_STORAGE, JSON.stringify(data));
+  console.log("[storeSessionKey] localStorage write complete");
   window.dispatchEvent(new CustomEvent("sessionkey-changed", { detail: { fromStore: true } }));
 }
 
