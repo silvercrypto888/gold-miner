@@ -26,8 +26,9 @@ mnemonic\.
 seed_phrase
 "
 
-# Build the grep pattern
-PATTERN=$(echo "$FORBIDDEN_FILE_PATTERNS" | tr '\n' '|' | sed 's/|$//' | sed 's/^|//' | sed 's/||/|/g')
+# Build the grep pattern — filter blank lines first so we never get a
+# dangling leading/trailing '|' (an empty alternative matches every file).
+PATTERN=$(printf '%s\n' "$FORBIDDEN_FILE_PATTERNS" | grep -vE '^[[:space:]]*$' | tr '\n' '|' | sed 's/|$//')
 
 STAGED=$(git diff --cached --name-only)
 
