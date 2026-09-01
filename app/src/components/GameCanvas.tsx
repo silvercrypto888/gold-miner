@@ -71,7 +71,7 @@ export function GameCanvas({ onPlaySound }: { onPlaySound?: (name: "mine" | "wal
   const foresightPosRef = useRef<{ x: number; y: number }>({ x: 1, y: 1 });
 
   // ── Gold Sense toggle ──
-  const [goldSenseEnabled, setGoldSenseEnabled] = useState(true);
+  const [goldSenseEnabled, setGoldSenseEnabled] = useState(false);
 
   // Sync foresightPos with real position when NOT in foresight mode, or on toggle ON
 const prevForesightRef = useRef(foresightMode);
