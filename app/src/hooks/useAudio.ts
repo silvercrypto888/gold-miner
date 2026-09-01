@@ -8,6 +8,10 @@ const TRACK_CANDIDATES = [
   "/assets/music/Op.72_No.2.opus",
   "/assets/music/Pinball Spring.opus",
   "/assets/music/The_Planets_Op.32_Jupiter_The_Bringer_of_Jollity_Mix_USAF_and_NYCP.opus",
+  "/assets/music/2690_etude-op-10-no-2-chromatique-ba65b02e-a28d-4b0f-be0b-95680122847e.opus",
+  "/assets/music/2690_etude-op-10-no-5-black-keys-78597894-e4e5-4bf9-8df4-a611a967dd3e.opus",
+  "/assets/music/freesound_community-zapping-5-58125.opus",
+  "/assets/music/the_mountain-space-438391.opus",
 ];
 
 const SOUND_CANDIDATES: Record<string, string> = {
