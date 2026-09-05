@@ -259,7 +259,7 @@ export function TreasuryPanel() {
         className="w-full flex items-center justify-between p-4 hover:bg-gray-700/30 transition-colors"
       >
         <h3 className="font-semibold text-gray-200 flex items-center gap-2">
-          <span>🪙</span> Game Treasury
+          <span>💰</span> LP Treasury
         </h3>
         <span className={`text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}>▼</span>
       </button>
