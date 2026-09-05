@@ -7,7 +7,7 @@ import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@sol
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 import {
-  SolanaMobileWalletAdapter,
+  RemoteSolanaMobileWalletAdapter,
   createDefaultAddressSelector,
   createDefaultAuthorizationResultCache,
   createDefaultWalletNotFoundHandler,
@@ -42,29 +42,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Custom RPC endpoint for X1 Testnet
   const endpoint = RPC_URL;
 
-  // Explicit wallet adapters: Backpack (desktop extension) + an explicitly
-  // constructed Solana Mobile Wallet Adapter for Android Chrome.
+  // Explicit wallet adapters: Backpack (desktop extension) + a Solana Mobile
+  // Wallet Adapter for Android Chrome.
   //
-  // We construct the MWA adapter ourselves (rather than letting
-  // wallet-adapter-react auto-add it) so we can pin a proper `appIdentity`
-  // and `cluster`. The auto-added one infers the cluster from the RPC URL;
-  // for a custom X1 testnet endpoint that inference is fragile, and a
-  // missing/odd appIdentity can make the wallet app mishandle the
-  // association handshake (symptom: deep link opens, then a 30s
-  // ws://localhost timeout).
+  // We use REMOTE association (via Solana Mobile's public reflector) instead of
+  // local association. Local association dials ws://localhost on the device,
+  // and Backpack's Android MWA local server fails to accept that loopback
+  // connection (symptom: deep link opens, then a 30s ws://localhost timeout).
+  // Remote association routes the connection over wss:// through the reflector,
+  // which sidesteps the broken local server entirely. Desktop is unaffected
+  // (it uses the Backpack extension).
   const wallets = useMemo(() => {
     const adapters: import("@solana/wallet-adapter-base").Adapter[] = [new BackpackWalletAdapter()];
     // Only add the MWA adapter on mobile (Android Chrome / Solana web shell).
     if (typeof window !== "undefined" && /Android/i.test(navigator.userAgent)) {
       adapters.push(
-        new SolanaMobileWalletAdapter({
+        new RemoteSolanaMobileWalletAdapter({
           addressSelector: createDefaultAddressSelector(),
           appIdentity: {
             name: "Gold Miner",
             uri: typeof window !== "undefined" ? window.location.origin : "https://goldminer.x1",
           },
           authorizationResultCache: createDefaultAuthorizationResultCache(),
-          cluster: "testnet",
+          chain: "solana:testnet",
+          remoteHostAuthority: "https://reflector.walletstandard.org",
           onWalletNotFound: createDefaultWalletNotFoundHandler(),
         })
       );
