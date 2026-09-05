@@ -11,6 +11,38 @@ import { TreasuryPanel } from "@/components/TreasuryPanel";
 import { useAudio } from "@/hooks/useAudio";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
+// Renders wallet-adapter errors (esp. MWA handshake failures) as a visible banner
+function WalletErrorListener() {
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const err = (e as CustomEvent).detail as Error;
+      console.error("[WalletErrorListener]", err);
+      setError(err);
+    };
+    window.addEventListener("wallet-error", handler as EventListener);
+    return () => window.removeEventListener("wallet-error", handler as EventListener);
+  }, []);
+  if (!error) return null;
+  return (
+    <div style={{
+      position: "fixed", bottom: 12, left: 12, right: 12, zIndex: 9999,
+      background: "#7f1d1d", color: "#fecaca",
+      border: "1px solid #ef4444", borderRadius: 10,
+      padding: "10px 14px", fontSize: 12, fontFamily: "monospace",
+      whiteSpace: "pre-wrap", wordBreak: "break-word",
+      maxHeight: "40vh", overflow: "auto",
+    }}>
+      <strong>Wallet error:</strong> {error.message}
+      {error.stack ? `\n${error.stack}` : ""}
+      <button
+        onClick={() => setError(null)}
+        style={{ display: "block", marginTop: 8, background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}
+      >Dismiss</button>
+    </div>
+  );
+}
+
 export default function GameUI() {
   const { soundEnabled, musicEnabled, toggleSound, toggleMusic, playSound } = useAudio();
   const [gasToast, setGasToast] = useState<string | null>(null);
@@ -32,6 +64,7 @@ export default function GameUI() {
   }, []);
   return (
     <WalletProvider>
+      <WalletErrorListener />
       <main className="min-h-screen bg-gray-900 text-white">
         {/* Header */}
         <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-50">
