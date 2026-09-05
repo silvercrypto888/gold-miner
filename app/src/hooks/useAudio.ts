@@ -110,6 +110,7 @@ export function useAudio() {
   const SOUND_VOLUMES: Record<string, number> = {
     mine: 0.55,
     enter_foresight: 0.55,
+    cinematic_boom: 0.35,
   };
 
   const playSound = useCallback(
