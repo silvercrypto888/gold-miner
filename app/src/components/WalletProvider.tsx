@@ -5,13 +5,6 @@ import { ReactNode, useMemo } from "react";
 import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@solana/wallet-adapter-react";
 // @ts-ignore
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
-import {
-  RemoteSolanaMobileWalletAdapter,
-  createDefaultAddressSelector,
-  createDefaultAuthorizationResultCache,
-  createDefaultWalletNotFoundHandler,
-} from "@solana-mobile/wallet-adapter-mobile";
 import { RPC_URL } from "@/lib/constants";
 
 // Import wallet adapter CSS
@@ -42,36 +35,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Custom RPC endpoint for X1 Testnet
   const endpoint = RPC_URL;
 
-  // Explicit wallet adapters: Backpack (desktop extension) + a Solana Mobile
-  // Wallet Adapter for Android Chrome.
+  // Wallet-agnostic: pass an EMPTY wallet list so wallet-adapter-react
+  // auto-discovers every wallet the device exposes via the wallet-standard
+  // registry.
   //
-  // We use REMOTE association (via Solana Mobile's public reflector) instead of
-  // local association. Local association dials ws://localhost on the device,
-  // and Backpack's Android MWA local server fails to accept that loopback
-  // connection (symptom: deep link opens, then a 30s ws://localhost timeout).
-  // Remote association routes the connection over wss:// through the reflector,
-  // which sidesteps the broken local server entirely. Desktop is unaffected
-  // (it uses the Backpack extension).
-  const wallets = useMemo(() => {
-    const adapters: import("@solana/wallet-adapter-base").Adapter[] = [new BackpackWalletAdapter()];
-    // Only add the MWA adapter on mobile (Android Chrome / Solana web shell).
-    if (typeof window !== "undefined" && /Android/i.test(navigator.userAgent)) {
-      adapters.push(
-        new RemoteSolanaMobileWalletAdapter({
-          addressSelector: createDefaultAddressSelector(),
-          appIdentity: {
-            name: "Gold Miner",
-            uri: typeof window !== "undefined" ? window.location.origin : "https://goldminer.x1",
-          },
-          authorizationResultCache: createDefaultAuthorizationResultCache(),
-          chain: "solana:testnet",
-          remoteHostAuthority: "https://reflector.walletstandard.org",
-          onWalletNotFound: createDefaultWalletNotFoundHandler(),
-        })
-      );
-    }
-    return adapters;
-  }, []);
+  //  - Desktop: auto-discovers the Backpack extension (and any other
+  //    installed extension).
+  //  - Mobile: auto-discovers every Solana Mobile Wallet Adapter wallet the
+  //    device exposes (Phantom, Solflare, Backpack, ...) and shows them all.
+  //
+  // We deliberately do NOT hardcode a single wallet here. Backpack's Android
+  // app does not properly implement the MWA protocol (local association times
+  // out on ws://localhost; remote association hangs on the reflector), so
+  // forcing Backpack-only would block mobile connect entirely. Auto-discovery
+  // lets the user pick a wallet that actually works (e.g. Phantom/Solflare).
+  const wallets = useMemo(() => [], []);
 
   return (
     // @ts-ignore
