@@ -6,6 +6,12 @@ import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@sol
 // @ts-ignore
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAddressSelector,
+  createDefaultAuthorizationResultCache,
+  createDefaultWalletNotFoundHandler,
+} from "@solana-mobile/wallet-adapter-mobile";
 import { RPC_URL } from "@/lib/constants";
 
 // Import wallet adapter CSS
@@ -36,8 +42,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Custom RPC endpoint for X1 Testnet
   const endpoint = RPC_URL;
 
-  // Explicit wallet adapters for Backpack + wallet-standard auto-discover
-  const wallets = useMemo(() => [new BackpackWalletAdapter()], []);
+  // Explicit wallet adapters: Backpack (desktop extension) + an explicitly
+  // constructed Solana Mobile Wallet Adapter for Android Chrome.
+  //
+  // We construct the MWA adapter ourselves (rather than letting
+  // wallet-adapter-react auto-add it) so we can pin a proper `appIdentity`
+  // and `cluster`. The auto-added one infers the cluster from the RPC URL;
+  // for a custom X1 testnet endpoint that inference is fragile, and a
+  // missing/odd appIdentity can make the wallet app mishandle the
+  // association handshake (symptom: deep link opens, then a 30s
+  // ws://localhost timeout).
+  const wallets = useMemo(() => {
+    const adapters: import("@solana/wallet-adapter-base").Adapter[] = [new BackpackWalletAdapter()];
+    // Only add the MWA adapter on mobile (Android Chrome / Solana web shell).
+    if (typeof window !== "undefined" && /Android/i.test(navigator.userAgent)) {
+      adapters.push(
+        new SolanaMobileWalletAdapter({
+          addressSelector: createDefaultAddressSelector(),
+          appIdentity: {
+            name: "Gold Miner",
+            uri: typeof window !== "undefined" ? window.location.origin : "https://goldminer.x1",
+          },
+          authorizationResultCache: createDefaultAuthorizationResultCache(),
+          cluster: "testnet",
+          onWalletNotFound: createDefaultWalletNotFoundHandler(),
+        })
+      );
+    }
+    return adapters;
+  }, []);
 
   return (
     // @ts-ignore
