@@ -46,6 +46,7 @@ function WalletErrorListener() {
 export default function GameUI() {
   const { soundEnabled, musicEnabled, toggleSound, toggleMusic, playSound } = useAudio();
   const [gasToast, setGasToast] = useState<string | null>(null);
+  const [consented, setConsented] = useState(false);
 
   useEffect(() => {
     const handler = (e: CustomEvent) => {
@@ -168,8 +169,8 @@ export default function GameUI() {
           </div>
         </div>
       </main>
-      <ConsentModal />
-      <OnboardingModal />
+      <ConsentModal onAgree={() => setConsented(true)} />
+      <OnboardingModal agreed={consented} />
     </WalletProvider>
   );
 }

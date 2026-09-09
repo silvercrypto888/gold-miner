@@ -5,7 +5,7 @@ import Link from "next/link";
 
 const CONSENT_KEY = "gold-miner-consent-v1";
 
-export function ConsentModal() {
+export function ConsentModal({ onAgree }: { onAgree?: () => void }) {
   const [open, setOpen] = useState(false);
   const [checked, setChecked] = useState(false);
 
@@ -18,6 +18,7 @@ export function ConsentModal() {
     if (!checked) return;
     localStorage.setItem(CONSENT_KEY, "agreed");
     setOpen(false);
+    onAgree?.();
   };
 
   if (!open) return null;

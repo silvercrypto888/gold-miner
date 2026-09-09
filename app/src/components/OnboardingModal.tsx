@@ -4,17 +4,21 @@ import { useState, useEffect, useRef } from "react";
 
 const ONBOARDING_KEY = "gold-miner-onboarding-v1";
 
-export function OnboardingModal() {
+export function OnboardingModal({ agreed }: { agreed?: boolean }) {
   const [open, setOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const consented = typeof window !== "undefined" && localStorage.getItem("gold-miner-consent-v1") === "agreed";
+    // Refresh path: consent already persisted before this mount.
+    // Also reacts to `agreed` flipping true the moment the consent modal is
+    // dismissed, so the How-to-Play shows right after the clickwrapper/consent
+    // without requiring a manual refresh.
+    const consented = agreed || (typeof window !== "undefined" && localStorage.getItem("gold-miner-consent-v1") === "agreed");
     const seenOnboarding = typeof window !== "undefined" && localStorage.getItem(ONBOARDING_KEY) === "seen";
     if (consented && !seenOnboarding) {
       setOpen(true);
     }
-  }, []);
+  }, [agreed]);
 
   const handleClose = () => {
     localStorage.setItem(ONBOARDING_KEY, "seen");
