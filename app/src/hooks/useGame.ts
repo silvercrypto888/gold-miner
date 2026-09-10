@@ -483,8 +483,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       case Direction.Left:  newX = curPos.x - 1; break;
       case Direction.Right: newX = curPos.x + 1; break;
     }
-    if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) return;
-    if (newX === curPos.x && newY === curPos.y) return;
+    if (newX < 1 || newX > GRID_SIZE || newY < 1 || newY > GRID_SIZE) {
+      moveInProgressRef.current = false;
+      return;
+    }
+    if (newX === curPos.x && newY === curPos.y) {
+      moveInProgressRef.current = false;
+      return;
+    }
 
     // Clear any stale status timer from previous move
     clearStatusTimer();
