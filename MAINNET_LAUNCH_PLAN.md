@@ -1,6 +1,6 @@
 # Gold Miner — Mainnet Launch Plan
 
-> **Status:** `READY FOR PHASE 2` — Phase 1 decisions captured. Testnet blockers cleared (2026-09-10). Awaiting Silver's final green light + remaining Phase 2 inputs.  
+> **Status:** `HOLDING FOR GREEN LIGHT` — Phase 1 decisions captured. Testnet blockers cleared (2026-09-10). AMM confirmed. Awaiting Silver's go to start mainnet deployment.  
 > **Target:** X1 Mainnet (`https://rpc.mainnet.x1.xyz`)  
 > **Current:** X1 Testnet (`https://rpc.testnet.x1.xyz`)
 
@@ -202,10 +202,11 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 - ✅ AMM program ID discovered: `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` (different from testnet `7EEuq...`)
 - ✅ Discriminator **VERIFIED** — exact match between testnet and mainnet (same Anchor codebase)
 - ✅ Upgrade history checked — **zero upgrades** since 2026-01-07 deployment
-- ⏳ Silver to confirm this is the intended AMM for GOLD/XNT
-- ⏳ Initial LP size confirmation (Silver to decide)
+- ✅ **AMM CONFIRMED (2026-09-10):** Silver confirmed `sEsYH...` is the intended mainnet AMM (verified from a real mainnet example transaction)
+- ✅ **Seed LP size:** discretionary, may be very small for testing — do not be surprised if it's tiny
 - ⏳ Dev to update `AMM_PROGRAM_ID` constant for mainnet builds (one-line change)
 - ⏳ **Mint discrepancy to resolve:** live testnet `GameConfig.gold_mint` = `14YBZ...` (not found on-chain), but frontend uses `vKxn...`. Verify which is the intended live mint before mainnet.
+- ⏳ **Deployer funding:** Silver will fund later; not yet ready to start mainnet deployment (2026-09-10)
 
 ---
 
@@ -393,15 +394,14 @@ Step 9: Future — Make Immutable
 
 ## What I Need From You Right Now
 
-Phase 1 decisions are **captured** (see summary table). To move into Phase 2 execution, I need these remaining inputs:
+Phase 1 decisions are **captured** (see summary table). AMM confirmed, seed LP discretionary. **Silver is not yet ready to start mainnet deployment (2026-09-10)** — we are holding for the green light.
 
-1. **AMM confirm:** Is `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` the intended mainnet AMM for GOLD/XNT? (Discriminator already verified to match.)
-2. **Initial LP size:** How much GOLD + XNT for the seed pool? (Small seed = high slippage; may defer auto-LP until liquidity deepens.)
-3. **Deployer funding:** Fund the mainnet deployer wallet with ~0.5–1 XN for deployment fees.
-4. **Mint discrepancy:** Confirm the intended live testnet GOLD mint (`vKxn...` vs on-chain `14YBZ...`).
-5. **Green light:** Explicit go to start Phase 2 (token deploy → program deploy → game init → AMM pool → frontend).
+Remaining inputs when you're ready to go:
+1. **Deployer funding:** Fund the mainnet deployer wallet with ~0.5–1 XN for deployment fees (Silver will fund later).
+2. **Mint discrepancy:** Confirm the intended live testnet GOLD mint (`vKxn...` vs on-chain `14YBZ...`).
+3. **Green light:** Explicit go to start Phase 2 (token deploy → program deploy → game init → AMM pool → frontend).
 
-Once I have these, I will:
+**No action needed now.** I'll hold here until you give the go. When you do, I will:
 - Generate the exact deploy scripts
 - Update the frontend constants file (mainnet program ID + mint + AMM)
 - Write the `init_game` and `init_treasury` mainnet commands
