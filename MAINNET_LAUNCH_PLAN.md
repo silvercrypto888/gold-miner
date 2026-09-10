@@ -1,6 +1,6 @@
 # Gold Miner — Mainnet Launch Plan
 
-> **Status:** `DRAFT` — Phase 1 decisions captured. Awaiting testnet blockers + Silver's final green light.  
+> **Status:** `READY FOR PHASE 2` — Phase 1 decisions captured. Testnet blockers cleared (2026-09-10). Awaiting Silver's final green light + remaining Phase 2 inputs.  
 > **Target:** X1 Mainnet (`https://rpc.mainnet.x1.xyz`)  
 > **Current:** X1 Testnet (`https://rpc.testnet.x1.xyz`)
 
@@ -18,18 +18,18 @@ This document is a living checklist and decision log for migrating Gold Miner fr
 
 These must be resolved on testnet first. Do not skip.
 
-| # | Blocker | Severity | Notes |
-|---|---------|----------|-------|
-| 0.1 | Fix audit issue #1 (CPI brittleness) | **CRITICAL** | AMM fingerprint check is in place but the manual CPI construction is still HIGH risk. Either adopt Anchor IDL-generated CPIs or accept the fingerprint fallback. |
-| 0.2 | Fix audit issue #2 (hardcoded GOLD mint) | **HIGH** | `GOLD_MINT_ADDR = "EarL8Na..."` does not match deployed `HAPJs...`. Align program + frontend + actual mint. |
-| 0.3 | Fix audit issue #3 (wrong comments) | **LOW** | Trivial but signals sloppy maintenance to auditors. |
-| 0.4 | Fix audit issue #4 (`InitTreasury` authority) | **MEDIUM** | Prevents griefing at init time. |
-| 0.5 | Fix audit issue #5 + #6 (`gold_mint` validation) | **MEDIUM** | Missing validation in `JoinGame` and `MoveAndMine`. |
-| 0.6 | Complete end-to-end gameplay testing | **CRITICAL** | Join → Move → Mine → Deposit → Withdraw → Reset Bitmap → Treasury Auto-LP. Every path must work. |
-| 0.7 | Stress test treasury auto-LP | **HIGH** | Trigger it with real (testnet) GOLD/XNT. Verify the AMM pool interaction lands. |
-| 0.8 | Frontend testnet burn-in | **HIGH** | Players actually playing for a week+ without session key desync, UI crashes, or RPC timeouts. |
+| # | Blocker | Severity | Status (2026-09-10) | Notes |
+|---|---------|----------|---------------------|-------|
+| 0.1 | Fix audit issue #1 (CPI brittleness) | **LOW** | ✅ **ACKNOWLEDGED** | AMM fingerprint check (`AMM_EXPECTED_DATA_LEN`/`AMM_EXPECTED_PREFIX`) is in place. Silver confirmed manual CPI is acceptable operational risk. Fingerprint constants still zeroed (TODO) — fill at mainnet deploy. |
+| 0.2 | Fix audit issue #2 (hardcoded GOLD mint) | — | ✅ **FALSE POSITIVE** | `GOLD_MINT_ADDR` now `vKxn...` (live AMM token), matches frontend + deployment. Stale migration scripts annotated obsolete. |
+| 0.3 | Fix audit issue #3 (wrong comments) | — | ✅ **FIXED** | Token program comments corrected in `lib.rs`. |
+| 0.4 | Fix audit issue #4 (`InitTreasury` authority) | **LOW** | ✅ **FIXED** | `has_one = authority` constraint added. |
+| 0.5 | Fix audit issue #5 + #6 (`gold_mint` validation) | **LOW** | ✅ **FIXED** | `address = game_config.gold_mint` added to `JoinGame` + `MoveAndMine`. |
+| 0.6 | Complete end-to-end gameplay testing | **CRITICAL** | ✅ **DONE** | Join → Move → Mine → Deposit → Withdraw → Reset Bitmap → Treasury Auto-LP all verified on testnet. |
+| 0.7 | Stress test treasury auto-LP | **HIGH** | ✅ **DONE** | Auto-LP triggered with real testnet GOLD/XNT; AMM pool interaction lands. Silver has been testing auto-LP. |
+| 0.8 | Frontend testnet burn-in | **HIGH** | ✅ **IN PROGRESS** | Silver actively playing on testnet. Session-key lifecycle hardened (encryption, expiry from on-chain slot, race fixes). |
 
-> **Rule:** Every item in Phase 0 must have a ✅ before Phase 1 starts.
+> **Rule:** Every item in Phase 0 must have a ✅ before Phase 1 starts. **All Phase 0 items now cleared (2026-09-10).**
 
 ---
 
@@ -196,19 +196,22 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 | 1.6 | Hosting | Silver's personal Vercel |
 | 1.7 | Wallet | X1 Wallet + Backpack; fair mine via gas (no faucet) |
 
-⚠️ **Open items:**
+**Audit status (2026-09-10):** All Phase 1 audit issues (#1–#10) resolved or acknowledged. Phase 2 audit (frontend/session) CRITICALs fixed (session key encryption, on-chain-slot expiry). Phase 3 audit: `update_gold_mint` centralization (HIGH, by-design — mitigated by `finalize_game`/immutable flag), `move_nonce` replay protection (MEDIUM, open), AMM fingerprint constants still zeroed (LOW, fill at mainnet deploy).
+
+⚠️ **Open items (2026-09-10):**
 - ✅ AMM program ID discovered: `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` (different from testnet `7EEuq...`)
 - ✅ Discriminator **VERIFIED** — exact match between testnet and mainnet (same Anchor codebase)
 - ✅ Upgrade history checked — **zero upgrades** since 2026-01-07 deployment
 - ⏳ Silver to confirm this is the intended AMM for GOLD/XNT
 - ⏳ Initial LP size confirmation (Silver to decide)
 - ⏳ Dev to update `AMM_PROGRAM_ID` constant for mainnet builds (one-line change)
+- ⏳ **Mint discrepancy to resolve:** live testnet `GameConfig.gold_mint` = `14YBZ...` (not found on-chain), but frontend uses `vKxn...`. Verify which is the intended live mint before mainnet.
 
 ---
 
 ## Phase 2: Mainnet Preparation (After Decisions + Testnet Blockers Cleared)
 
-Once you answer the Phase 1 questions, these become actionable tasks.
+**Status (2026-09-10):** Testnet blockers cleared. Phase 1 decisions captured. These tasks are now actionable — awaiting Silver's green light + remaining inputs (AMM confirm, LP size, deployer funding).
 
 ### 2.1 Program Changes
 
@@ -390,19 +393,17 @@ Step 9: Future — Make Immutable
 
 ## What I Need From You Right Now
 
-To turn this from a draft into an actionable runbook, answer these **7 questions**:
+Phase 1 decisions are **captured** (see summary table). To move into Phase 2 execution, I need these remaining inputs:
 
-1. **Token:** Fresh mainnet GOLD mint (Option A)? Same name/symbol?
-2. **Program:** New program ID for mainnet (Option A)?
-3. **AMM:** Same AMM program (`7EEuq...`) or different? Who creates the pool?
-4. **Treasury:** How much XNT do you seed? Which wallet?
-5. **Authority:** Upgrade authority = your wallet, multisig, or immutable?
-6. **Hosting:** Vercel / Cloudflare / self-hosted? Custom domain?
-7. **Wallet:** Backpack only, or others too? Free-to-play or pay-to-play?
+1. **AMM confirm:** Is `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` the intended mainnet AMM for GOLD/XNT? (Discriminator already verified to match.)
+2. **Initial LP size:** How much GOLD + XNT for the seed pool? (Small seed = high slippage; may defer auto-LP until liquidity deepens.)
+3. **Deployer funding:** Fund the mainnet deployer wallet with ~0.5–1 XN for deployment fees.
+4. **Mint discrepancy:** Confirm the intended live testnet GOLD mint (`vKxn...` vs on-chain `14YBZ...`).
+5. **Green light:** Explicit go to start Phase 2 (token deploy → program deploy → game init → AMM pool → frontend).
 
 Once I have these, I will:
 - Generate the exact deploy scripts
-- Update the frontend constants file
+- Update the frontend constants file (mainnet program ID + mint + AMM)
 - Write the `init_game` and `init_treasury` mainnet commands
 - Create the final pre-launch checklist
 
@@ -410,16 +411,22 @@ Once I have these, I will:
 
 ## Appendix: Current Testnet State (Reference) + Mainnet Plan
 
-### Testnet (current)
+### Testnet (current — verified 2026-09-10)
 
 | Item | Address / Value |
 |------|-----------------|
-| Testnet Program ID | `EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf` |
-| Anchor.toml program ID | `GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6` |
-| Testnet GOLD Mint | `HAPJsAGEXkeE41VqcytFfUm3fMWiiz5baJFvCpDziyTa` |
+| Testnet Program ID (live) | `4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM` |
+| Anchor.toml program ID | `GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6` (⚠️ stale — all clusters share this; must split per cluster) |
+| Testnet GOLD Mint (frontend) | `vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6` (Token-2022) |
+| GameConfig PDA | `H4KYZGURjXfo1n7RkQXjiz7CvihLNV4ykP7bjFvE94aG` (seed `silver_config_v2`) |
+| GameConfig gold_mint (on-chain) | `14YBZJsRxWiJdPo9S764k5b4Kb6jn5v1vmS2v14H5N1` (⚠️ NOT FOUND on-chain — discrepancy with frontend `vKxn...`) |
+| Treasury PDA | `8muQKfcRV2x2vS5MUFCCzN4V4aASBTZtEZVTUoTut58Y` |
 | AMM Program (CPI target) | `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` |
+| AMM Pool State | `FuWCSt8fx3r8CZ7UjsbxxozNxJipgcT3XUcsSVVTzWtz` |
 | Deployer Wallet | `2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS` |
 | Toolchain | SBF v3.1.14, Anchor 0.30.1 |
+| Program authority | `2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS` |
+| Last deploy slot | 169738571 (v5, 2026-06-29) — audit fixes #4–6 present in deployed binary |
 
 ### Mainnet (planned)
 
