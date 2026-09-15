@@ -134,11 +134,14 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     }
   }, [playerState]);
 
-  // Fetch the bitmap (cached, refetched every 30s)
+  // Fetch the bitmap (cached, refetched every 8s)
+  // Short TTL keeps cross-player gold visible-to-mined updates reasonably fresh
+  // (two players mining nearby: the loser's client stops showing ghost gold
+  // within ~8s). fetchBitmap(true) forces an immediate hard refetch regardless.
   const fetchBitmap = useCallback(async (force = false) => {
     if (!connRef.current) return null;
     const now = Date.now();
-    if (!force && bitmapRef.current && now - bitmapLastFetch.current < 30000) return bitmapRef.current;
+    if (!force && bitmapRef.current && now - bitmapLastFetch.current < 8000) return bitmapRef.current;
 
     try {
       const [bpda] = getGoldBitmapPda();
