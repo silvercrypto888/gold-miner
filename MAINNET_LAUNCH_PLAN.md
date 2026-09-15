@@ -321,7 +321,8 @@ Recommended order — do not skip or reorder.
 Step 0: Generate new keypair (done before deploy day)
   ├── solana-keygen new -o ~/.config/solana/gold-miner-mainnet.json
   ├── Airdrop/fund with XN for deployment fees
-  └── Back up keypair securely (Silver's responsibility)
+  ├── Theo stores + backs up the keypair on the server and records its path + purpose in memory (never sent over chat)
+  └── Upgrade-authority key gets a SEPARATE owner-side backup copy (offline / hardware wallet / private encrypted note) so the live program is never hostage to a single server
 
 Step 1: Pre-flight
   ├── Verify deployer wallet balance (XN for fees)
