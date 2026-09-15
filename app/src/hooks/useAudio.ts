@@ -124,6 +124,7 @@ export function useAudio() {
     mine: 0.55,
     enter_foresight: 0.55,
     cinematic_boom: 0.35,
+    angelical_pad: 0.6,
   };
 
   const playSound = useCallback(
