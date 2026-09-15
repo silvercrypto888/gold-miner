@@ -42,11 +42,23 @@ The following decisions are locked in. One-way doors have been answered.
 **Decision:** Option A — fresh mainnet Token-2022 GOLD mint.
 
 - Same metadata as testnet: name="Goldium", symbol="GOLD", decimals=9
-- Same image URI (IPFS)
+- Same image URI (Arweave gold icosahedron)
 - Testnet GOLD (`HAPJs...`) stays on testnet for continued dev/testing
 - Clean slate, no migration headaches
 
+**⚠️ ONE-WAY DOOR — Metadata Extension MUST be enabled at mint creation:**
+- The **Token-2022 Metadata Extension** must be enabled when the GOLD mint is first created on mainnet.
+- **It CANNOT be added after the fact.** If the mint is created without it, the only way to get on-chain metadata later is to create an entirely new mint (fresh address) and migrate the game to it.
+- This is why we deploy with `create_gold_mint.js` (which initializes the `MetadataPointer` + `TokenMetadata` extensions at creation time) — **do NOT** fall back to a bare `spl-token create-token` without extensions.
+- Verify the extension is present on the mainnet mint BEFORE wiring it into `GameConfig` / the frontend; re-checking is cheap, re-minting is not.
+
 **Action item:** Deploy new Token-2022 mint on mainnet with metadata enabled.
+
+**Metadata URI for reference (gold icosahedron image on Arweave, used for the testnet mint):**
+```
+https://arweave.net/cxmHUDnAAt9jUV4RDiEFM5jkoUCR8awzIcnSpcD1r5o
+```
+This exact URI (and image) should be reused for the mainnet GOLD mint metadata.
 
 ---
 
@@ -245,7 +257,12 @@ spl-token --url https://rpc.mainnet.x1.xyz create-token \
 **What I need from you:**
 - Initial supply amount (e.g., 100M GOLD)
 - Whether mint authority should be retained or revoked
-- Metadata JSON (name, symbol, description, image URI)
+- Metadata JSON (name, symbol, description, image URI) — reuse the testnet Arweave URI below unless you want to mint a new one
+
+**Reference — testnet GOLD metadata (Token-2022 Metadata Extension):**
+- Name=`Goldium` / Symbol=`GOLD` / Decimals=`9`
+- Image URI (gold icosahedron, Arweave): `https://arweave.net/cxmHUDnAAt9jUV4RDiEFM5jkoUCR8awzIcnSpcD1r5o`
+- **⚠️ The Metadata Extension must be enabled at mint creation.** It is a one-way door: if the mainnet mint is created without it, it cannot be added later — you'd need a brand-new mint. Use the `create_gold_mint.js` flow (MetadataPointer + TokenMetadata extensions initialized at creation), not a bare `spl-token create-token`.
 
 ### 2.3 AMM Pool Setup (mainnet)
 
@@ -314,8 +331,13 @@ Step 1: Pre-flight
 
 Step 2: Token Deploy
   ├── Create GOLD mint (Token-2022) on mainnet
+  ├── ⚠️ ENABLE Token-2022 Metadata Extension AT CREATION (one-way door — cannot add later)
+  │      └── Use create_gold_mint.js flow (MetadataPointer + TokenMetadata)
   ├── Set metadata (same as testnet: Goldium, GOLD, 9 decimals)
+  ├── Set image URI (Arweave gold icosahedron):
+  │      └── https://arweave.net/cxmHUDnAAt9jUV4RDiEFM5jkoUCR8awzIcnSpcD1r5o
   ├── Mint initial supply to deployer
+  ├── VERIFY metadata extension present on the mainnet mint (cheap) BEFORE wiring into GameConfig
   └── Record mainnet mint address
 
 Step 3: Program Deploy
