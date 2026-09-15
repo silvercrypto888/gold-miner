@@ -24,7 +24,7 @@ On-chain multiplayer fair mine game on X1 Network. Explore a 1,024×1,024 grid, 
 
 | Detail | Value |
 |--------|-------|
-| Program ID | `EkThFJFcQtC9vmguQWQu6qhbndCkCaFFvuGX5MSsgGAf` |
+| Program ID | `4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM` |
 | Network | X1 Testnet |
 | RPC | `https://rpc.testnet.x1.xyz` |
 | Grid Size | 1,024 × 1,024 |
