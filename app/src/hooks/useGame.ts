@@ -528,9 +528,11 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // Minimum safe = rentExempt (~890K) + ATA rent (~2.04M) + buffer. We keep
       // the threshold comfortably above the hard floor so the topup fires EARLY,
       // before a move can fail for lack of session gas (avoids console errors).
-      // 8M lamports = 0.008 SOL — well below the 0.2 SOL topup target (~4%), so it
-      // won't topup on every move, but gives several moves + RPC lag of headroom.
-      const SESSION_MIN_SAFE_BALANCE = 8_000_000;
+      // 15M lamports = 0.015 SOL — well below the 0.2 SOL topup target (~7.5%), so
+      // it won't topup on every move, but gives comfortably more moves + RPC lag
+      // of headroom than the old 8M (raised 2026-09-15 after a console error
+      // surfaced when the session key ran out mid-session).
+      const SESSION_MIN_SAFE_BALANCE = 15_000_000;
       const balCache = sessionBalanceRef.current;
       let bal = balCache && (now - balCache.time < 5000) ? balCache.lamports : null;
       if (bal === null) {
