@@ -522,8 +522,12 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // The move_and_mine program creates the player's Token-2022 ATA via CPI
       // when it doesn't exist yet — that costs ~2.04M in rent, paid by the
       // session key. The key must retain its own rent-exempt balance afterward.
-      // Minimum safe = rentExempt (~890K) + ATA rent (~2.04M) + buffer = 3.5M.
-      const SESSION_MIN_SAFE_BALANCE = 3_500_000;
+      // Minimum safe = rentExempt (~890K) + ATA rent (~2.04M) + buffer. We keep
+      // the threshold comfortably above the hard floor so the topup fires EARLY,
+      // before a move can fail for lack of session gas (avoids console errors).
+      // 8M lamports = 0.008 SOL — well below the 0.2 SOL topup target (~4%), so it
+      // won't topup on every move, but gives several moves + RPC lag of headroom.
+      const SESSION_MIN_SAFE_BALANCE = 8_000_000;
       const balCache = sessionBalanceRef.current;
       let bal = balCache && (now - balCache.time < 5000) ? balCache.lamports : null;
       if (bal === null) {
