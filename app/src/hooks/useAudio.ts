@@ -58,6 +58,16 @@ export function useAudio() {
     return found;
   }, []);
 
+  // Per-track music volume (0-1). Tracks are 30% louder vs the default 0.4
+  // baseline where noted (some sources are recorded quieter).
+  const TRACK_VOLUMES: Record<string, number> = {
+    "2690_etude-op-10-no-2-chromatique-ba65b02e-a28d-4b0f-be0b-95680122847e.opus": 0.52, // +30%
+    "2690_etude-op-10-no-5-black-keys-78597894-e4e5-4bf9-8df4-a611a967dd3e.opus": 0.52, // +30%
+    "freesound_community-zapping-5-58125.opus": 0.52, // +30%
+    "The_Planets_Op.32_Jupiter_The_Bringer_of_Jollity_Mix_USAF_and_NYCP.opus": 0.52, // +30%
+  };
+  const BASE_MUSIC_VOLUME = 0.4;
+
   const playNextTrack = useCallback((index: number) => {
     const tracks = trackListRef.current;
     if (tracks.length === 0) return;
@@ -70,9 +80,12 @@ export function useAudio() {
       musicRef.current = null;
     }
 
-    const audio = new Audio(tracks[idx]);
+    const url = tracks[idx];
+    const audio = new Audio(url);
     audio.preload = "none";
-    audio.volume = 0.4;
+    // Pick per-track volume (e.g. +30% for quieter sources), else the baseline.
+    const fileName = url.split("/").pop() ?? "";
+    audio.volume = TRACK_VOLUMES[fileName] ?? BASE_MUSIC_VOLUME;
     audio.addEventListener("ended", () => playNextTrack(idx + 1));
     audio.load();
     audio.play().catch(() => {});
