@@ -96,9 +96,8 @@ export default function LitepaperPage() {
           </div>
           <ul className="list-disc list-inside text-gray-300 space-y-2 leading-relaxed">
             <li>
-              <strong>Total Supply:</strong> Uncapped — limited only by total gold spots (~15 million
-              GOLD theoretical max at 100 GOLD per mine). Respawning of gold spots may be permitted if 
-              sufficiently many are mined.
+              <strong>Total Supply:</strong> Uncapped — ~30 million GOLD minted per world epoch
+              (~200 GOLD per gold spot at 100 GOLD to the player + 100 GOLD to the treasury).
             </li>
             <li>
               <strong>Minting:</strong> Only via on-chain <code>move_and_mine</code> instructions.
