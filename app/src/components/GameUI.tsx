@@ -106,7 +106,7 @@ export default function GameUI() {
                 <h3 className="font-semibold text-gray-200 mb-2">How to Play</h3>
                 <ul className="text-sm text-gray-400 space-y-1">
                   <li>• Use Arrow Keys or WASD to move</li>
-                  <li>• Find gold squares (yellow glow)</li>
+                  <li>• Find gold blocks (yellow glow)</li>
                   <li>• Step on gold to mine it</li>
                   <li>• Earn 100 GOLD per mine</li>
                   <li>• Use Foresight to see ahead</li>

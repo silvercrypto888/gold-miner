@@ -113,7 +113,7 @@ export function TreasuryPanel() {
     } catch (err: any) {
       const msg = err.message || String(err);
       if (msg.includes("NotEnoughMinedForReset") || msg.includes("0x1779")) {
-        setTxStatus("⚠️ Need 75% of gold spots mined first");
+        setTxStatus("⚠️ Need 75% of gold blocks mined first");
       } else if (msg.includes("User rejected")) {
         setTxStatus("Cancelled");
       } else {
@@ -316,7 +316,7 @@ export function TreasuryPanel() {
             <p>Swaps ~50% of treasury GOLD for XNT, deposits both as LP, and burns the LP tokens.</p>
             <p className="mt-1">Requires at least 1,000 GOLD in the treasury.</p>
             <p className="mt-2">
-              <strong>🔄 Reset Gold Map</strong> — Anyone can call once 75% of gold spots are mined.
+              <strong>🔄 Reset Gold Map</strong> — Anyone can call once 75% of gold blocks are mined.
               Zeroes the bitmap so gold respawns across the grid.
               {minedCount !== null && (
                 <span> Currently <strong>{minedCount.toLocaleString()}</strong> / 121,042 mined (75% threshold).</span>
