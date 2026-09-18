@@ -120,8 +120,8 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 - No Anchor IDL found at standard on-chain location (`8UdBhp5MMWa4ZcutmYfQ1sh3EtNhimC3GmtKJUVTXuor`)
 
 **Action items:**
-- Silver to confirm `sEsYH...` is the intended AMM for GOLD/XNT
-- Dev to update `AMM_PROGRAM_ID` constant for mainnet builds (discriminator stays the same)
+- ✅ Silver confirmed `sEsYH...` is the intended mainnet AMM (2026-09-10)
+- ✅ Dev to update `AMM_PROGRAM_ID` constant for mainnet builds — **DONE 2026-09-18 (commit `5cdcab4`)**: AMM addresses now env-driven via `NEXT_PUBLIC_AMM_*`, no constant edit needed (discriminator stays the same)
 - Consider fetching AMM source/IDL from the AMM team for 100% account layout certainty
 
 ### 🔒 Upgrade History Verification
@@ -216,7 +216,7 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 - ✅ Upgrade history checked — **zero upgrades** since 2026-01-07 deployment
 - ✅ **AMM CONFIRMED (2026-09-10):** Silver confirmed `sEsYH...` is the intended mainnet AMM (verified from a real mainnet example transaction)
 - ✅ **Seed LP size:** discretionary, may be very small for testing — do not be surprised if it's tiny
-- ⏳ Dev to update `AMM_PROGRAM_ID` constant for mainnet builds (one-line change)
+- ✅ **AMM_PROGRAM_ID per-network config:** now done (2026-09-18, commit `5cdcab4`) — AMM addresses are env-driven via `NEXT_PUBLIC_AMM_*`; set mainnet values in env at deploy
 - ⏳ **Mint discrepancy to resolve:** live testnet `GameConfig.gold_mint` = `14YBZ...` (not found on-chain), but frontend uses `vKxn...`. Verify which is the intended live mint before mainnet.
 - ⏳ **Deployer funding:** Silver will fund later; not yet ready to start mainnet deployment (2026-09-10)
 
@@ -301,6 +301,12 @@ spl-token --url https://rpc.mainnet.x1.xyz create-token \
 | Add network switcher (testnet ↔ mainnet) | Dev | For continued testnet dev |
 | Update wallet adapter for mainnet | Dev | Backpack, etc. |
 | Test on mainnet dev build | Dev | Internal smoke test |
+
+**✅ Cleanup #1/#2 DONE (2026-09-18, commit `5cdcab4`)** — code is now env-driven, no code edits needed for mainnet:
+- **AMM addresses are env-driven** (`NEXT_PUBLIC_AMM_*`) with testnet defaults — a mainnet build supplied the mainnet AMM set (program `sEsYH...` differs from testnet `7EEuq...`). See `app/.env.example`.
+- **Game program/mint/RPC already env-driven** (`NEXT_PUBLIC_PROGRAM_ID` / `GOLD_MINT` / `RPC_URL` / `WS_URL` / `GOLD_BITMAP`).
+- **Anchor.toml** documents per-cluster program IDs + greenfield mainnet keypair strategy.
+- **So the mainnet frontend switch is now purely an env change**: set the mainnet values in `app/.env.production` (or Vercel env vars) and rebuild. No source edits required.
 
 ### 2.6 Security Finalization
 
