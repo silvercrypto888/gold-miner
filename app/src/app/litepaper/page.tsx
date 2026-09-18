@@ -30,7 +30,7 @@ export default function LitepaperPage() {
           <p className="text-gray-300 leading-relaxed mb-4">
             Gold Miner is a fully on-chain, fair-launch blockchain game built on the
             <strong> X1 Blockchain</strong> (Solana Virtual Machine). Players explore a 1,024 × 1,024
-            procedurally generated world, discover gold deposits using deterministic world-generation
+            procedurally generated world, discover gold blocks using deterministic world-generation
             logic, and earn <strong>GOLD</strong> tokens with every successful mine.
           </p>
           <p className="text-gray-300 leading-relaxed">
@@ -52,13 +52,13 @@ export default function LitepaperPage() {
             </li>
             <li>
               <strong>Gold Discovery:</strong> Gold exists where <code>(x &amp; y) % 7 === 0</code>,
-              yielding approximately 150,000 gold spots across the map.
+              yielding approximately 150,000 gold blocks across the map.
             </li>
             <li>
               <strong>Mining Reward:</strong> Each valid gold mine yields <strong>100 GOLD</strong> tokens.
             </li>
             <li>
-              <strong>World Reset:</strong> Once <strong>75%</strong> of the grid&apos;s gold spots are mined
+              <strong>World Reset:</strong> Once <strong>75%</strong> of the grid&apos;s gold blocks are mined
               (<code>121,042</code> of ~161,390), the on-chain bitmap and mined-counter are zeroed,
               resetting the map so gold respawns across the grid.
             </li>
@@ -102,7 +102,7 @@ export default function LitepaperPage() {
           <ul className="list-disc list-inside text-gray-300 space-y-2 leading-relaxed">
             <li>
               <strong>Total Supply:</strong> Uncapped — ~30 million GOLD minted per world epoch
-              (~200 GOLD per gold spot at 100 GOLD to the player + 100 GOLD to the treasury).
+              (~200 GOLD per gold block at 100 GOLD to the player + 100 GOLD to the treasury).
             </li>
             <li>
               <strong>Minting:</strong> Only via on-chain <code>move_and_mine</code> instructions.
@@ -122,7 +122,7 @@ export default function LitepaperPage() {
           <p className="text-gray-300 leading-relaxed mb-4">
             All GOLD tokens minted into the game treasury are deployed to deepen protocol-owned
             liquidity on the native X1 DEX. The treasury periodically pairs GOLD with XNT and
-            deposits liquidity into a CPMM pool. Every time a gold spot is mined, 100 GOLD is 
+            deposits liquidity into a CPMM pool. Every time a gold block is mined, 100 GOLD is 
             minted into the treasury.
           </p>
           <p className="text-gray-300 leading-relaxed mb-4">
@@ -164,7 +164,7 @@ export default function LitepaperPage() {
             6. Game Theory
           </h2>
           <p className="text-gray-300 leading-relaxed mb-4">
-            Gold Miner is built around <strong>spatial competition</strong>: gold spots are consumable,
+            Gold Miner is built around <strong>spatial competition</strong>: gold blocks are consumable,
             meaning the first player to mine a cell claims its 100 GOLD, and the spot yields nothing
             thereafter. There are no artificial multipliers or airdrops. The early-adopter advantage is
             <strong> endogenous</strong> — it emerges from the rules themselves, not from exogenous bonuses.
