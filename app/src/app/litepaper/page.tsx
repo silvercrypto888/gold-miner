@@ -101,8 +101,10 @@ export default function LitepaperPage() {
           </div>
           <ul className="list-disc list-inside text-gray-300 space-y-2 leading-relaxed">
             <li>
-              <strong>Total Supply:</strong> Uncapped — ~30 million GOLD minted per world epoch
-              (~200 GOLD per gold block at 100 GOLD to the player + 100 GOLD to the treasury).
+              <strong>Total Supply:</strong> Effectively uncapped in practice — ~30 million GOLD minted
+              per world epoch (~200 GOLD per gold block at 100 GOLD to the player + 100 GOLD to the
+              treasury). As an SPL Token at 9 decimals the on-chain ceiling is ~18.4&nbsp;billion GOLD,
+              far above any realistic play-driven supply.
             </li>
             <li>
               <strong>Minting:</strong> Only via on-chain <code>move_and_mine</code> instructions.
