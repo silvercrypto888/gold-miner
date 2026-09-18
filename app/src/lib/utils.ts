@@ -5,6 +5,25 @@ import { SessionKeyData } from "@/types";
 import { SESSION_KEY_STORAGE, LAMPORTS_PER_SOL } from "./constants";
 import { encryptSessionKey, decryptSessionKey, clearCachedCryptoKey } from "./sessionCrypto";
 
+/**
+ * Detect a mobile device via user-agent (works on SSR + client).
+ * Used to gate wallet connect on mobile only (Silver's decision 2026-09-18).
+ * Reversible: flip ALLOW_MOBILE_WALLET_CONNECT to true to re-enable later.
+ */
+export const ALLOW_MOBILE_WALLET_CONNECT = false;
+
+export function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /(iPhone|iPad|iPod|Android|webOS|BlackBerry|Windows Phone)/i.test(
+    navigator.userAgent
+  );
+}
+
+export function isWalletConnectLockedOnMobile(): boolean {
+  return !ALLOW_MOBILE_WALLET_CONNECT && isMobileDevice();
+}
+
+
 const SESSION_KEY_BACKUP = SESSION_KEY_STORAGE + "_backup";
 
 // Generate a new session keypair

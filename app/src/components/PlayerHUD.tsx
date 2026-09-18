@@ -7,6 +7,7 @@ import { useSessionKey } from "@/hooks/useSessionKey";
 import { useGoldMiner } from "@/hooks/useGoldMiner";
 import { formatXNT, formatGoldium } from "@/lib/constants";
 import { shortenAddress } from "@/lib/utils";
+import { isWalletConnectLockedOnMobile } from "@/lib/utils";
 
 export function PlayerHUD() {
   const { publicKey, disconnect } = useWallet();
@@ -49,6 +50,22 @@ export function PlayerHUD() {
   }, [sweepSessionKey]);
 
   if (!publicKey) {
+    // On mobile, wallet connect is temporarily locked (Silver's decision 2026-09-18).
+    // Show a disabled state / notice instead of the Connect button.
+    if (isWalletConnectLockedOnMobile()) {
+      return (
+        <span
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-600 bg-gray-800/60 px-4 py-2 text-gray-500"
+          title="Wallet connect is not supported on mobile yet — play on desktop."
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Desktop only
+        </span>
+      );
+    }
     return (
       <button
         onClick={() => setVisible(true)}

@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { isWalletConnectLockedOnMobile } from "@/lib/utils";
 import { useGame } from "@/hooks/useGame";
 import { useSessionKey } from "@/hooks/useSessionKey";
 import {
@@ -632,7 +633,17 @@ const prevForesightRef = useRef(foresightMode);
   let overlay: React.ReactNode = null;
 
   if (!publicKey) {
-    overlay = (
+    overlay = isWalletConnectLockedOnMobile() ? (
+      <div className="absolute inset-0 z-10 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center p-8 text-center">
+        <div className="text-6xl mb-4">🖥️</div>
+        <h2 className="text-2xl font-bold text-white mb-2">Play on Desktop</h2>
+        <p className="text-gray-400 mb-4 text-center max-w-sm">
+          Gold Miner isn't available on mobile yet — wallet connect isn't
+          supported on mobile right now. Open this game on a desktop/laptop
+          browser to play.
+        </p>
+      </div>
+    ) : (
       <div className="absolute inset-0 z-10 bg-gray-900/95 rounded-xl flex flex-col items-center justify-center p-8">
         <div className="text-6xl mb-4">⛏️</div>
         <h2 className="text-2xl font-bold text-white mb-2">Connect Your Wallet</h2>
