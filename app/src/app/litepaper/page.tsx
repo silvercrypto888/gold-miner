@@ -58,6 +58,11 @@ export default function LitepaperPage() {
               <strong>Mining Reward:</strong> Each valid gold mine yields <strong>100 GOLD</strong> tokens.
             </li>
             <li>
+              <strong>World Reset:</strong> Once <strong>75%</strong> of the grid&apos;s gold spots are mined
+              (<code>121,042</code> of ~161,390), the on-chain bitmap and mined-counter are zeroed,
+              resetting the map so gold respawns across the grid.
+            </li>
+            <li>
               <strong>Session Keys:</strong> Players use session keys to cover gas for fast in-game
               movement and mining. Session keys expire after ~4 hours (36,000 slots) and can be topped
               up with XNT gas. Session secret keys are encrypted at rest using <strong>AES-256-GCM</strong> via the browser's native <strong>Web Crypto API</strong> (W3C standard). The encryption key is derived from a wallet signature, so only the same wallet can decrypt — the key never exists in plaintext outside the active session.
