@@ -5,7 +5,16 @@ node_modules/
 app/.next/
 
 # Environment
+# Real env files are ignored (may hold live addresses/secrets). The *.example
+# templates ARE tracked — copy them to the real file and fill in per-network.
 app/.env.local
+app/.env.production
+app/.env.development
+app/.env
+.env.local
+.env.production
+.env.development
+.env
 
 # Keys (sensitive)
 **/*-keypair.json
