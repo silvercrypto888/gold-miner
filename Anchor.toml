@@ -7,21 +7,35 @@ rust_version = "1.78.0"
 seeds = true
 skip-lint = false
 
+# Per-cluster program IDs.
+#
+# GREENFIELD STRATEGY (mainnet): mainnet gets a BRAND-NEW program keypair, NOT
+# the testnet ID. Generate the mainnet keypair (e.g. target/deploy/gold_miner
+# mainnet keypair) and set its pubkey here before the first mainnet deploy.
+#
+# localnet/testnet currently share the older testnet program ID (GLDFu...). The
+# live testnet program is 4GQU2... (see lib.rs declare_id!); GLDFu... is kept for
+# localnet runs that target that older build. Reconcile when convenient.
 [programs.localnet]
 gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
 [programs.testnet]
 gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
+# Mainnet placeholder — replaced with the real mainnet program ID at deploy.
 [programs.mainnet]
 gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
-[registry]
-url = "https://api.apr.dev"
-
+# Provider for local runs / `anchor test`. Anchor 0.30.1 uses this single
+# top-level [provider] block (per-cluster provider blocks are not supported).
+# Select the cluster per-invocation: cluster is switched via --provider on the
+# CLI, or by editing this block. Deployments use `--provider.cluster` + --provider.wallet.
 [provider]
 cluster = "testnet"
 wallet = "~/.config/solana/id.json"
+
+[registry]
+url = "https://api.apr.dev"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

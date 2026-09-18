@@ -190,17 +190,40 @@ export function getTreasuryGoldAta(treasuryPda: PublicKey, goldMint?: PublicKey)
   )[0];
 }
 
-// AMM addresses for treasury_auto_lp
-export const AMM_PROGRAM_ID = new PublicKey("7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf");
-export const AMM_MARKET_AUTHORITY = new PublicKey("2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C");
-export const AMM_CONFIG = new PublicKey("3FzzbxwpdJKxRW1yNT7UPYmna17SwC9PRmskMa8A2BuY");
-export const AMM_POOL_STATE = new PublicKey("FuWCSt8fx3r8CZ7UjsbxxozNxJipgcT3XUcsSVVTzWtz");
-export const AMM_GOLD_VAULT = new PublicKey("DvprQjnFnjhdjqLDkagcjSsqYZNuDPbXmto9zdqDcE94");
-export const AMM_XNT_VAULT = new PublicKey("AkvjBU6S3G4UdrXFHrgZPxnofrCgEToXvtbczKpFqvFD");
-export const AMM_OBSERVER_STATE = new PublicKey("DUd6JfdKGA8M2xiSWLGwfxkDgHXWQKVLL6CCvcdFx2En");
-export const AMM_GOLD_MINT = new PublicKey("vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6");
+// ─── AMM addresses for treasury_auto_lp ───
+//
+// All network-specific AMM addresses are now env-driven (NEXT_PUBLIC_AMM_*)
+// so a mainnet build can never silently resolve to testnet pools.
+// Defaults = X1 TESTNET values (current live). Flip the env vars for mainnet.
+// (The token programs, XNT mint, and incinerator are network-stable public keys.)
+export const AMM_PROGRAM_ID = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_PROGRAM_ID || "7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf"
+);
+export const AMM_MARKET_AUTHORITY = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_MARKET_AUTHORITY || "2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C"
+);
+export const AMM_CONFIG = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_CONFIG || "3FzzbxwpdJKxRW1yNT7UPYmna17SwC9PRmskMa8A2BuY"
+);
+export const AMM_POOL_STATE = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_POOL_STATE || "FuWCSt8fx3r8CZ7UjsbxxozNxJipgcT3XUcsSVVTzWtz"
+);
+export const AMM_GOLD_VAULT = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_GOLD_VAULT || "DvprQjnFnjhdjqLDkagcjSsqYZNuDPbXmto9zdqDcE94"
+);
+export const AMM_XNT_VAULT = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_XNT_VAULT || "AkvjBU6S3G4UdrXFHrgZPxnofrCgEToXvtbczKpFqvFD"
+);
+export const AMM_OBSERVER_STATE = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_OBSERVER_STATE || "DUd6JfdKGA8M2xiSWLGwfxkDgHXWQKVLL6CCvcdFx2En"
+);
+export const AMM_GOLD_MINT = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_GOLD_MINT || "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6"
+);
 export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111111112");
-export const AMM_LP_MINT = new PublicKey("R42M1rNtsrDvTAKMZbMWHE2TXZxPqAZzZ5bR6uR3Qzy");
+export const AMM_LP_MINT = new PublicKey(
+  process.env.NEXT_PUBLIC_AMM_LP_MINT || "R42M1rNtsrDvTAKMZbMWHE2TXZxPqAZzZ5bR6uR3Qzy"
+);
 export const AMM_XNT_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const AMM_GOLD_TOKEN_PROG = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 export const AMM_LP_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
