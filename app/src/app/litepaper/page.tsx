@@ -52,7 +52,7 @@ export default function LitepaperPage() {
             </li>
             <li>
               <strong>Gold Discovery:</strong> Gold exists where <code>(x &amp; y) % 7 === 0</code>,
-              yielding approximately 150,000 gold blocks across the map.
+              yielding approximately 161,390 gold blocks across the map.
             </li>
             <li>
               <strong>Mining Reward:</strong> Each valid gold mine yields <strong>100 GOLD</strong> tokens.
