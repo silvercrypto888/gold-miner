@@ -8,6 +8,7 @@ import { Leaderboard } from "@/components/Leaderboard";
 import { ConsentModal } from "@/components/ConsentModal";
 import { OnboardingModal } from "@/components/OnboardingModal";
 import { TreasuryPanel } from "@/components/TreasuryPanel";
+import ContractFooter from "@/components/ContractFooter";
 import { useAudio } from "@/hooks/useAudio";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
@@ -168,6 +169,7 @@ export default function GameUI() {
             </div>
           </div>
         </div>
+        <ContractFooter />
       </main>
       <ConsentModal onAgree={() => setConsented(true)} />
       <OnboardingModal agreed={consented} />
