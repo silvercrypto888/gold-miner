@@ -608,10 +608,10 @@ pub struct MoveAndMine<'info> {
     #[account(mut, seeds = [b"player", player.wallet.as_ref()], bump = player.bump,
               constraint = player.session_key == session_signer.key() @ GoldMinerError::InvalidSessionKey)]
     pub player: Account<'info, Player>,
-    #[account(mut)]
+    #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump)]
     pub game_config: Account<'info, GameConfig>,
-    /// CHECK: raw bitmap bytes, owned by program
-    #[account(mut, owner = crate::ID)]
+    /// CHECK: raw bitmap bytes, owned by program, pinned to the configured bitmap
+    #[account(mut, address = game_config.gold_bitmap @ GoldMinerError::InvalidBitmap)]
     pub gold_bitmap: UncheckedAccount<'info>,
     #[account(mut, address = game_config.gold_mint)]
     pub gold_mint: Box<InterfaceAccount<'info, Mint>>,
@@ -667,8 +667,8 @@ pub struct ResetBitmap<'info> {
     #[account(mut, seeds = [b"silver_config_v2"], bump = game_config.bump)]
     pub game_config: Account<'info, GameConfig>,
 
-    /// CHECK: raw bitmap bytes, owned by program
-    #[account(mut, owner = crate::ID)]
+    /// CHECK: raw bitmap bytes, owned by program, pinned to the configured bitmap
+    #[account(mut, address = game_config.gold_bitmap @ GoldMinerError::InvalidBitmap)]
     pub gold_bitmap: UncheckedAccount<'info>,
 }
 
@@ -778,4 +778,6 @@ pub enum GoldMinerError {
     AmmProgramVersionMismatch,
     #[msg("Game is immutable — no further config changes allowed")]
     GameIsImmutable,
+    #[msg("Gold bitmap account does not match the configured bitmap")]
+    InvalidBitmap,
 }
