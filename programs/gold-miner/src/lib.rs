@@ -8,6 +8,12 @@ use anchor_spl::token_interface::{Mint, TokenAccount, mint_to, MintTo};
 
 declare_id!("4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM");
 
+/// The sole administrator / bootstrapper of the game. Enforced on
+/// `initialize_game` so the fixed-seed GameConfig PDA can never be
+/// front-run — whoever calls init, the recorded authority is always ADMIN.
+/// (This is the deployer wallet; update here if the admin rotates.)
+pub const ADMIN: Pubkey = pubkey!("2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS");
+
 pub const GRID_SIZE: u32 = 1024;
 pub const GOLD_PER_MINE: u64 = 100;
 pub const GOLD_DECIMALS: u8 = 9;
@@ -552,7 +558,7 @@ impl Treasury { pub const SIZE: usize = 8 + 32 + 8 + 8 + 8 + 1; }
 
 #[derive(Accounts)]
 pub struct InitializeGame<'info> {
-    #[account(mut)]
+    #[account(mut, address = ADMIN)]
     pub authority: Signer<'info>,
     #[account(init, payer = authority, space = GameConfig::SIZE, seeds = [b"silver_config_v2"], bump)]
     pub game_config: Account<'info, GameConfig>,
