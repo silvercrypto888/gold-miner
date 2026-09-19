@@ -311,6 +311,14 @@ export function TreasuryPanel() {
             </div>
           )}
 
+          <button
+            onClick={fetchTreasuryBalance}
+            disabled={isLoading}
+            className="mt-1 w-full text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+          >
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </button>
+
           {/* Info text */}
           <div className="text-xs text-gray-500">
             <p>Swaps ~50% of treasury GOLD for XNT, deposits both as LP, and burns the LP tokens.</p>
