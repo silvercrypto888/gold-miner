@@ -217,7 +217,7 @@ Silver found a mainnet LP transaction for Capy token. Analysis:
 - ✅ **AMM CONFIRMED (2026-09-10):** Silver confirmed `sEsYH...` is the intended mainnet AMM (verified from a real mainnet example transaction)
 - ✅ **Seed LP size:** discretionary, may be very small for testing — do not be surprised if it's tiny
 - ✅ **AMM_PROGRAM_ID per-network config:** now done (2026-09-18, commit `5cdcab4`) — AMM addresses are env-driven via `NEXT_PUBLIC_AMM_*`; set mainnet values in env at deploy
-- ⏳ **Mint discrepancy to resolve:** live testnet `GameConfig.gold_mint` = `14YBZ...` (not found on-chain), but frontend uses `vKxn...`. Verify which is the intended live mint before mainnet.
+- ⏳ **Mint discrepancy — RESOLVED (2026-09-20):** The `14YBZ...` value was a **stale entry from an older deployment snapshot**. Direct on-chain read of the live `GameConfig` (PDA `H4KYZGUR...`) confirms `gold_mint = vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6` — **identical to the frontend**. No conflict. Program `GOLD_MINT_ADDR`, frontend `constants.ts`, and on-chain `GameConfig` all use `vKxn...`. Frontend also defers to on-chain at runtime (`useGame.ts` reads `gold_mint` from `GameConfig`).
 - ⏳ **Deployer funding:** Silver will fund later; not yet ready to start mainnet deployment (2026-09-10)
 
 ---
@@ -429,7 +429,7 @@ Phase 1 decisions are **captured** (see summary table). AMM confirmed, seed LP d
 
 Remaining inputs when you're ready to go:
 1. **Deployer funding:** Fund the mainnet deployer wallet with ~0.5–1 XN for deployment fees (Silver will fund later).
-2. **Mint discrepancy:** Confirm the intended live testnet GOLD mint (`vKxn...` vs on-chain `14YBZ...`).
+2. ✅ **Mint discrepancy — RESOLVED (2026-09-20):** No conflict. On-chain `GameConfig.gold_mint` = `vKxn...`, identical to frontend. The `14YBZ...` note was stale. (Cross-checked 2026-09-20: treasury + gold_bitmap live and owned by program, data consistent — see Appendix.)
 3. **Green light:** Explicit go to start Phase 2 (token deploy → program deploy → game init → AMM pool → frontend).
 
 **No action needed now.** I'll hold here until you give the go. When you do, I will:
@@ -450,7 +450,7 @@ Remaining inputs when you're ready to go:
 | Anchor.toml program ID | `GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6` (⚠️ stale — all clusters share this; must split per cluster) |
 | Testnet GOLD Mint (frontend) | `vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6` (Token-2022) |
 | GameConfig PDA | `H4KYZGURjXfo1n7RkQXjiz7CvihLNV4ykP7bjFvE94aG` (seed `silver_config_v2`) |
-| GameConfig gold_mint (on-chain) | `14YBZJsRxWiJdPo9S764k5b4Kb6jn5v1vmS2v14H5N1` (⚠️ NOT FOUND on-chain — discrepancy with frontend `vKxn...`) |
+| GameConfig gold_mint (on-chain) | `vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6` (Token-2022) — **RESOLVED 2026-09-20**: matches frontend; the old `14YBZ...` was stale. |
 | Treasury PDA | `8muQKfcRV2x2vS5MUFCCzN4V4aASBTZtEZVTUoTut58Y` |
 | AMM Program (CPI target) | `7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf` |
 | AMM Pool State | `FuWCSt8fx3r8CZ7UjsbxxozNxJipgcT3XUcsSVVTzWtz` |
