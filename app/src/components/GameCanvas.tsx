@@ -751,7 +751,7 @@ const prevForesightRef = useRef(foresightMode);
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700 text-center">
             <div className="text-sm text-gray-400">Gold Blocks</div>
             <div className="text-xl font-bold text-yellow-400">
-              {visibleGold.filter(g => g.hasGold).length} remaining
+              {visibleGold.filter(g => g.hasGold).length} visible
             </div>
           </div>
           <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-lg border border-gray-700 text-center">
