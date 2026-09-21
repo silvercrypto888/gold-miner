@@ -66,3 +66,22 @@ npm run dev
 | 0.02 XNT | ~12–16 moves |
 | 0.1 XNT | ~60–80 moves |
 | 1 XNT | ~600–800 moves |
+
+## Deployment
+
+> ⚠️ **REMEMBER:** This project **auto-deploys to Vercel from GitHub**.
+> Pushing to `main` triggers a Vercel production deploy automatically.
+> Vercel project: `x1-safe/gold-miner` (rootDir `app`). Live: `https://gold-miner-five.vercel.app`.
+>
+> If you take the Vercel deployment/site down manually, the next push to `main`
+> (or the already-pushed commit) will bring it back up — disable the Vercel
+> GitHub integration or reset the commit to keep it down.
+
+Frontend deploy (manual fallback):
+
+```bash
+cd app
+vercel --prod --yes --token "$VTOK"
+# linked project: x1-safe/gold-miner (rootDir app)
+# NOTE: unset VERCEL_PROJECT_ID / VERCEL_ORG_ID first if they're set globally.
+```
