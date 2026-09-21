@@ -71,11 +71,6 @@ npm run dev
 
 > ⚠️ **REMEMBER:** This project **auto-deploys to Vercel from GitHub**.
 > Pushing to `main` triggers a Vercel production deploy automatically.
-> Vercel project: `x1-safe/gold-miner` (rootDir `app`). Live: `https://gold-miner-five.vercel.app`.
->
-> If you take the Vercel deployment/site down manually, the next push to `main`
-> (or the already-pushed commit) will bring it back up — disable the Vercel
-> GitHub integration or reset the commit to keep it down.
 
 Frontend deploy (manual fallback):
 
