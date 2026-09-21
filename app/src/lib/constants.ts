@@ -5,7 +5,7 @@ let _PROGRAM_ID: PublicKey | null = null;
 export function getProgramId(): PublicKey {
   if (!_PROGRAM_ID) {
     _PROGRAM_ID = new PublicKey(
-      process.env.NEXT_PUBLIC_PROGRAM_ID || "4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM"
+      process.env.NEXT_PUBLIC_PROGRAM_ID || "DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP"
     );
   }
   return _PROGRAM_ID;
@@ -15,14 +15,14 @@ let _GOLD_MINT: PublicKey | null = null;
 export function getGoldMint(): PublicKey {
   if (!_GOLD_MINT) {
     _GOLD_MINT = new PublicKey(
-      process.env.NEXT_PUBLIC_GOLD_MINT || "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6"
+      process.env.NEXT_PUBLIC_GOLD_MINT || "CXD3q99qVmfhUYqzimTMaJRPvP3FpAYMGZhJewQuen8i"
     );
   }
   return _GOLD_MINT;
 }
 
-export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.testnet.x1.xyz";
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws.testnet.x1.xyz";
+export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://rpc.mainnet.x1.xyz";
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws.mainnet.x1.xyz";
 
 const JOIN_GAME_DISC = Buffer.from([107, 112, 18, 38, 56, 173, 60, 128]);
 const START_SESSION_DISC = Buffer.from([23, 227, 111, 142, 212, 230, 3, 175]);
@@ -65,7 +65,7 @@ export function getGoldAta(wallet: PublicKey, goldMint?: PublicKey): PublicKey {
 
 // ─── Game Constants ───
 
-const BITMAP_KEYPAIR_ADDRESS = process.env.NEXT_PUBLIC_GOLD_BITMAP || "HaphYcxXYfPbUCppeYkDNpVTZhdGcwbPQonwx7kTjzK5";
+const BITMAP_KEYPAIR_ADDRESS = process.env.NEXT_PUBLIC_GOLD_BITMAP || "3XPLwxytSvLf7RthxPAx2gPeaVcbF2LhQuMDUw9uvmG2";
 export const VIEWPORT_SIZE = 15;
 export const CELL_SIZE = 40;
 export const GRID_SIZE = 1024;
@@ -192,12 +192,11 @@ export function getTreasuryGoldAta(treasuryPda: PublicKey, goldMint?: PublicKey)
 
 // ─── AMM addresses for treasury_auto_lp ───
 //
-// All network-specific AMM addresses are now env-driven (NEXT_PUBLIC_AMM_*)
-// so a mainnet build can never silently resolve to testnet pools.
-// Defaults = X1 TESTNET values (current live). Flip the env vars for mainnet.
-// (The token programs, XNT mint, and incinerator are network-stable public keys.)
+// Defaults are MAINNET for the confirmed program ID (sEsYH...). The pool-derived
+// addresses below still resolve to testnet placeholders until the mainnet GOLD/XNT
+// pool exists (§2.3) — they only matter for treasury_auto_lp, not the core game.
 export const AMM_PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_PROGRAM_ID || "7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf"
+  process.env.NEXT_PUBLIC_AMM_PROGRAM_ID || "sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN"
 );
 export const AMM_MARKET_AUTHORITY = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_MARKET_AUTHORITY || "2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C"
