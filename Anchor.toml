@@ -22,9 +22,10 @@ gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 [programs.testnet]
 gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
 
-# Mainnet placeholder — replaced with the real mainnet program ID at deploy.
+# Mainnet — GREENFIELD program keypair (generated 2026-09-21). Distinct from
+# testnet. Deploy via scripts/mainnet/01-deploy-program.sh.
 [programs.mainnet]
-gold_miner = "GLDFuDjyt5rGBpu5nuZXC2BHR5XVfEYwgwrNC4Mi9Sq6"
+gold_miner = "DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP"
 
 # Provider for local runs / `anchor test`. Anchor 0.30.1 uses this single
 # top-level [provider] block (per-cluster provider blocks are not supported).

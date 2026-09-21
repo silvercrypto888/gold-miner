@@ -6,13 +6,14 @@ use anchor_spl::token::Token;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{Mint, TokenAccount, mint_to, MintTo};
 
-declare_id!("4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM");
+// MAINNET program ID (greenfield keypair, 2026-09-21). Distinct from testnet.
+declare_id!("DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP");
 
 /// The sole administrator / bootstrapper of the game. Enforced on
 /// `initialize_game` so the fixed-seed GameConfig PDA can never be
 /// front-run — whoever calls init, the recorded authority is always ADMIN.
-/// (This is the deployer wallet; update here if the admin rotates.)
-pub const ADMIN: Pubkey = pubkey!("2zotLCHPhTazmMVaRg9y4bmRm8mbBHb5XuvbV4mcQRAS");
+/// (MAINNET: the funded mainnet deployer wallet.)
+pub const ADMIN: Pubkey = pubkey!("2jMoBSSoh8oYsaD2Vvw6r66XmfrYGUj1jiM4385oRNzz");
 
 pub const GRID_SIZE: u32 = 1024;
 pub const GOLD_PER_MINE: u64 = 100;
@@ -30,16 +31,23 @@ pub const SLIPPAGE_BPS: u64 = 100;
 pub const INCINERATOR: &str = "1nc1nerator11111111111111111111111111111111";
 
 // AMM constants
-pub const AMM_PROGRAM_ID: &str = "7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf";
-pub const MARKET_AUTHORITY: &str = "2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C";
-pub const AMM_CONFIG: &str = "3FzzbxwpdJKxRW1yNT7UPYmna17SwC9PRmskMa8A2BuY";
-pub const POOL_STATE: &str = "FuWCSt8fx3r8CZ7UjsbxxozNxJipgcT3XUcsSVVTzWtz";
-pub const GOLD_VAULT: &str = "DvprQjnFnjhdjqLDkagcjSsqYZNuDPbXmto9zdqDcE94";
-pub const XNT_VAULT: &str = "AkvjBU6S3G4UdrXFHrgZPxnofrCgEToXvtbczKpFqvFD";
-pub const OBSERVER_STATE: &str = "DUd6JfdKGA8M2xiSWLGwfxkDgHXWQKVLL6CCvcdFx2En";
-pub const GOLD_MINT_ADDR: &str = "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6";
+// ── AMM (treasury_auto_lp) constants ──────────────────────────────────────
+// AMM_PROGRAM_ID is CONFIRMED for MAINNET = sEsYH... (verified 2026-09-10, launch
+// plan §1.3). The pool-derived addresses below (MARKET_AUTHORITY / AMM_CONFIG /
+// POOL_STATE / vaults / observer / LP mint) are mainnet PLACEHOLDERS — they are
+// created when the mainnet GOLD/XNT pool is live (§2.3) and MUST be replaced with
+// the real addresses BEFORE enabling treasury_auto_lp on mainnet. Leaving them = 0
+// makes treasury_auto_lp revert, which is SAFE (core game unaffected).
+pub const AMM_PROGRAM_ID: &str = "sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN";
+pub const MARKET_AUTHORITY: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const AMM_CONFIG: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const POOL_STATE: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const GOLD_VAULT: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const XNT_VAULT: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const OBSERVER_STATE: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const GOLD_MINT_ADDR: &str = "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6"; // TODO-pool (mainnet GOLD mint)
 pub const XNT_MINT_ADDR: &str = "So11111111111111111111111111111111111111112";
-pub const LP_MINT_ADDR: &str = "R42M1rNtsrDvTAKMZbMWHE2TXZxPqAZzZ5bR6uR3Qzy";
+pub const LP_MINT_ADDR: &str = "11111111111111111111111111111111"; // TODO-pool
 pub const XNT_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 pub const GOLD_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 pub const LP_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";

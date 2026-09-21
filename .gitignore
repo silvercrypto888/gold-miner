@@ -19,6 +19,8 @@ app/.env
 # Keys (sensitive)
 **/*-keypair.json
 *.keypair.json
+# Mainnet deployer/program backups (NEVER commit)
+secure-mainnet/
 app/tsconfig.tsbuildinfo
 .vercel
 *.json
