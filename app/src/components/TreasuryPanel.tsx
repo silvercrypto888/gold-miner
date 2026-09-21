@@ -37,6 +37,7 @@ export function TreasuryPanel() {
   const { publicKey, signTransaction } = useWallet();
   const [isOpen, setIsOpen] = useState(false);
   const [goldBalance, setGoldBalance] = useState<number | null>(null);
+  const [xntBalance, setXntBalance] = useState<number | null>(null);
   const [minedCount, setMinedCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
@@ -67,8 +68,18 @@ export function TreasuryPanel() {
       const treasuryGoldAta = getTreasuryGoldAta(treasuryPda, goldMint);
       const account = await connRef.current.getTokenAccountBalance(treasuryGoldAta);
       setGoldBalance(Number(account.value.uiAmountString || "0"));
+
+      // Treasury XNT ATA (Tokenkeg — XNT is wSOL)
+      const treasuryXntAta = getTreasuryXntAta(treasuryPda);
+      try {
+        const xntAccount = await connRef.current.getTokenAccountBalance(treasuryXntAta);
+        setXntBalance(Number(xntAccount.value.uiAmountString || "0"));
+      } catch {
+        setXntBalance(0);
+      }
     } catch {
       setGoldBalance(0);
+      setXntBalance(0);
     }
   }, []);
 
@@ -266,15 +277,27 @@ export function TreasuryPanel() {
 
       {isOpen && (
         <div className="px-4 pb-4 space-y-3">
-          {/* GOLD Balance */}
-          <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
-            <div className="text-xs text-gray-500 mb-1">GOLD Balance</div>
-            <div className="text-lg font-bold text-yellow-400">
-              {goldBalance === null ? (
-                <span className="text-gray-500 animate-pulse">Loading...</span>
-              ) : (
-                `${goldBalance.toLocaleString()} GOLD`
-              )}
+          {/* Balances row: GOLD + XNT */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+              <div className="text-xs text-gray-500 mb-1">Treasury GOLD</div>
+              <div className="text-lg font-bold text-yellow-400">
+                {goldBalance === null ? (
+                  <span className="text-gray-500 animate-pulse">Loading...</span>
+                ) : (
+                  `${goldBalance.toLocaleString()} GOLD`
+                )}
+              </div>
+            </div>
+            <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+              <div className="text-xs text-gray-500 mb-1">Treasury XNT</div>
+              <div className="text-lg font-bold text-blue-400">
+                {xntBalance === null ? (
+                  <span className="text-gray-500 animate-pulse">Loading...</span>
+                ) : (
+                  `${xntBalance.toLocaleString()} XNT`
+                )}
+              </div>
             </div>
           </div>
 

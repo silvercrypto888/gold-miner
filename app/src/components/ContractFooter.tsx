@@ -64,8 +64,7 @@ export default function ContractFooter() {
     <footer className="border-t border-gray-800 bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-2">
         <p className="text-xs text-gray-500">
-          GOLD is a <span className="text-gray-400">Token-2022</span> mint on X1. Contract addresses below are
-          <span className="text-yellow-500/90"> testnet</span> values and will be replaced at mainnet launch.
+          GOLD is a <span className="text-gray-400">Token-2022</span> mint on X1 <span className="text-gray-400">mainnet</span>. The contract addresses below are live on-chain values.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <AddressChip label="GOLD CA" address={goldMint} accent="text-yellow-400" />
