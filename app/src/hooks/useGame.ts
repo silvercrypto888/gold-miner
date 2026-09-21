@@ -256,22 +256,34 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     return () => clearInterval(iv);
   }, [fetchOtherPlayers]);
 
-  // ── Blockhash pre-fetcher ──
-  // Background interval fetches a fresh blockhash every 400ms
-  // so the hot path rarely awaits getLatestBlockhash.
+  // ── Blockhash cache (lazy, short TTL) ──
+  // FIX (2026-09-21): the old background pre-fetcher called getLatestBlockhash
+  // every 400ms — 2.5 req/s CONTINUOUSLY, even when idle — which was the main
+  // source of public-RPC 429 rate-limit errors. Now we fetch lazily right before
+  // a move and cache it for BLOCKHASH_TTL_MS. Consecutive rapid moves reuse the
+  // same still-valid blockhash (Solana hashes last ~60s; TTL is a fraction of
+  // that), and the unique memo already guarantees a distinct signature per TX.
+  const BLOCKHASH_TTL_MS = 800;
   const nextBlockhashRef = useRef<{ blockhash: string; lastValidBlockHeight: number }>(null!);
-  const preFetchBlockhash = useCallback(async () => {
+  const bhFetchedAtRef = useRef(0);
+  const getBlockhash = useCallback(async (): Promise<{ blockhash: string; lastValidBlockHeight: number }> => {
+    const now = Date.now();
+    // Reuse the cached blockhash if it's still fresh (0 RPC calls in the hot loop).
+    if (nextBlockhashRef.current && now - bhFetchedAtRef.current < BLOCKHASH_TTL_MS) {
+      return nextBlockhashRef.current;
+    }
+    // Cache expired/missing — fetch one. On failure, fall back to the cached
+    // blockhash if present (still valid far beyond our TTL).
     try {
       const fresh = await connRef.current!.getLatestBlockhash();
       nextBlockhashRef.current = fresh;
-    } catch {}
+      bhFetchedAtRef.current = now;
+      return fresh;
+    } catch {
+      if (nextBlockhashRef.current) return nextBlockhashRef.current;
+      throw new Error("getLatestBlockhash failed");
+    }
   }, []);
-  // Kick off first fetch immediately, then every 400ms
-  useEffect(() => {
-    if (connRef.current) preFetchBlockhash();
-    const iv = setInterval(preFetchBlockhash, 400);
-    return () => clearInterval(iv);
-  }, [preFetchBlockhash]);
 
   // ── Pending move batch confirm ──
   interface PendingMove {
@@ -388,18 +400,10 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     systemProgram: PublicKey,
     memo?: string,
   ): Promise<Transaction> => {
-    // Use pre-fetched blockhash if available (common case, zero RPC wait)
-    let blockhash: string, lastValidBlockHeight: number;
-    if (nextBlockhashRef.current) {
-      blockhash = nextBlockhashRef.current.blockhash;
-      lastValidBlockHeight = nextBlockhashRef.current.lastValidBlockHeight;
-      nextBlockhashRef.current = null!;
-    } else {
-      // Pre-fetcher was consumed — fetch on demand (rare, bursts only)
-      const fresh = await connRef.current!.getLatestBlockhash();
-      blockhash = fresh.blockhash;
-      lastValidBlockHeight = fresh.lastValidBlockHeight;
-    }
+    // Use cached blockhash when fresh (common case, zero RPC wait). Reusing a
+    // still-valid blockhash across rapid moves is safe — each TX has a unique
+    // memo-seeded signature, so there's no duplicate-TX risk.
+    const { blockhash, lastValidBlockHeight } = await getBlockhash();
     const tx = new Transaction({ feePayer: sessionPubkey!, blockhash, lastValidBlockHeight });
 
     // Accounts:
@@ -450,7 +454,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
     }));
 
     return tx;
-  }, [sessionPubkey]);
+  }, [sessionPubkey, getBlockhash]);
 
   const move = useCallback(async (direction: Direction) => {
     if (isSessionValid && !isSessionValid()) {
@@ -547,7 +551,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
           return;
         }
         lastFundTimeRef.current = now;
-        const { blockhash: fbh, lastValidBlockHeight: flvb } = await connRef.current.getLatestBlockhash();
+        const { blockhash: fbh, lastValidBlockHeight: flvb } = await getBlockhash();
         try {
           await fundSessionKey(sessionPubkey, fbh, flvb);
           // Wait briefly for RPC propagation, then re-check actual balance
@@ -680,6 +684,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
 
       if (err?.name === "TransactionExpiredBlockheightExceededError") {
         nextBlockhashRef.current = null!;
+        bhFetchedAtRef.current = 0;
       }
 
       try {
@@ -694,7 +699,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
       // Success path clears ref via setTimeout (600ms cooldown).
       // Error/catch paths clear it immediately so user can retry.
     }
-  }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx]);
+  }, [sessionKeypair, sessionPubkey, playerState, lastMoveTime, fundSessionKey, startSession, fetchBitmap, buildMoveTx, getBlockhash]);
 
   // Keyboard controls — hold-to-repeat with 600ms post-move cooldown
   const moveRef = useRef(move);
