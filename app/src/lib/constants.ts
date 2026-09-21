@@ -15,7 +15,7 @@ let _GOLD_MINT: PublicKey | null = null;
 export function getGoldMint(): PublicKey {
   if (!_GOLD_MINT) {
     _GOLD_MINT = new PublicKey(
-      process.env.NEXT_PUBLIC_GOLD_MINT || "CXD3q99qVmfhUYqzimTMaJRPvP3FpAYMGZhJewQuen8i"
+      process.env.NEXT_PUBLIC_GOLD_MINT || "8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX"
     );
   }
   return _GOLD_MINT;
@@ -217,7 +217,7 @@ export const AMM_OBSERVER_STATE = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_OBSERVER_STATE || "DUd6JfdKGA8M2xiSWLGwfxkDgHXWQKVLL6CCvcdFx2En"
 );
 export const AMM_GOLD_MINT = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_GOLD_MINT || "CXD3q99qVmfhUYqzimTMaJRPvP3FpAYMGZhJewQuen8i"
+  process.env.NEXT_PUBLIC_AMM_GOLD_MINT || "8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX"
 );
 export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 export const AMM_LP_MINT = new PublicKey(
