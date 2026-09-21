@@ -1,6 +1,7 @@
 # Gold Miner ⛏️
 
-On-chain multiplayer fair mine game on X1 Network. Explore a 1,024×1,024 grid, discover gold, and mine GOLD tokens.
+On-chain multiplayer fair mine game on the X1 Network (mainnet). Explore a
+1,024×1,024 grid, discover gold, and mine GOLD tokens (Token-2022).
 
 ## How It Works
 
@@ -13,31 +14,45 @@ On-chain multiplayer fair mine game on X1 Network. Explore a 1,024×1,024 grid, 
 
 ## Architecture
 
-- **Program**: Anchor (Solana VM), deployed on X1 Testnet
+- **Program**: Anchor (Solana VM / SVM), deployed on X1 Mainnet
 - **Frontend**: Next.js + TypeScript + TailwindCSS
 - **Session Keys**: One wallet signature → ephemeral browser keypair → AES-256-GCM encrypted via Web Crypto API
 - **GOLD Token**: Token-2022, mint-on-demand through gameplay
 - **Treasury**: Auto-LP burn — all mined GOLD that goes to the protocol treasury is deployed into protocol-owned liquidity, then burned permanently
 - **World State**: On-chain bitmap account tracking mined cells (resettable when sufficiently mined out)
 
-## Program
+## Program (Mainnet)
 
 | Detail | Value |
 |--------|-------|
-| Program ID | `4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM` |
-| Network | X1 Testnet |
-| RPC | `https://rpc.testnet.x1.xyz` |
+| Program ID | `DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP` |
+| Network | X1 Mainnet |
+| RPC | `https://rpc.mainnet.x1.xyz` |
+| WebSocket | `wss://ws.mainnet.x1.xyz` |
 | Grid Size | 1,024 × 1,024 |
 | Session Duration | ~4 hours (36,000 slots) |
 | Gold per Mine | 100 GOLD |
 
+## Tokens / Accounts (Mainnet — verified 2026-09-21)
+
+| Item | Address / Value |
+|------|-----------------|
+| GOLD mint (Token-2022, 9 decimals) | `8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX` |
+| GOLD metadata URI | `https://arweave.net/cxmHUDnAAt9jUV4RDiEFM5jkoUCR8awzIcnSpcD1r5o` |
+| Gold bitmap account | `3XPLwxytSvLf7RthxPAx2gPeaVcbF2LhQuMDUw9uvmG2` |
+| GameConfig PDA | `AZqr6YTneD2uFuiBjz7c7yviLYV5pYvcXoa8aWgL2kYU` |
+| AMM program (treasury_auto_lp) | `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN` |
+| AMM LP mint | `B9Vd1yhwQUoKNnYB7b7Z2MWDQs5XrxbEhqzfnpVaXsTX` |
+
+Full env reference: `app/.env.production` (all addresses verified live on mainnet).
+
 ## Setup
 
-### Program (already deployed)
+### Program (already deployed to mainnet)
 
 ```bash
 cargo build-sbf --manifest-path programs/gold-miner/Cargo.toml
-solana program deploy target/deploy/gold_miner.so --url https://rpc.testnet.x1.xyz
+solana program deploy target/deploy/gold_miner.so --url https://rpc.mainnet.x1.xyz
 ```
 
 ### Frontend
@@ -45,8 +60,13 @@ solana program deploy target/deploy/gold_miner.so --url https://rpc.testnet.x1.x
 ```bash
 cd app
 npm install
+# Configure mainnet env (see app/.env.production)
+cp .env.production .env.local
 npm run dev
 ```
+
+Production build pulls values from `app/.env.production` (mainnet). All address
+constants are env-driven (`NEXT_PUBLIC_*`) and default to mainnet in `constants.ts`.
 
 ## Gas Costs
 

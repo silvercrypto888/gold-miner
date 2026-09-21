@@ -1,5 +1,12 @@
 # Gold Miner — X1 Testnet Archive (Snapshot 2026-09-18)
 
+> **UPDATE (2026-09-21):** Mainnet is now **LIVE** (`DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP`,
+> GOLD mint `8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX`). See `README.md` for the current mainnet
+> deployment. This document is kept purely as the **testnet snapshot** should we need to restore or
+> reference the old testnet environment. The `14YBZ...` stale entry and dual-program-ID note (§2)
+> were resolved: on-chain `GameConfig.gold_mint` matched the frontend (`vKxn...`) for testnet, and
+> mainnet uses the fresh `DZ4FEr...` program + `8HLD8...` mint per MAINNET_LAUNCH_PLAN decisions.
+
 **Purpose:** Archival snapshot of the X1 **testnet** deployment, captured before the planned
 transition to **mainnet**. If the mainnet migration fails for any reason and we need to fall
 back to testnet, this document is the single source of truth for restoring the working
@@ -137,6 +144,9 @@ under program `GLDFu...`. See `create-treasury-ata.js` / `create-treasury-gold-a
 ---
 
 ## 8. Open items / known inconsistencies to resolve before mainnet
+
+> **UPDATE (2026-09-21):** These were resolved during the mainnet migration — see README.md for the
+> live mainnet addresses. The notes below are historical context only.
 
 - **Dual program IDs** (`4GQU2...` frontend vs `GLDFu...` Anchor) — reconcile to one canonical ID.
 - **Multiple mint versions** (v3/v4/v5 + testnet keypair) — the "live" GOLD mint is ambiguous
