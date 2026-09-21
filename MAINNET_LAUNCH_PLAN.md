@@ -1,14 +1,26 @@
 # Gold Miner — Mainnet Launch Plan
 
-> **Status:** `HOLDING FOR GREEN LIGHT` — Phase 1 decisions captured. Testnet blockers cleared (2026-09-10). AMM confirmed. Awaiting Silver's go to start mainnet deployment.  
-> **Target:** X1 Mainnet (`https://rpc.mainnet.x1.xyz`)  
-> **Current:** X1 Testnet (`https://rpc.testnet.x1.xyz`)
+> **Status:** ✅ **LIVE ON MAINNET** — Mainnet deployed + verified on-chain 2026-09-21.
+> Program `DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP`, GOLD mint
+> `8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX` (Token-2022, metadata on-chain),
+> AMM `sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN`. Full verified address set in
+> `app/.env.production` and `README.md`.
+> **Target:** X1 Mainnet (`https://rpc.mainnet.x1.xyz`) — **ACTIVE**
+> **Current:** X1 Mainnet (transitioned from testnet 2026-09-21; testnet snapshot in `TESTNET_ARCHIVE.md`)
+
+---
+
+> **Historical note (post-launch):** The sections below capture the pre-launch plan and decision log.
+> Phase-1 decisions were executed during the mainnet launch (2026-09-21). Where values are now final
+> (e.g. mint address, program ID), the live truth lives in `README.md` / `app/.env.production`; this
+> document is kept as the launch record. Any future post-launch changes (immutability ceremony,
+> parameter tuning) belong in the current operational docs, not here.
 
 ---
 
 ## Overview
 
-This document is a living checklist and decision log for migrating Gold Miner from X1 testnet to X1 mainnet. It assumes you want to keep testing on testnet for "a bit longer" and only launch when everything is solid.
+This document is a living checklist and decision log for migrating Gold Miner from X1 testnet to X1 mainnet. It was written under the assumption of an extended testnet phase; that phase ended and mainnet is now live (2026-09-21). It remains the authoritative record of the launch decisions and their rationale.
 
 **Do not treat mainnet as a redeploy of testnet.** Mainnet is permanent, expensive to fix, and holds real player funds. Every decision below should be deliberate.
 
@@ -425,6 +437,13 @@ Step 9: Future — Make Immutable
 
 ## What I Need From You Right Now
 
+> **UPDATE (2026-09-21):** ✅ **MAINNET IS LIVE.** Funding, mint creation, program deploy, game init,
+> AMM pool, and frontend are all done and verified on-chain. The "inputs needed" below are historical
+> (pre-launch asks). Live addresses are in `README.md` / `app/.env.production`.
+>
+> Remaining forward work (when needed): the "make immutable" ceremony — only after Silver gives
+> explicit green light (§1.5 / §5).
+
 Phase 1 decisions are **captured** (see summary table). AMM confirmed, seed LP discretionary. **Silver is not yet ready to start mainnet deployment (2026-09-10)** — we are holding for the green light.
 
 Remaining inputs when you're ready to go:
@@ -433,10 +452,10 @@ Remaining inputs when you're ready to go:
 3. **Green light:** Explicit go to start Phase 2 (token deploy → program deploy → game init → AMM pool → frontend).
 
 **No action needed now.** I'll hold here until you give the go. When you do, I will:
-- Generate the exact deploy scripts
-- Update the frontend constants file (mainnet program ID + mint + AMM)
-- Write the `init_game` and `init_treasury` mainnet commands
-- Create the final pre-launch checklist
+- ~~Generate the exact deploy scripts~~ ✅ done (scripts/mainnet/
+- ~~Update the frontend constants file (mainnet program ID + mint + AMM)~~ ✅ done (env-driven, app/.env.production)
+- ~~Write the `init_game` and `init_treasury` mainnet commands~~ ✅ done (scripts/mainnet/05-init-game.js, ATA scripts)
+- ~~Create the final pre-launch checklist~~ ✅ superseded by live deployment
 
 ---
 
