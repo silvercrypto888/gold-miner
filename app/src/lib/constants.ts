@@ -199,7 +199,7 @@ export const AMM_PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_PROGRAM_ID || "sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN"
 );
 export const AMM_MARKET_AUTHORITY = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_MARKET_AUTHORITY || "DS4keEcVVdCCUs5mBLUYn7CjEuhuLzNxX798UxuHBkGx"
+  process.env.NEXT_PUBLIC_AMM_MARKET_AUTHORITY || "9Dpjw2pB5kXJr6ZTHiqzEMfJPic3om9jgNacnwpLCoaU"
 );
 export const AMM_CONFIG = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_CONFIG || "2eFPWosizV6nSAGeSvi5tRgXLoqhjnSesra23ALA248c"

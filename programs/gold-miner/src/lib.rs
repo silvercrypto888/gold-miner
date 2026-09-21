@@ -39,7 +39,7 @@ pub const INCINERATOR: &str = "1nc1nerator11111111111111111111111111111111";
 // the real addresses BEFORE enabling treasury_auto_lp on mainnet. Leaving them = 0
 // makes treasury_auto_lp revert, which is SAFE (core game unaffected).
 pub const AMM_PROGRAM_ID: &str = "sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN";
-pub const MARKET_AUTHORITY: &str = "DS4keEcVVdCCUs5mBLUYn7CjEuhuLzNxX798UxuHBkGx";
+pub const MARKET_AUTHORITY: &str = "9Dpjw2pB5kXJr6ZTHiqzEMfJPic3om9jgNacnwpLCoaU";
 pub const AMM_CONFIG: &str = "2eFPWosizV6nSAGeSvi5tRgXLoqhjnSesra23ALA248c";
 pub const POOL_STATE: &str = "CLu2iZ1q1EZpgGhNZTPwAoLXJXpAohXmiM76EQZ7tPQQ";
 pub const GOLD_VAULT: &str = "2NNCctcoybbLUHgb5Pig8UnBQDtCMDhsgEVSbkKCq3qx";
