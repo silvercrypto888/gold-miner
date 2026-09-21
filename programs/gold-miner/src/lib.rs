@@ -39,28 +39,31 @@ pub const INCINERATOR: &str = "1nc1nerator11111111111111111111111111111111";
 // the real addresses BEFORE enabling treasury_auto_lp on mainnet. Leaving them = 0
 // makes treasury_auto_lp revert, which is SAFE (core game unaffected).
 pub const AMM_PROGRAM_ID: &str = "sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN";
-pub const MARKET_AUTHORITY: &str = "11111111111111111111111111111111"; // TODO-pool
-pub const AMM_CONFIG: &str = "11111111111111111111111111111111"; // TODO-pool
-pub const POOL_STATE: &str = "11111111111111111111111111111111"; // TODO-pool
-pub const GOLD_VAULT: &str = "11111111111111111111111111111111"; // TODO-pool
-pub const XNT_VAULT: &str = "11111111111111111111111111111111"; // TODO-pool
-pub const OBSERVER_STATE: &str = "11111111111111111111111111111111"; // TODO-pool
-pub const GOLD_MINT_ADDR: &str = "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6"; // TODO-pool (mainnet GOLD mint)
+pub const MARKET_AUTHORITY: &str = "DS4keEcVVdCCUs5mBLUYn7CjEuhuLzNxX798UxuHBkGx";
+pub const AMM_CONFIG: &str = "2eFPWosizV6nSAGeSvi5tRgXLoqhjnSesra23ALA248c";
+pub const POOL_STATE: &str = "CLu2iZ1q1EZpgGhNZTPwAoLXJXpAohXmiM76EQZ7tPQQ";
+pub const GOLD_VAULT: &str = "2NNCctcoybbLUHgb5Pig8UnBQDtCMDhsgEVSbkKCq3qx";
+pub const XNT_VAULT: &str = "8kC33UKBLx3SvM5YVkg2umT7xTHDiM3zndvKEma4hKg4";
+pub const OBSERVER_STATE: &str = "EeVUEYTiPbEAUBYcf2MWyYch5LNuy4D8WzRL9cZa4gDo";
+pub const GOLD_MINT_ADDR: &str = "8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX";
 pub const XNT_MINT_ADDR: &str = "So11111111111111111111111111111111111111112";
-pub const LP_MINT_ADDR: &str = "11111111111111111111111111111111"; // TODO-pool
+pub const LP_MINT_ADDR: &str = "B9Vd1yhwQUoKNnYB7b7Z2MWDQs5XrxbEhqzfnpVaXsTX";
 pub const XNT_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 pub const GOLD_TOKEN_PROG: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 pub const LP_TOKEN_PROG: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 // ── AMM immutability fingerprint ────────────────────────────────────────────
-// ⚠️  CRITICAL: Gold Miner is intended to become immutable. These CPI calls target
-//     a specific AMM program binary. If the AMM at AMM_PROGRAM_ID is ever upgraded,
-//     the CPIs below may fail or behave incorrectly. The lightweight fingerprint
-//     below catches ~99 % of upgrades by checking data length + ELF header prefix.
-//     To obtain the real values for your deploy, run on a machine with Solana CLI:
-//       solana program dump 7EEuq61z9VKdkUzj7G36xGd7ncyz8KBtUwAWVjypYQHf amm.bin --url <X1_RPC>
-//       ls -l amm.bin                               # → AMM_EXPECTED_DATA_LEN
-//       head -c 32 amm.bin | xxd -p | sed 's/../0x&, /g'  # → AMM_EXPECTED_PREFIX
+// ⚠️  KNOWN LIMITATION (2026-09-21): This fingerprint reads the `amm_program`
+//     ACCOUNT data, NOT the ELF binary. The mainnet AMM (sEsYH...) is an
+//     UPGRADEABLE program (owner = BPFLoaderUpgradeable), so its account is a
+//     constant 36-byte header (version u32 + ProgramData pubkey) — it does NOT
+//     contain the ELF bytes. Therefore an ELF-length/prefix fingerprint here can
+//     NEVER match a full-binary check: filling AMM_EXPECTED_DATA_LEN with the
+//     ELF size (526600) would make the check ALWAYS FAIL and brick treasury
+//     auto-LP. Keeping these at 0 disables the (broken) check rather than ship
+//     a false guarantee. If a real binary-pinning guard is wanted, it must read
+//     the ProgramData account (owner BPFLoaderUpgradeable) + verify the ELF
+//     hash there — out of scope for this upgrade; tracked separately.
 // ─────────────────────────────────────────────────────────────────────────────
 pub const AMM_EXPECTED_DATA_LEN: usize = 0; // TODO: fill at deploy time
 pub const AMM_EXPECTED_PREFIX: [u8; 32] = [

@@ -199,29 +199,29 @@ export const AMM_PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_PROGRAM_ID || "sEsYH97wqmfnkzHedjNcw3zyJdPvUmsa9AixhS4b4fN"
 );
 export const AMM_MARKET_AUTHORITY = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_MARKET_AUTHORITY || "2HbqjtA9gB9c95c8KkUUWxhtNjCfYcPbvfdhcdobbq1C"
+  process.env.NEXT_PUBLIC_AMM_MARKET_AUTHORITY || "DS4keEcVVdCCUs5mBLUYn7CjEuhuLzNxX798UxuHBkGx"
 );
 export const AMM_CONFIG = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_CONFIG || "3FzzbxwpdJKxRW1yNT7UPYmna17SwC9PRmskMa8A2BuY"
+  process.env.NEXT_PUBLIC_AMM_CONFIG || "2eFPWosizV6nSAGeSvi5tRgXLoqhjnSesra23ALA248c"
 );
 export const AMM_POOL_STATE = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_POOL_STATE || "FuWCSt8fx3r8CZ7UjsbxxozNxJipgcT3XUcsSVVTzWtz"
+  process.env.NEXT_PUBLIC_AMM_POOL_STATE || "CLu2iZ1q1EZpgGhNZTPwAoLXJXpAohXmiM76EQZ7tPQQ"
 );
 export const AMM_GOLD_VAULT = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_GOLD_VAULT || "DvprQjnFnjhdjqLDkagcjSsqYZNuDPbXmto9zdqDcE94"
+  process.env.NEXT_PUBLIC_AMM_GOLD_VAULT || "2NNCctcoybbLUHgb5Pig8UnBQDtCMDhsgEVSbkKCq3qx"
 );
 export const AMM_XNT_VAULT = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_XNT_VAULT || "AkvjBU6S3G4UdrXFHrgZPxnofrCgEToXvtbczKpFqvFD"
+  process.env.NEXT_PUBLIC_AMM_XNT_VAULT || "8kC33UKBLx3SvM5YVkg2umT7xTHDiM3zndvKEma4hKg4"
 );
 export const AMM_OBSERVER_STATE = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_OBSERVER_STATE || "DUd6JfdKGA8M2xiSWLGwfxkDgHXWQKVLL6CCvcdFx2En"
+  process.env.NEXT_PUBLIC_AMM_OBSERVER_STATE || "EeVUEYTiPbEAUBYcf2MWyYch5LNuy4D8WzRL9cZa4gDo"
 );
 export const AMM_GOLD_MINT = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_GOLD_MINT || "8HLD8UvZotgX7tGW4TEPLJEkJZGSAsanuRZe7q64CLrX"
 );
 export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 export const AMM_LP_MINT = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_LP_MINT || "R42M1rNtsrDvTAKMZbMWHE2TXZxPqAZzZ5bR6uR3Qzy"
+  process.env.NEXT_PUBLIC_AMM_LP_MINT || "B9Vd1yhwQUoKNnYB7b7Z2MWDQs5XrxbEhqzfnpVaXsTX"
 );
 export const AMM_XNT_TOKEN_PROG = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const AMM_GOLD_TOKEN_PROG = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
