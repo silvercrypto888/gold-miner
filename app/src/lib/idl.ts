@@ -1,9 +1,9 @@
 // Gold Miner v2 IDL — Bitmap Architecture (Anchor v0.30 format)
-// Generated program ID: 4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM
+// Generated program ID: DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP
 import { Idl } from "@coral-xyz/anchor";
 
 export const GoldMinerIDL: Idl = {
-  address: "4GQU2H48Ai2WtM8mzGexLGDA1KAcrvrHRXG1WeHaWxAM",
+  address: "DZ4FErNjFdqFMumiYpTLtdKh5a1mqREhYFpQPr6XiJcP",
   metadata: {
     name: "gold_miner",
     version: "0.2.0",

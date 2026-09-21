@@ -217,7 +217,7 @@ export const AMM_OBSERVER_STATE = new PublicKey(
   process.env.NEXT_PUBLIC_AMM_OBSERVER_STATE || "DUd6JfdKGA8M2xiSWLGwfxkDgHXWQKVLL6CCvcdFx2En"
 );
 export const AMM_GOLD_MINT = new PublicKey(
-  process.env.NEXT_PUBLIC_AMM_GOLD_MINT || "vKxnbuf4HeR6espPnfnVwaByaWgp3NHSGWGmjyNyrS6"
+  process.env.NEXT_PUBLIC_AMM_GOLD_MINT || "CXD3q99qVmfhUYqzimTMaJRPvP3FpAYMGZhJewQuen8i"
 );
 export const AMM_XNT_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 export const AMM_LP_MINT = new PublicKey(
