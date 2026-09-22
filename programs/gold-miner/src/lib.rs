@@ -27,7 +27,7 @@ pub const RESET_THRESHOLD: u64 = 121_042; // 75% of 161,390 total gold spots
 // Treasury / LP constants
 pub const MIN_GOLD_FOR_LP: u64 = 1000 * 10u64.pow(GOLD_DECIMALS as u32);
 pub const MIN_LP_TO_BURN: u64 = 1000;
-pub const SLIPPAGE_BPS: u64 = 100;
+pub const SLIPPAGE_BPS: u64 = 300; // 3% slippage tolerance (was 100/1%) — 33% treasury swap on thin pool needs real margin vs AMM 0.3% fee + price impact
 /// Denominator for the treasury auto-LP bootstrap swap: swap 1/SWAP_TO_XNT_DIVISOR
 /// of accumulated treasury GOLD for XNT before pairing the remainder back into the pool.
 /// 2 = swap 50% (aggressive), 3 = swap ~33% (gentler on a young pool). Adjustable.
