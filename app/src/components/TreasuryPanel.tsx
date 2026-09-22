@@ -344,7 +344,7 @@ export function TreasuryPanel() {
 
           {/* Info text */}
           <div className="text-xs text-gray-500">
-            <p>Swaps ~50% of treasury GOLD for XNT, deposits both as LP, and burns the LP tokens.</p>
+            <p>Swaps ~33% of treasury GOLD for XNT, deposits both as LP, and burns the LP tokens.</p>
             <p className="mt-1">Requires at least 1,000 GOLD in the treasury.</p>
             <p className="mt-2">
               <strong>🔄 Reset Gold Map</strong> — Anyone can call once 75% of gold blocks are mined.
