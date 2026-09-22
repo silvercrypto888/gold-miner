@@ -91,12 +91,3 @@ constants are env-driven (`NEXT_PUBLIC_*`) and default to mainnet in `constants.
 
 > ⚠️ **REMEMBER:** This project **auto-deploys to Vercel from GitHub**.
 > Pushing to `main` triggers a Vercel production deploy automatically.
-
-Frontend deploy (manual fallback):
-
-```bash
-cd app
-vercel --prod --yes --token "$VTOK"
-# linked project: x1-safe/gold-miner (rootDir app)
-# NOTE: unset VERCEL_PROJECT_ID / VERCEL_ORG_ID first if they're set globally.
-```
