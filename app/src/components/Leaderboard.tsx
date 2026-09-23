@@ -5,7 +5,8 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { useSessionKey } from "@/hooks/useSessionKey";
 import { LeaderboardEntry } from "@/types";
 import { shortenAddress, formatGoldium } from "@/lib/utils";
-import { getProgramId, RPC_URL } from "@/lib/constants";
+import { getProgramId } from "@/lib/constants";
+import { getConnection } from "@/lib/rpc";
 
 // Player discriminator = sha256("account:Player")[0:8]
 const PLAYER_DISC_B58 = "bSBoKNsSHuj"; // base58 of [205,222,112,7,165,155,206,218]
@@ -19,7 +20,7 @@ export function Leaderboard() {
   const connRef = useRef<Connection | null>(null);
 
   const loadLeaderboard = async () => {
-    if (!connRef.current) connRef.current = new Connection(RPC_URL);
+    if (!connRef.current) connRef.current = getConnection("finalized");
 
     setIsLoading(true);
     try {

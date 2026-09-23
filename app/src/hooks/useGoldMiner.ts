@@ -11,13 +11,13 @@ import {
   getToken2022ProgramId,
   getGoldMint,
   getGoldAta,
-  RPC_URL,
   LAMPORTS_PER_SOL,
   getPlayerPda,
   getGameConfigPda,
 } from "@/lib/constants";
 import { PlayerAccount, GameConfigAccount } from "@/lib/idl";
 import { shortenAddress } from "@/lib/utils";
+import { getConnection } from "@/lib/rpc";
 
 export interface TransactionResult {
   signature: string;
@@ -37,7 +37,7 @@ export function useGoldMiner() {
 
   useEffect(() => {
     if (!connectionRef.current) {
-      connectionRef.current = new Connection(RPC_URL, "confirmed");
+      connectionRef.current = getConnection("confirmed");
     }
     if (publicKey && signTransaction) {
       const provider = new AnchorProvider(

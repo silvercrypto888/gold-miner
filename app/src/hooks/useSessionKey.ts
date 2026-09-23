@@ -26,10 +26,10 @@ import {
   getGoldAta,
   getGameConfigPda,
   getToken2022ProgramId,
-  RPC_URL,
   SESSION_DURATION_SLOTS,
 } from "@/lib/constants";
 import { PlayerState } from "@/types";
+import { getConnection } from "@/lib/rpc";
 
 // ── Sweep result types (used by sweepSessionKey + callers) ──
 type SweepOk = { ok: true };
@@ -84,7 +84,7 @@ export function useSessionKey() {
   // Initialize connection + program
   useEffect(() => {
     if (!connectionRef.current) {
-      connectionRef.current = new Connection(RPC_URL, "confirmed");
+      connectionRef.current = getConnection("confirmed");
     }
     if (publicKey && signTransaction && !programRef.current) {
       const provider = new AnchorProvider(

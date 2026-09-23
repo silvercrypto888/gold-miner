@@ -15,7 +15,6 @@ import {
   getPlayerPda,
   getTreasuryPda,
   getTreasuryGoldAta,
-  RPC_URL,
   GRID_SIZE,
   BITMAP_BYTES,
   hasGoldAt,
@@ -26,6 +25,7 @@ import {
   GOLD_PER_MINE,
 } from "@/lib/constants";
 import { GoldMinerIDL } from "@/lib/idl";
+import { getConnection } from "@/lib/rpc";
 
 const MOVE_COOLDOWN_MS = 300;
 
@@ -100,7 +100,7 @@ export function useGame(props?: UseGameProps): UseGameReturn {
   const moveSeqRef = useRef(0);
 
   useEffect(() => {
-    if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
+    if (!connRef.current) connRef.current = getConnection("confirmed");
     // Fetch GOLD mint from game_config
     (async () => {
       if (gold_mint_pk.current) return;

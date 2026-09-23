@@ -3,13 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram, ComputeBudgetProgram } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { getConnection } from "@/lib/rpc";
 import {
   getProgramId,
   getTreasuryPda,
   getTreasuryGoldAta,
   getToken2022ProgramId,
   getGameConfigPda,
-  RPC_URL,
   AMM_PROGRAM_ID,
   AMM_MARKET_AUTHORITY,
   AMM_CONFIG,
@@ -44,7 +44,7 @@ export function TreasuryPanel() {
   const connRef = useRef<Connection | null>(null);
 
   useEffect(() => {
-    if (!connRef.current) connRef.current = new Connection(RPC_URL, "confirmed");
+    if (!connRef.current) connRef.current = getConnection("confirmed");
   }, []);
 
   const fetchTreasuryBalance = useCallback(async () => {
